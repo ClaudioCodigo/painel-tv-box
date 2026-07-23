@@ -1,0 +1,19 @@
+api:
+  url: http://localhost:9997
+  timeout: 5
+server:
+  rtsp_port: 8554
+  rtmp_port: 1935
+  api_port: 9997
+  metrics_port: 9998
+logLevel: warn
+writeQueueSize: 2048
+readTimeout: 10s
+writeTimeout: 10s
+rtspTransports:
+- udp
+- tcp
+hls: false
+webrtc: false
+metrics: false
+api_allowed_network: 192.168.254.0/24

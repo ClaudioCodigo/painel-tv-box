@@ -1,0 +1,95 @@
+/* Scrcpy Page */
+
+.scrcpy-version-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 6px;
+}
+
+.scrcpy-version-name {
+    font-weight: 600;
+    font-size: 0.9em;
+    color: var(--text-primary);
+}
+
+.scrcpy-version-meta {
+    font-size: 0.75em;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+.scrcpy-version-actions {
+    display: flex;
+    gap: 4px;
+}
+
+.scrcpy-version-actions .btn {
+    font-size: 0.75em;
+    padding: 4px 10px;
+}
+
+.badge-warning {
+    background: var(--warning-subtle);
+    color: var(--warning);
+    font-size: 0.7em;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+    margin-left: 8px;
+    vertical-align: middle;
+}
+
+/* Checklist de args */
+.scrcpy-arg-grp {
+    margin-bottom: 10px;
+}
+
+.scrcpy-arg-title {
+    font-size: 0.85em;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+}
+
+.scrcpy-arg-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.scrcpy-arg-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 5px 10px;
+    cursor: pointer;
+    font-size: 0.8em;
+    transition: border-color 0.15s;
+}
+
+.scrcpy-arg-item:hover {
+    border-color: var(--accent);
+}
+
+.scrcpy-arg-item input[type="checkbox"] {
+    accent-color: var(--accent);
+}
+
+.scrcpy-arg-item code {
+    font-family: 'Consolas', monospace;
+    font-size: 0.85em;
+    color: var(--text-muted);
+}
+
+.scrcpy-arg-item:has(input:checked) {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 10%, var(--bg-primary));
+}

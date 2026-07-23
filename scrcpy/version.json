@@ -1,0 +1,12 @@
+{
+  "current": "4.1",
+  "previous": null,
+  "versions": {
+    "4.1": {
+      "installed_at": "2026-07-22T16:23:56.024754+00:00",
+      "size_bytes": 26243358,
+      "asset": "scrcpy-win64-v4.1.zip"
+    }
+  },
+  "updated_at": "2026-07-22T16:23:56.063799+00:00"
+}

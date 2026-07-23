@@ -1,0 +1,19 @@
+check_interval: 10
+ping:
+  count: 1
+  timeout_ms: 800
+adb:
+  timeout: 5
+activity_check: true
+mediamtx_check: true
+recovery:
+  cooldown_seconds: 15
+  player_retry_max: 2
+  player_retry_delay: 10
+  wifi_restart: true
+  wifi_reconnect_timeout: 30
+  eth_restart: true
+  eth_reconnect_timeout: 30
+  reboot_max: 1
+  reboot_boot_timeout: 120
+  critical_alert_cooldown: 300

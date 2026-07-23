@@ -1,0 +1,255 @@
+/* Wizard CSS — multi-step layout */
+
+.wizard-progress {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 24px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 16px;
+}
+
+.wizard-progress-bar {
+    height: 6px;
+    background: var(--accent);
+    border-radius: 3px;
+    transition: width var(--transition-slow);
+    min-width: 4%;
+}
+
+.wizard-progress-track {
+    flex: 1;
+    height: 6px;
+    background: var(--bg-tertiary);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.wizard-progress-text {
+    font-size: 0.8em;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.wizard-step {
+    max-width: 640px;
+    margin: 0 auto;
+}
+
+.wizard-step h2 {
+    font-size: 1.2em;
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: var(--text-primary);
+}
+
+.wizard-step p {
+    font-size: 0.9em;
+    color: var(--text-secondary);
+    margin-bottom: 20px;
+    line-height: 1.5;
+}
+
+.wizard-nav {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 24px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-muted);
+}
+
+/* Form fields */
+.wizard-step .form-group {
+    margin-bottom: 14px;
+}
+
+.wizard-step .form-group label {
+    display: block;
+    font-size: 0.85em;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+    font-weight: 500;
+}
+
+.wizard-step .form-group input,
+.wizard-step .form-group select,
+.wizard-step .form-group textarea {
+    width: 100%;
+    padding: 10px 12px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 0.9em;
+    font-family: var(--font);
+    transition: border-color var(--transition);
+}
+
+.wizard-step .form-group input:focus,
+.wizard-step .form-group select:focus {
+    border-color: var(--accent);
+    outline: none;
+}
+
+.wizard-step .form-hint {
+    font-size: 0.75em;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+/* Buttons */
+.btn {
+    padding: 10px 20px;
+    border-radius: var(--radius-sm);
+    font-size: 0.9em;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    transition: background var(--transition), opacity var(--transition);
+}
+
+.btn-primary {
+    background: var(--accent);
+    color: #fff;
+}
+
+.btn-primary:hover { background: var(--accent-hover); }
+
+.btn-secondary {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+}
+
+.btn-secondary:hover { background: var(--border); }
+
+.btn-ghost {
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px dashed var(--border);
+}
+
+.btn-ghost:hover {
+    color: var(--text-secondary);
+    border-color: var(--text-muted);
+}
+
+.btn-success {
+    background: var(--success);
+    color: #000;
+}
+
+.btn-success:hover { opacity: 0.9; }
+
+.btn-danger {
+    background: var(--danger);
+    color: #fff;
+}
+
+.btn-danger:hover { opacity: 0.9; }
+
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Device list in wizard */
+.wizard-device-item {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px;
+    margin-bottom: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.wizard-device-item .d-name { font-weight: 600; }
+.wizard-device-item .d-ip { color: var(--text-muted); font-size: 0.85em; }
+.wizard-device-item .d-remove { color: var(--danger); cursor: pointer; }
+
+/* Form grid */
+.form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.form-grid .full-width {
+    grid-column: 1 / -1;
+}
+
+@media (max-width: 600px) {
+    .form-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Review */
+.wizard-review {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+}
+
+.wizard-review h3 {
+    font-size: 0.95em;
+    color: var(--accent);
+    margin: 12px 0 6px;
+}
+
+.wizard-review h3:first-child { margin-top: 0; }
+
+.wizard-review p {
+    font-size: 0.85em;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+}
+
+.wizard-review .review-device {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-muted);
+    border-radius: var(--radius-sm);
+    padding: 8px 12px;
+    margin-bottom: 6px;
+    font-size: 0.85em;
+}
+
+.wizard-review ul {
+    list-style: none;
+    padding: 0;
+    font-size: 0.85em;
+    color: var(--text-muted);
+}
+
+.wizard-review ul li::before {
+    content: '📄 ';
+}
+
+/* Validation */
+.form-error {
+    color: var(--danger);
+    font-size: 0.8em;
+    margin-top: 2px;
+}
+
+.input-error {
+    border-color: var(--danger) !important;
+}
+
+/* Connection test */
+.test-result {
+    padding: 8px 12px;
+    border-radius: var(--radius-sm);
+    font-size: 0.85em;
+    margin-top: 8px;
+}
+
+.test-result.success { background: var(--success-subtle); color: var(--success); }
+.test-result.error { background: var(--danger-subtle); color: var(--danger); }
+.test-result.loading { background: var(--bg-tertiary); color: var(--text-muted); }

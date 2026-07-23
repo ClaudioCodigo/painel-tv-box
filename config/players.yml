@@ -1,0 +1,14 @@
+players:
+  vlc:
+    package: org.videolan.vlc
+    activity: org.videolan.vlc.gui.video.VideoPlayerActivity
+    force_stop: org.videolan.vlc
+    intent_template: am start -a android.intent.action.VIEW -d "{URL}" -n {PACKAGE}/{ACTIVITY}
+      --activity-clear-task
+  mpv:
+    package: is.xyz.mpv
+    activity: is.xyz.mpv.MPVActivity
+    force_stop: is.xyz.mpv
+    intent_template: am start -a android.intent.action.VIEW -d "{URL}" -n {PACKAGE}/{ACTIVITY}
+      --activity-clear-task
+default: vlc

@@ -1,0 +1,2999 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEXUS — Android TV Box Command Center</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        obsidian: '#0B0E14',
+        slate: '#161B22',
+        'slate-2': '#1C2128',
+        'slate-3': '#22272E',
+        bd: '#30363D',
+        'bd-bright': '#444C56',
+        cyan: '#00F2FE',
+        'cyan-dim': '#00B8CC',
+        violet: '#7C4DFF',
+        emerald: '#00E676',
+        amber: '#FFB300',
+        crimson: '#FF5252',
+      },
+      fontFamily: {
+        sans: ['Inter', 'sans-serif'],
+        mono: ['JetBrains Mono', 'monospace'],
+      }
+    }
+  }
+}
+</script>
+<style>
+:root {
+  --obsidian: #0B0E14;
+  --slate: #161B22;
+  --slate-2: #1C2128;
+  --bd: #30363D;
+  --bd-bright: #444C56;
+  --cyan: #00F2FE;
+  --violet: #7C4DFF;
+  --emerald: #00E676;
+  --amber: #FFB300;
+  --crimson: #FF5252;
+  --text: #E6EDF3;
+  --text-dim: #8B949E;
+  --text-muted: #6E7681;
+}
+
+* { box-sizing: border-box; }
+html, body {
+  background: #0B0E14;
+  color: #E6EDF3;
+  font-family: 'Inter', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: -0.011em;
+  margin: 0;
+  overflow-x: hidden;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 70% 50% at 15% 0%, rgba(124, 77, 255, 0.08), transparent 60%),
+    radial-gradient(ellipse 60% 40% at 100% 100%, rgba(0, 242, 254, 0.06), transparent 60%),
+    radial-gradient(ellipse 40% 30% at 50% 50%, rgba(0, 230, 118, 0.025), transparent 60%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+#app { position: relative; z-index: 1; }
+
+.glass {
+  background: linear-gradient(180deg, rgba(28, 33, 40, 0.7), rgba(22, 27, 34, 0.5));
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--bd);
+}
+.glass-2 {
+  background: linear-gradient(180deg, rgba(36, 42, 51, 0.85), rgba(28, 33, 40, 0.65));
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--bd-bright);
+}
+
+.halo-online { box-shadow: inset 0 0 0 1px rgba(0, 230, 118, 0.35), 0 0 28px rgba(0, 230, 118, 0.08); }
+.halo-degraded { box-shadow: inset 0 0 0 1px rgba(255, 179, 0, 0.35), 0 0 28px rgba(255, 179, 0, 0.08); }
+.halo-offline { box-shadow: inset 0 0 0 1px rgba(255, 82, 82, 0.35), 0 0 28px rgba(255, 82, 82, 0.08); }
+
+@keyframes pulse-dot {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.4); opacity: 0.6; }
+}
+.pulse-dot { animation: pulse-dot 2s ease-in-out infinite; }
+
+@keyframes ripple {
+  0% { transform: scale(0.9); opacity: 0.5; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+.ripple::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: ripple 2s ease-out infinite;
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #30363D; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #444C56; }
+
+.terminal {
+  background: #07090C;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  line-height: 1.65;
+}
+.term-prompt { color: #00F2FE; }
+.term-cmd { color: #E6EDF3; }
+.term-out { color: #8B949E; }
+.term-ok { color: #00E676; }
+.term-warn { color: #FFB300; }
+.term-err { color: #FF5252; }
+.term-path { color: #FFB86C; }
+.term-key { color: #7C4DFF; }
+.term-comment { color: #6272a4; }
+.term-num { color: #00F2FE; }
+.term-string { color: #F1FA8C; }
+
+@keyframes ws-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.8); }
+}
+.ws-pulse { animation: ws-pulse 1.5s ease-in-out infinite; }
+
+@keyframes blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+.cursor-blink { animation: blink 1s steps(2) infinite; }
+
+@keyframes slide-up {
+  from { transform: translateY(8px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.slide-up { animation: slide-up 0.3s ease-out; }
+
+@keyframes toast-in {
+  from { transform: translateX(20px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+.toast { animation: toast-in 0.3s ease-out; }
+
+@keyframes scan-line {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #00F2FE, #00B8CC);
+  color: #001114;
+  font-weight: 600;
+  transition: all 0.2s;
+  border: none;
+  cursor: pointer;
+}
+.btn-primary:hover {
+  box-shadow: 0 0 20px rgba(0, 242, 254, 0.5);
+  transform: translateY(-1px);
+}
+.btn-ghost {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--bd);
+  transition: all 0.15s;
+  color: #E6EDF3;
+  cursor: pointer;
+}
+.btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: var(--bd-bright);
+}
+.btn-danger {
+  background: rgba(255, 82, 82, 0.1);
+  border: 1px solid rgba(255, 82, 82, 0.3);
+  color: #FF5252;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+.btn-danger:hover {
+  background: rgba(255, 82, 82, 0.2);
+  border-color: rgba(255, 82, 82, 0.6);
+}
+
+.sd {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  position: relative;
+  flex-shrink: 0;
+}
+.sd.online { background: #00E676; box-shadow: 0 0 8px #00E676; }
+.sd.degraded { background: #FFB300; box-shadow: 0 0 8px #FFB300; }
+.sd.offline { background: #FF5252; box-shadow: 0 0 8px #FF5252; }
+
+.grid-bg {
+  background-image:
+    linear-gradient(rgba(48, 54, 61, 0.12) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(48, 54, 61, 0.12) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+.tab-pill {
+  position: relative;
+  transition: all 0.2s;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+}
+.tab-pill:hover { color: #E6EDF3; }
+.tab-pill.active {
+  color: #00F2FE;
+  border-bottom-color: #00F2FE;
+}
+.tab-pill.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: #00F2FE;
+  box-shadow: 0 0 12px #00F2FE;
+}
+
+.cb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--bd-bright);
+  border-radius: 3px;
+  background: #0D1117;
+  cursor: pointer;
+  position: relative;
+  flex-shrink: 0;
+}
+.cb:checked {
+  background: #00F2FE;
+  border-color: #00F2FE;
+}
+.cb:checked::after {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 0px;
+  width: 4px;
+  height: 8px;
+  border: solid #001114;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  position: relative;
+}
+.nav-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+}
+.nav-item.active {
+  background: linear-gradient(90deg, rgba(0, 242, 254, 0.12), rgba(0, 242, 254, 0.02));
+  color: #00F2FE;
+}
+.nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  background: #00F2FE;
+  box-shadow: 0 0 8px #00F2FE;
+  border-radius: 2px;
+}
+
+.dropzone {
+  border: 2px dashed var(--bd);
+  border-radius: 12px;
+  transition: all 0.2s;
+}
+.dropzone.dragover {
+  border-color: #00F2FE;
+  background: rgba(0, 242, 254, 0.06);
+  transform: scale(1.01);
+}
+
+.modal-backdrop {
+  background: rgba(11, 14, 20, 0.85);
+  backdrop-filter: blur(8px);
+}
+
+.device-card {
+  transition: all 0.2s;
+}
+.device-card:hover {
+  transform: translateY(-2px);
+}
+
+input, select, textarea {
+  background: #0D1117;
+  border: 1px solid var(--bd);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-family: inherit;
+  font-size: 13px;
+  outline: none;
+  transition: all 0.15s;
+  width: 100%;
+}
+input:focus, select:focus, textarea:focus {
+  border-color: #00F2FE;
+  box-shadow: 0 0 0 3px rgba(0, 242, 254, 0.12);
+}
+
+.glow-cyan { text-shadow: 0 0 12px rgba(0, 242, 254, 0.6); }
+.glow-emerald { text-shadow: 0 0 12px rgba(0, 230, 118, 0.6); }
+
+.live-badge {
+  background: rgba(255, 82, 82, 0.12);
+  border: 1px solid rgba(255, 82, 82, 0.4);
+  color: #FF5252;
+}
+.live-dot {
+  width: 6px;
+  height: 6px;
+  background: #FF5252;
+  border-radius: 50%;
+  display: inline-block;
+  animation: pulse-dot 1s ease-in-out infinite;
+}
+
+.section-title {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.stream-preview {
+  background:
+    linear-gradient(135deg, #0a0d12 0%, #161B22 100%);
+  position: relative;
+  overflow: hidden;
+}
+.stream-preview::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0, 242, 254, 0.025) 3px, rgba(0, 242, 254, 0.025) 4px);
+  pointer-events: none;
+}
+.stream-preview .noise {
+  position: absolute;
+  inset: 0;
+  opacity: 0.04;
+  background-image:
+    radial-gradient(circle at 20% 30%, #fff 1px, transparent 1px),
+    radial-gradient(circle at 80% 70%, #fff 1px, transparent 1px),
+    radial-gradient(circle at 50% 50%, #fff 1px, transparent 1px);
+  background-size: 30px 30px, 25px 25px, 40px 40px;
+}
+
+@keyframes stream-shimmer {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 0.8; }
+}
+.stream-active { animation: stream-shimmer 3s ease-in-out infinite; }
+
+.wizard-step-circle {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid var(--bd);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--slate);
+  color: var(--text-muted);
+  transition: all 0.3s;
+  flex-shrink: 0;
+}
+.wizard-step.done .wizard-step-circle {
+  background: #00E676;
+  border-color: #00E676;
+  color: #001114;
+}
+.wizard-step.active .wizard-step-circle {
+  background: #00F2FE;
+  border-color: #00F2FE;
+  color: #001114;
+  box-shadow: 0 0 16px rgba(0, 242, 254, 0.5);
+}
+.wizard-step-line {
+  flex: 1;
+  height: 2px;
+  background: var(--bd);
+  margin: 0 4px;
+}
+.wizard-step.done + .wizard-step-line {
+  background: #00E676;
+}
+
+.cascade-step {
+  position: relative;
+  padding-left: 32px;
+}
+.cascade-step:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 11px;
+  top: 24px;
+  bottom: -8px;
+  width: 2px;
+  background: var(--bd);
+}
+.cascade-step.done:not(:last-child)::before {
+  background: linear-gradient(180deg, #00E676, #00F2FE);
+}
+.cascade-step.active:not(:last-child)::before {
+  background: linear-gradient(180deg, #FFB300, var(--bd));
+}
+
+.kbd {
+  background: #0D1117;
+  border: 1px solid var(--bd);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.scan-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(0, 242, 254, 0.4), transparent);
+  animation: scan-line 4s linear infinite;
+  pointer-events: none;
+}
+
+.code-block {
+  background: #07090C;
+  border: 1px solid var(--bd);
+  border-radius: 6px;
+  padding: 12px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  line-height: 1.6;
+  overflow-x: auto;
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 500;
+}
+
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  width: 100%;
+  padding: 0;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  background: var(--slate);
+  height: 4px;
+  border-radius: 2px;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  margin-top: -5px;
+  background: #00F2FE;
+  height: 14px;
+  width: 14px;
+  border-radius: 50%;
+  box-shadow: 0 0 8px rgba(0, 242, 254, 0.6);
+  cursor: pointer;
+}
+
+.diff-add { color: #00E676; background: rgba(0, 230, 118, 0.08); }
+.diff-rem { color: #FF5252; background: rgba(255, 82, 82, 0.08); }
+.diff-ctx { color: #6E7681; }
+
+.shell-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-family: 'JetBrains Mono', monospace;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--bd);
+  cursor: pointer;
+  transition: all 0.15s;
+  color: var(--text-dim);
+}
+.shell-action:hover {
+  background: rgba(0, 242, 254, 0.08);
+  border-color: rgba(0, 242, 254, 0.4);
+  color: #00F2FE;
+}
+
+.log-line {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  line-height: 1.6;
+  padding: 2px 0;
+  display: flex;
+  gap: 8px;
+}
+.log-time { color: #6E7681; flex-shrink: 0; }
+.log-level { font-weight: 600; min-width: 44px; }
+.log-level.info { color: #00F2FE; }
+.log-level.warn { color: #FFB300; }
+.log-level.error { color: #FF5252; }
+.log-level.debug { color: #7C4DFF; }
+.log-level.success { color: #00E676; }
+.log-msg { color: #E6EDF3; }
+.log-source { color: #FFB86C; }
+
+.apk-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 14px;
+  color: #001114;
+  flex-shrink: 0;
+}
+
+.timeline-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--bd);
+  background: var(--slate);
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+}
+.timeline-dot.active {
+  background: #00F2FE;
+  border-color: #00F2FE;
+  box-shadow: 0 0 12px rgba(0, 242, 254, 0.5);
+}
+.timeline-dot.done {
+  background: #00E676;
+  border-color: #00E676;
+}
+
+.fade-in { animation: slide-up 0.4s ease-out; }
+</style>
+</head>
+<body>
+
+<div id="app" class="flex min-h-screen">
+
+  <!-- ============ SIDEBAR ============ -->
+  <aside class="w-60 flex-shrink-0 border-r border-bd bg-slate/40 backdrop-blur-xl flex flex-col sticky top-0 h-screen z-40">
+    <!-- Logo -->
+    <div class="p-4 border-b border-bd flex items-center gap-3">
+      <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-cyan to-violet flex items-center justify-center relative overflow-hidden">
+        <div class="absolute inset-0 bg-gradient-to-br from-cyan to-violet opacity-50 blur-md"></div>
+        <svg class="w-5 h-5 relative z-10" viewBox="0 0 24 24" fill="none" stroke="#001114" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 9V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v3"/>
+          <path d="M2 11h20"/>
+          <path d="M4 11v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/>
+          <path d="M9 4v16"/>
+          <path d="M15 4v16"/>
+        </svg>
+      </div>
+      <div>
+        <div class="text-sm font-bold tracking-tight">NEXUS</div>
+        <div class="text-[10px] text-text-muted mono">v3.4.1 · prod</div>
+      </div>
+    </div>
+
+    <!-- Nav -->
+    <nav class="flex-1 p-3 space-y-0.5 overflow-y-auto">
+      <div class="section-title px-3 mb-2">Monitor</div>
+      <div class="nav-item active" data-tab="overview">
+        <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+        <span>Overview</span>
+      </div>
+      <div class="nav-item" data-tab="devices">
+        <i data-lucide="tv" class="w-4 h-4"></i>
+        <span>Devices</span>
+        <span class="ml-auto text-[10px] mono px-1.5 py-0.5 rounded bg-emerald/10 text-emerald border border-emerald/20">8</span>
+      </div>
+      <div class="nav-item" data-tab="groups">
+        <i data-lucide="boxes" class="w-4 h-4"></i>
+        <span>Groups</span>
+      </div>
+      <div class="nav-item" data-tab="stream">
+        <i data-lucide="radio" class="w-4 h-4"></i>
+        <span>Stream Engine</span>
+      </div>
+
+      <div class="section-title px-3 mb-2 mt-4">Control</div>
+      <div class="nav-item" data-tab="shell">
+        <i data-lucide="terminal" class="w-4 h-4"></i>
+        <span>Remote Shell</span>
+      </div>
+      <div class="nav-item" data-tab="logs">
+        <i data-lucide="scroll-text" class="w-4 h-4"></i>
+        <span>Log Viewer</span>
+      </div>
+
+      <div class="section-title px-3 mb-2 mt-4">System</div>
+      <div class="nav-item" data-tab="watchdog">
+        <i data-lucide="shield-alert" class="w-4 h-4"></i>
+        <span>Watchdog</span>
+      </div>
+      <div class="nav-item" data-tab="apk">
+        <i data-lucide="package" class="w-4 h-4"></i>
+        <span>APK Manager</span>
+      </div>
+      <div class="nav-item" data-tab="backup">
+        <i data-lucide="database-backup" class="w-4 h-4"></i>
+        <span>Backup & Recovery</span>
+      </div>
+    </nav>
+
+    <!-- Footer -->
+    <div class="p-3 border-t border-bd">
+      <div class="glass rounded-lg p-3">
+        <div class="flex items-center gap-2 mb-2">
+          <div class="sd online pulse-dot"></div>
+          <span class="text-xs font-medium">Server Operational</span>
+        </div>
+        <div class="text-[10px] mono text-text-muted space-y-0.5">
+          <div class="flex justify-between"><span>Uptime</span><span class="text-text">47d 12h</span></div>
+          <div class="flex justify-between"><span>Region</span><span class="text-text">eu-west-1</span></div>
+          <div class="flex justify-between"><span>Node</span><span class="text-text">nexus-01</span></div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ============ MAIN ============ -->
+  <main class="flex-1 flex flex-col min-w-0">
+
+    <!-- HEADER -->
+    <header class="border-b border-bd bg-slate/30 backdrop-blur-xl sticky top-0 z-30">
+      <div class="px-6 py-3 flex items-center gap-6">
+        <div class="flex items-center gap-3">
+          <h1 class="text-lg font-semibold tracking-tight" id="page-title">Command Overview</h1>
+          <span class="text-text-muted text-xs">/</span>
+          <span class="text-xs mono text-text-muted">dashboard.nexus.io</span>
+        </div>
+
+        <div class="flex items-center gap-2 ml-auto">
+          <!-- CPU -->
+          <div class="flex items-center gap-2 px-3 py-1.5 rounded-md glass">
+            <i data-lucide="cpu" class="w-3.5 h-3.5 text-cyan"></i>
+            <div>
+              <div class="text-[9px] text-text-muted uppercase tracking-wider leading-none mb-0.5">CPU</div>
+              <div class="text-xs font-semibold mono leading-none">23.4%</div>
+            </div>
+            <svg width="48" height="20" viewBox="0 0 48 20" class="ml-1">
+              <defs><linearGradient id="g-cpu" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#00F2FE" stop-opacity="0.4"/><stop offset="100%" stop-color="#00F2FE" stop-opacity="0"/></linearGradient></defs>
+              <polygon points="0,15 6,12 12,14 18,8 24,10 30,6 36,9 42,5 48,7 48,20 0,20" fill="url(#g-cpu)"/>
+              <polyline points="0,15 6,12 12,14 18,8 24,10 30,6 36,9 42,5 48,7" fill="none" stroke="#00F2FE" stroke-width="1.2"/>
+            </svg>
+          </div>
+
+          <!-- RAM -->
+          <div class="flex items-center gap-2 px-3 py-1.5 rounded-md glass">
+            <i data-lucide="memory-stick" class="w-3.5 h-3.5 text-violet"></i>
+            <div>
+              <div class="text-[9px] text-text-muted uppercase tracking-wider leading-none mb-0.5">RAM</div>
+              <div class="text-xs font-semibold mono leading-none">4.2/16G</div>
+            </div>
+            <svg width="48" height="20" viewBox="0 0 48 20">
+              <defs><linearGradient id="g-ram" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#7C4DFF" stop-opacity="0.4"/><stop offset="100%" stop-color="#7C4DFF" stop-opacity="0"/></linearGradient></defs>
+              <polygon points="0,10 6,8 12,12 18,9 24,7 30,11 36,8 42,10 48,6 48,20 0,20" fill="url(#g-ram)"/>
+              <polyline points="0,10 6,8 12,12 18,9 24,7 30,11 36,8 42,10 48,6" fill="none" stroke="#7C4DFF" stroke-width="1.2"/>
+            </svg>
+          </div>
+
+          <!-- Disk -->
+          <div class="flex items-center gap-2 px-3 py-1.5 rounded-md glass">
+            <i data-lucide="hard-drive" class="w-3.5 h-3.5 text-emerald"></i>
+            <div>
+              <div class="text-[9px] text-text-muted uppercase tracking-wider leading-none mb-0.5">DISK</div>
+              <div class="text-xs font-semibold mono leading-none">142/512G</div>
+            </div>
+            <svg width="48" height="20" viewBox="0 0 48 20">
+              <defs><linearGradient id="g-disk" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#00E676" stop-opacity="0.4"/><stop offset="100%" stop-color="#00E676" stop-opacity="0"/></linearGradient></defs>
+              <polygon points="0,14 6,13 12,13 18,12 24,12 30,11 36,11 42,10 48,10 48,20 0,20" fill="url(#g-disk)"/>
+              <polyline points="0,14 6,13 12,13 18,12 24,12 30,11 36,11 42,10 48,10" fill="none" stroke="#00E676" stroke-width="1.2"/>
+            </svg>
+          </div>
+
+          <!-- WS Status -->
+          <div class="flex items-center gap-2 px-3 py-1.5 rounded-md glass">
+            <div class="relative w-2 h-2">
+              <div class="absolute inset-0 rounded-full bg-emerald ws-pulse"></div>
+            </div>
+            <div>
+              <div class="text-[9px] text-text-muted uppercase tracking-wider leading-none mb-0.5">WSS</div>
+              <div class="text-xs font-semibold text-emerald leading-none">LIVE</div>
+            </div>
+          </div>
+
+          <div class="w-px h-8 bg-bd mx-1"></div>
+
+          <button class="btn-ghost px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5" onclick="showToast('Pulling latest from main branch...', 'info', 'git-merge')">
+            <i data-lucide="git-merge" class="w-3.5 h-3.5"></i>
+            <span>Git Update</span>
+          </button>
+          <button class="btn-ghost px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5" onclick="showToast('Cache cleared: 247 MB freed', 'success', 'trash-2')">
+            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+            <span>Clear Cache</span>
+          </button>
+          <button class="btn-primary px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5" onclick="openWizard()">
+            <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
+            <span>Setup Wizard</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- TAB BAR -->
+    <div class="border-b border-bd px-6 bg-obsidian/50 backdrop-blur-sm">
+      <div class="flex items-center gap-1 overflow-x-auto">
+        <div class="tab-pill active px-3 py-2.5 text-xs font-medium text-text-dim" data-tab="overview">Overview</div>
+        <div class="tab-pill px-3 py-2.5 text-xs font-medium text-text-dim" data-tab="devices">Devices</div>
+        <div class="tab-pill px-3 py-2.5 text-xs font-medium text-text-dim" data-tab="groups">Groups</div>
+        <div class="tab-pill px-3 py-2.5 text-xs font-medium text-text-dim" data-tab="shell">Shell & Scrcpy</div>
+        <div class="tab-pill px-3 py-2.5 text-xs font-medium text-text-dim" data-tab="stream">Stream Engine</div>
+        <div class="tab-pill px-3 py-2.5 text-xs font-medium text-text-dim" data-tab="logs">Logs</div>
+        <div class="tab-pill px-3 py-2.5 text-xs font-medium text-text-dim" data-tab="watchdog">Watchdog</div>
+        <div class="tab-pill px-3 py-2.5 text-xs font-medium text-text-dim" data-tab="apk">APK</div>
+        <div class="tab-pill px-3 py-2.5 text-xs font-medium text-text-dim" data-tab="backup">Backup</div>
+
+        <div class="ml-auto flex items-center gap-2 text-xs text-text-muted pl-4">
+          <i data-lucide="refresh-cw" class="w-3 h-3"></i>
+          <span>Auto-refresh in</span>
+          <span class="mono text-cyan font-semibold" id="refresh-countdown">15s</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONTENT -->
+    <div class="flex-1 p-6 overflow-y-auto">
+
+      <!-- ============ OVERVIEW ============ -->
+      <div id="panel-overview" class="space-y-4 fade-in">
+
+        <!-- KPI Row -->
+        <div class="grid grid-cols-12 gap-4">
+          <div class="col-span-3 glass rounded-xl p-4 relative overflow-hidden">
+            <div class="flex items-center justify-between mb-2">
+              <span class="section-title">Total Devices</span>
+              <i data-lucide="tv" class="w-4 h-4 text-text-muted"></i>
+            </div>
+            <div class="flex items-end gap-3">
+              <span class="text-3xl font-bold">8</span>
+              <span class="text-xs text-emerald mb-1.5 flex items-center gap-1"><i data-lucide="trending-up" class="w-3 h-3"></i>+2 this week</span>
+            </div>
+            <svg width="100%" height="28" viewBox="0 0 200 28" class="mt-2">
+              <defs><linearGradient id="g-kpi1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#00F2FE" stop-opacity="0.3"/><stop offset="100%" stop-color="#00F2FE" stop-opacity="0"/></linearGradient></defs>
+              <polygon points="0,24 25,22 50,20 75,18 100,16 125,14 150,12 175,10 200,8 200,28 0,28" fill="url(#g-kpi1)"/>
+              <polyline points="0,24 25,22 50,20 75,18 100,16 125,14 150,12 175,10 200,8" fill="none" stroke="#00F2FE" stroke-width="1.5"/>
+            </svg>
+          </div>
+
+          <div class="col-span-3 glass rounded-xl p-4 halo-online">
+            <div class="flex items-center justify-between mb-2">
+              <span class="section-title">Online</span>
+              <div class="sd online pulse-dot"></div>
+            </div>
+            <div class="flex items-end gap-3">
+              <span class="text-3xl font-bold text-emerald glow-emerald">5</span>
+              <span class="text-xs text-text-muted mb-1.5">/ 8 devices</span>
+            </div>
+            <div class="mt-3 h-1.5 bg-slate rounded-full overflow-hidden">
+              <div class="h-full bg-emerald rounded-full" style="width: 62.5%; box-shadow: 0 0 8px #00E676;"></div>
+            </div>
+            <div class="mt-1 flex justify-between text-[10px] mono text-text-muted"><span>62.5% availability</span><span class="text-emerald">▲ 4.2%</span></div>
+          </div>
+
+          <div class="col-span-3 glass rounded-xl p-4 halo-degraded">
+            <div class="flex items-center justify-between mb-2">
+              <span class="section-title">Degraded</span>
+              <div class="sd degraded pulse-dot"></div>
+            </div>
+            <div class="flex items-end gap-3">
+              <span class="text-3xl font-bold text-amber">2</span>
+              <span class="text-xs text-text-muted mb-1.5">/ 8 devices</span>
+            </div>
+            <div class="mt-3 h-1.5 bg-slate rounded-full overflow-hidden">
+              <div class="h-full bg-amber rounded-full" style="width: 25%; box-shadow: 0 0 8px #FFB300;"></div>
+            </div>
+            <div class="mt-1 flex justify-between text-[10px] mono text-text-muted"><span>2 alerts pending</span><span class="text-amber">⚠ Action</span></div>
+          </div>
+
+          <div class="col-span-3 glass rounded-xl p-4 halo-offline">
+            <div class="flex items-center justify-between mb-2">
+              <span class="section-title">Offline</span>
+              <div class="sd offline pulse-dot"></div>
+            </div>
+            <div class="flex items-end gap-3">
+              <span class="text-3xl font-bold text-crimson">1</span>
+              <span class="text-xs text-text-muted mb-1.5">/ 8 devices</span>
+            </div>
+            <div class="mt-3 h-1.5 bg-slate rounded-full overflow-hidden">
+              <div class="h-full bg-crimson rounded-full" style="width: 12.5%; box-shadow: 0 0 8px #FF5252;"></div>
+            </div>
+            <div class="mt-1 flex justify-between text-[10px] mono text-text-muted"><span>Last incident 14m</span><span class="text-crimson">● Critical</span></div>
+          </div>
+        </div>
+
+        <!-- Main Grid: Devices + Side -->
+        <div class="grid grid-cols-12 gap-4">
+          <!-- Device Grid -->
+          <div class="col-span-8 space-y-3">
+            <div class="flex items-center justify-between">
+              <div>
+                <h2 class="text-sm font-semibold">Device Fleet</h2>
+                <p class="text-xs text-text-muted">Real-time status across all registered TV boxes</p>
+              </div>
+              <div class="flex items-center gap-2">
+                <button class="btn-ghost px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5">
+                  <i data-lucide="filter" class="w-3.5 h-3.5"></i>
+                  <span>Filter</span>
+                </button>
+                <button class="btn-ghost px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5">
+                  <i data-lucide="layout-grid" class="w-3.5 h-3.5"></i>
+                  <span>View</span>
+                </button>
+                <button class="btn-primary px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5" onclick="openAddDevice()">
+                  <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                  <span>Add Device</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3" id="device-grid"></div>
+          </div>
+
+          <!-- Side Panel -->
+          <div class="col-span-4 space-y-3">
+            <!-- Terminal Preview -->
+            <div class="glass rounded-xl overflow-hidden">
+              <div class="flex items-center justify-between px-4 py-2.5 border-b border-bd bg-slate-2/50">
+                <div class="flex items-center gap-2">
+                  <div class="flex gap-1.5">
+                    <div class="w-2.5 h-2.5 rounded-full bg-crimson/70"></div>
+                    <div class="w-2.5 h-2.5 rounded-full bg-amber/70"></div>
+                    <div class="w-2.5 h-2.5 rounded-full bg-emerald/70"></div>
+                  </div>
+                  <span class="text-xs font-medium ml-2 mono">adb — TVB-001@192.168.1.101</span>
+                </div>
+                <button class="text-text-muted hover:text-cyan" onclick="switchTab('shell')">
+                  <i data-lucide="maximize-2" class="w-3.5 h-3.5"></i>
+                </button>
+              </div>
+              <div class="terminal p-3 h-72 overflow-y-auto" id="mini-terminal"></div>
+              <div class="px-3 py-2 border-t border-bd bg-slate-2/30 flex items-center gap-2">
+                <span class="text-xs mono text-cyan">$</span>
+                <input type="text" id="mini-terminal-input" placeholder="type a command..." class="flex-1 bg-transparent border-none text-xs mono focus:ring-0 focus:border-transparent focus:shadow-none" style="background:transparent;border:none;padding:0;">
+                <span class="text-[10px] text-text-muted">↑↓ history</span>
+              </div>
+            </div>
+
+            <!-- Watchdog Mini -->
+            <div class="glass rounded-xl p-4">
+              <div class="flex items-center justify-between mb-3">
+                <h3 class="text-sm font-semibold flex items-center gap-2">
+                  <i data-lucide="shield-alert" class="w-4 h-4 text-cyan"></i>
+                  Watchdog Cascade
+                </h3>
+                <span class="text-[10px] mono px-2 py-0.5 rounded bg-emerald/10 text-emerald border border-emerald/20">ARMED</span>
+              </div>
+
+              <div class="space-y-3">
+                <div class="cascade-step done">
+                  <div class="flex items-center gap-2 text-xs">
+                    <div class="w-6 h-6 rounded-full bg-emerald/20 border border-emerald flex items-center justify-center absolute left-0" style="margin-left:-32px;">
+                      <i data-lucide="check" class="w-3 h-3 text-emerald"></i>
+                    </div>
+                    <span class="flex-1 font-medium">Reopen Stream</span>
+                    <span class="mono text-[10px] text-emerald">PASSED · 1.2s</span>
+                  </div>
+                </div>
+                <div class="cascade-step active">
+                  <div class="flex items-center gap-2 text-xs">
+                    <div class="w-6 h-6 rounded-full bg-amber/20 border border-amber flex items-center justify-center absolute left-0" style="margin-left:-32px;">
+                      <i data-lucide="loader" class="w-3 h-3 text-amber animate-spin"></i>
+                    </div>
+                    <span class="flex-1 font-medium">Wi-Fi Restart</span>
+                    <span class="mono text-[10px] text-amber">ACTIVE · 45s</span>
+                  </div>
+                </div>
+                <div class="cascade-step">
+                  <div class="flex items-center gap-2 text-xs opacity-50">
+                    <div class="w-6 h-6 rounded-full bg-slate border border-bd flex items-center justify-center absolute left-0" style="margin-left:-32px;">
+                      <i data-lucide="circle" class="w-3 h-3"></i>
+                    </div>
+                    <span class="flex-1">Ethernet Toggle</span>
+                    <span class="mono text-[10px]">PENDING</span>
+                  </div>
+                </div>
+                <div class="cascade-step">
+                  <div class="flex items-center gap-2 text-xs opacity-50">
+                    <div class="w-6 h-6 rounded-full bg-slate border border-bd flex items-center justify-center absolute left-0" style="margin-left:-32px;">
+                      <i data-lucide="power" class="w-3 h-3"></i>
+                    </div>
+                    <span class="flex-1">Hard Reboot</span>
+                    <span class="mono text-[10px]">PENDING</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="mt-4 pt-3 border-t border-bd grid grid-cols-2 gap-3">
+                <div>
+                  <div class="text-[9px] text-text-muted uppercase tracking-wider">Grace Period</div>
+                  <div class="mono font-semibold text-cyan text-sm">60s remaining</div>
+                </div>
+                <div>
+                  <div class="text-[9px] text-text-muted uppercase tracking-wider">Cooldown</div>
+                  <div class="mono font-semibold text-violet text-sm">2m 00s</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bottom Row: Groups + MediaMTX + Activity -->
+        <div class="grid grid-cols-12 gap-4">
+          <!-- Groups -->
+          <div class="col-span-5 glass rounded-xl p-4">
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="text-sm font-semibold">Device Groups</h3>
+              <button class="text-xs text-cyan hover:underline flex items-center gap-1" onclick="switchTab('groups')">
+                Manage <i data-lucide="arrow-right" class="w-3 h-3"></i>
+              </button>
+            </div>
+            <div class="space-y-2">
+              <div class="glass-2 rounded-lg p-3 flex items-center gap-3">
+                <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-cyan/20 to-violet/20 border border-cyan/30 flex items-center justify-center">
+                  <i data-lucide="home" class="w-5 h-5 text-cyan"></i>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2">
+                    <span class="text-sm font-medium">Residential</span>
+                    <span class="tag bg-slate text-text-muted">5 devices</span>
+                  </div>
+                  <div class="flex items-center gap-2 mt-1.5">
+                    <div class="flex-1 h-1.5 bg-slate rounded-full overflow-hidden">
+                      <div class="h-full bg-gradient-to-r from-emerald to-cyan rounded-full" style="width: 80%;"></div>
+                    </div>
+                    <span class="text-[10px] mono text-emerald">4/5 online</span>
+                  </div>
+                </div>
+                <div class="flex gap-1">
+                  <button class="btn-ghost w-7 h-7 rounded flex items-center justify-center" title="Start All" onclick="showToast('Starting 5 devices in Residential...', 'info', 'play')">
+                    <i data-lucide="play" class="w-3 h-3 text-emerald"></i>
+                  </button>
+                  <button class="btn-ghost w-7 h-7 rounded flex items-center justify-center" title="Stop All" onclick="showToast('Stopping 5 devices in Residential...', 'warning', 'square')">
+                    <i data-lucide="square" class="w-3 h-3 text-crimson"></i>
+                  </button>
+                  <button class="btn-ghost w-7 h-7 rounded flex items-center justify-center" title="Reboot All" onclick="showToast('Rebooting 5 devices in Residential...', 'warning', 'rotate-cw')">
+                    <i data-lucide="rotate-cw" class="w-3 h-3 text-amber"></i>
+                  </button>
+                </div>
+              </div>
+
+              <div class="glass-2 rounded-lg p-3 flex items-center gap-3">
+                <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-violet/20 to-cyan/20 border border-violet/30 flex items-center justify-center">
+                  <i data-lucide="building-2" class="w-5 h-5 text-violet"></i>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2">
+                    <span class="text-sm font-medium">Commercial</span>
+                    <span class="tag bg-slate text-text-muted">3 devices</span>
+                  </div>
+                  <div class="flex items-center gap-2 mt-1.5">
+                    <div class="flex-1 h-1.5 bg-slate rounded-full overflow-hidden">
+                      <div class="h-full bg-gradient-to-r from-amber to-crimson rounded-full" style="width: 33%;"></div>
+                    </div>
+                    <span class="text-[10px] mono text-amber">1/3 online</span>
+                  </div>
+                </div>
+                <div class="flex gap-1">
+                  <button class="btn-ghost w-7 h-7 rounded flex items-center justify-center" onclick="showToast('Starting 3 devices in Commercial...', 'info', 'play')"><i data-lucide="play" class="w-3 h-3 text-emerald"></i></button>
+                  <button class="btn-ghost w-7 h-7 rounded flex items-center justify-center" onclick="showToast('Stopping 3 devices in Commercial...', 'warning', 'square')"><i data-lucide="square" class="w-3 h-3 text-crimson"></i></button>
+                  <button class="btn-ghost w-7 h-7 rounded flex items-center justify-center" onclick="showToast('Rebooting 3 devices in Commercial...', 'warning', 'rotate-cw')"><i data-lucide="rotate-cw" class="w-3 h-3 text-amber"></i></button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- MediaMTX -->
+          <div class="col-span-4 glass rounded-xl p-4">
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="text-sm font-semibold flex items-center gap-2">
+                <i data-lucide="radio" class="w-4 h-4 text-cyan"></i>
+                MediaMTX Engine
+              </h3>
+              <span class="live-badge text-[10px] mono px-2 py-0.5 rounded flex items-center gap-1">
+                <span class="live-dot"></span>
+                STREAMING
+              </span>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div class="glass-2 rounded-lg p-2.5">
+                <div class="text-[9px] text-text-muted uppercase tracking-wider">Active Paths</div>
+                <div class="text-lg font-bold mono text-cyan">7</div>
+              </div>
+              <div class="glass-2 rounded-lg p-2.5">
+                <div class="text-[9px] text-text-muted uppercase tracking-wider">Readers</div>
+                <div class="text-lg font-bold mono text-emerald">14</div>
+              </div>
+              <div class="glass-2 rounded-lg p-2.5">
+                <div class="text-[9px] text-text-muted uppercase tracking-wider">A/V Tracks</div>
+                <div class="text-lg font-bold mono">12/7</div>
+              </div>
+              <div class="glass-2 rounded-lg p-2.5">
+                <div class="text-[9px] text-text-muted uppercase tracking-wider">Bytes Sent</div>
+                <div class="text-lg font-bold mono text-violet">2.4 GB</div>
+              </div>
+            </div>
+            <div class="mt-3 pt-3 border-t border-bd space-y-1.5">
+              <div class="flex items-center justify-between text-xs">
+                <span class="mono text-text-muted truncate">/stream/living-room</span>
+                <span class="text-emerald flex items-center gap-1 flex-shrink-0"><span class="sd online" style="width:6px;height:6px"></span>3 readers</span>
+              </div>
+              <div class="flex items-center justify-between text-xs">
+                <span class="mono text-text-muted truncate">/stream/bedroom</span>
+                <span class="text-emerald flex items-center gap-1 flex-shrink-0"><span class="sd online" style="width:6px;height:6px"></span>2 readers</span>
+              </div>
+              <div class="flex items-center justify-between text-xs">
+                <span class="mono text-text-muted truncate">/stream/conference-a</span>
+                <span class="text-amber flex items-center gap-1 flex-shrink-0"><span class="sd degraded" style="width:6px;height:6px"></span>1 reader</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Recent Activity -->
+          <div class="col-span-3 glass rounded-xl p-4">
+            <h3 class="text-sm font-semibold mb-3">Recent Activity</h3>
+            <div class="space-y-2.5 text-xs">
+              <div class="flex gap-2.5">
+                <div class="w-1.5 h-1.5 rounded-full bg-emerald mt-1.5 flex-shrink-0"></div>
+                <div class="min-w-0">
+                  <div class="text-text leading-tight">Stream started on <span class="font-medium text-emerald">TVB-006</span></div>
+                  <div class="text-[10px] text-text-muted mono">2 min ago</div>
+                </div>
+              </div>
+              <div class="flex gap-2.5">
+                <div class="w-1.5 h-1.5 rounded-full bg-amber mt-1.5 flex-shrink-0"></div>
+                <div class="min-w-0">
+                  <div class="text-text leading-tight"><span class="font-medium text-amber">TVB-003</span> stream degraded</div>
+                  <div class="text-[10px] text-text-muted mono">8 min ago</div>
+                </div>
+              </div>
+              <div class="flex gap-2.5">
+                <div class="w-1.5 h-1.5 rounded-full bg-crimson mt-1.5 flex-shrink-0"></div>
+                <div class="min-w-0">
+                  <div class="text-text leading-tight"><span class="font-medium text-crimson">TVB-005</span> went offline</div>
+                  <div class="text-[10px] text-text-muted mono">14 min ago</div>
+                </div>
+              </div>
+              <div class="flex gap-2.5">
+                <div class="w-1.5 h-1.5 rounded-full bg-cyan mt-1.5 flex-shrink-0"></div>
+                <div class="min-w-0">
+                  <div class="text-text leading-tight">Git pull on <span class="font-medium">main</span></div>
+                  <div class="text-[10px] text-text-muted mono">23 min ago</div>
+                </div>
+              </div>
+              <div class="flex gap-2.5">
+                <div class="w-1.5 h-1.5 rounded-full bg-violet mt-1.5 flex-shrink-0"></div>
+                <div class="min-w-0">
+                  <div class="text-text leading-tight">Backup <span class="font-medium mono">cfg_v341.zip</span></div>
+                  <div class="text-[10px] text-text-muted mono">1h ago</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ DEVICES PANEL ============ -->
+      <div id="panel-devices" class="space-y-4" hidden>
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-base font-semibold">Device Management</h2>
+            <p class="text-xs text-text-muted">Full CRUD operations across all TV box endpoints</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button class="btn-ghost px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5" onclick="showToast('Exported device list to CSV', 'success', 'download')">
+              <i data-lucide="download" class="w-3.5 h-3.5"></i>
+              <span>Export CSV</span>
+            </button>
+            <button class="btn-primary px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5" onclick="openAddDevice()">
+              <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+              <span>Add Device</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="glass rounded-xl overflow-hidden">
+          <div class="px-4 py-3 border-b border-bd flex items-center gap-3 bg-slate-2/30">
+            <div class="flex items-center gap-2 flex-1">
+              <i data-lucide="search" class="w-4 h-4 text-text-muted"></i>
+              <input type="text" placeholder="Search by name, IP, or ID..." class="flex-1 bg-transparent border-none focus:ring-0 focus:border-transparent focus:shadow-none" style="background:transparent;border:none;padding:0;font-size:13px;">
+            </div>
+            <select class="w-32" style="height:32px;padding:4px 8px;">
+              <option>All Status</option>
+              <option>Online</option>
+              <option>Degraded</option>
+              <option>Offline</option>
+            </select>
+            <select class="w-32" style="height:32px;padding:4px 8px;">
+              <option>All Groups</option>
+              <option>Residential</option>
+              <option>Commercial</option>
+            </select>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="text-left text-[10px] text-text-muted uppercase tracking-wider border-b border-bd">
+                  <th class="px-4 py-2.5"><input type="checkbox" class="cb"></th>
+                  <th class="px-4 py-2.5">Device</th>
+                  <th class="px-4 py-2.5">IP Address</th>
+                  <th class="px-4 py-2.5">Player</th>
+                  <th class="px-4 py-2.5">Group</th>
+                  <th class="px-4 py-2.5">Status</th>
+                  <th class="px-4 py-2.5">Uptime</th>
+                  <th class="px-4 py-2.5 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="device-table-body"></tbody>
+            </table>
+          </div>
+
+          <div class="px-4 py-3 border-t border-bd flex items-center justify-between text-xs text-text-muted">
+            <span>Showing <span class="text-text">8</span> of <span class="text-text">8</span> devices</span>
+            <div class="flex items-center gap-1">
+              <button class="btn-ghost px-2 py-1 rounded text-xs">‹ Prev</button>
+              <button class="btn-ghost px-2 py-1 rounded text-xs bg-cyan/10 text-cyan border-cyan/30">1</button>
+              <button class="btn-ghost px-2 py-1 rounded text-xs">Next ›</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ GROUPS PANEL ============ -->
+      <div id="panel-groups" class="space-y-4" hidden>
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-base font-semibold">Group Management</h2>
+            <p class="text-xs text-text-muted">Batch operations and group-level policies</p>
+          </div>
+          <button class="btn-primary px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5" onclick="showToast('Group creation form opened', 'info', 'plus')">
+            <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+            <span>Create Group</span>
+          </button>
+        </div>
+
+        <div class="grid grid-cols-12 gap-4">
+          <div class="col-span-6 glass rounded-xl p-4 halo-online">
+            <div class="flex items-start justify-between mb-3">
+              <div class="flex items-center gap-3">
+                <div class="w-12 h-12 rounded-lg bg-gradient-to-br from-cyan/20 to-violet/20 border border-cyan/30 flex items-center justify-center">
+                  <i data-lucide="home" class="w-6 h-6 text-cyan"></i>
+                </div>
+                <div>
+                  <h3 class="text-base font-semibold">Residential</h3>
+                  <p class="text-xs text-text-muted">Home entertainment systems</p>
+                </div>
+              </div>
+              <button class="btn-ghost px-2 py-1 rounded text-xs"><i data-lucide="more-horizontal" class="w-4 h-4"></i></button>
+            </div>
+
+            <div class="grid grid-cols-3 gap-3 mb-4">
+              <div class="text-center">
+                <div class="text-2xl font-bold">5</div>
+                <div class="text-[10px] text-text-muted uppercase">Devices</div>
+              </div>
+              <div class="text-center">
+                <div class="text-2xl font-bold text-emerald">4</div>
+                <div class="text-[10px] text-text-muted uppercase">Online</div>
+              </div>
+              <div class="text-center">
+                <div class="text-2xl font-bold text-cyan">80%</div>
+                <div class="text-[10px] text-text-muted uppercase">Health</div>
+              </div>
+            </div>
+
+            <div class="space-y-1 mb-4">
+              <div class="flex items-center gap-2 text-xs">
+                <div class="sd online" style="width:6px;height:6px"></div>
+                <span class="flex-1">Living Room Main</span>
+                <span class="mono text-text-muted">192.168.1.101</span>
+              </div>
+              <div class="flex items-center gap-2 text-xs">
+                <div class="sd online" style="width:6px;height:6px"></div>
+                <span class="flex-1">Bedroom Stream Unit</span>
+                <span class="mono text-text-muted">192.168.1.102</span>
+              </div>
+              <div class="flex items-center gap-2 text-xs">
+                <div class="sd degraded" style="width:6px;height:6px"></div>
+                <span class="flex-1">Patio Outdoor TV</span>
+                <span class="mono text-text-muted">192.168.1.107</span>
+              </div>
+              <div class="flex items-center gap-2 text-xs">
+                <div class="sd online" style="width:6px;height:6px"></div>
+                <span class="flex-1">Gym Display Unit</span>
+                <span class="mono text-text-muted">192.168.1.108</span>
+              </div>
+              <div class="flex items-center gap-2 text-xs">
+                <div class="sd online" style="width:6px;height:6px"></div>
+                <span class="flex-1">Kitchen Display</span>
+                <span class="mono text-text-muted">192.168.1.109</span>
+              </div>
+            </div>
+
+            <div class="flex gap-2">
+              <button class="btn-ghost flex-1 py-2 rounded-md text-xs flex items-center justify-center gap-1.5" onclick="showToast('Starting all 5 devices in Residential...', 'info', 'play')">
+                <i data-lucide="play" class="w-3.5 h-3.5 text-emerald"></i> Start All
+              </button>
+              <button class="btn-ghost flex-1 py-2 rounded-md text-xs flex items-center justify-center gap-1.5" onclick="showToast('Stopping all 5 devices in Residential...', 'warning', 'square')">
+                <i data-lucide="square" class="w-3.5 h-3.5 text-crimson"></i> Stop All
+              </button>
+              <button class="btn-ghost flex-1 py-2 rounded-md text-xs flex items-center justify-center gap-1.5" onclick="showToast('Rebooting all 5 devices in Residential...', 'warning', 'rotate-cw')">
+                <i data-lucide="rotate-cw" class="w-3.5 h-3.5 text-amber"></i> Reboot All
+              </button>
+            </div>
+          </div>
+
+          <div class="col-span-6 glass rounded-xl p-4 halo-degraded">
+            <div class="flex items-start justify-between mb-3">
+              <div class="flex items-center gap-3">
+                <div class="w-12 h-12 rounded-lg bg-gradient-to-br from-violet/20 to-cyan/20 border border-violet/30 flex items-center justify-center">
+                  <i data-lucide="building-2" class="w-6 h-6 text-violet"></i>
+                </div>
+                <div>
+                  <h3 class="text-base font-semibold">Commercial</h3>
+                  <p class="text-xs text-text-muted">Business and retail deployments</p>
+                </div>
+              </div>
+              <button class="btn-ghost px-2 py-1 rounded text-xs"><i data-lucide="more-horizontal" class="w-4 h-4"></i></button>
+            </div>
+
+            <div class="grid grid-cols-3 gap-3 mb-4">
+              <div class="text-center">
+                <div class="text-2xl font-bold">3</div>
+                <div class="text-[10px] text-text-muted uppercase">Devices</div>
+              </div>
+              <div class="text-center">
+                <div class="text-2xl font-bold text-emerald">1</div>
+                <div class="text-[10px] text-text-muted uppercase">Online</div>
+              </div>
+              <div class="text-center">
+                <div class="text-2xl font-bold text-amber">33%</div>
+                <div class="text-[10px] text-text-muted uppercase">Health</div>
+              </div>
+            </div>
+
+            <div class="space-y-1 mb-4">
+              <div class="flex items-center gap-2 text-xs">
+                <div class="sd degraded" style="width:6px;height:6px"></div>
+                <span class="flex-1">Lobby Display #1</span>
+                <span class="mono text-text-muted">192.168.1.103</span>
+              </div>
+              <div class="flex items-center gap-2 text-xs">
+                <div class="sd online" style="width:6px;height:6px"></div>
+                <span class="flex-1">Conference Room A</span>
+                <span class="mono text-text-muted">192.168.1.104</span>
+              </div>
+              <div class="flex items-center gap-2 text-xs">
+                <div class="sd offline" style="width:6px;height:6px"></div>
+                <span class="flex-1">Reception Kiosk</span>
+                <span class="mono text-text-muted">192.168.1.105</span>
+              </div>
+            </div>
+
+            <div class="flex gap-2">
+              <button class="btn-ghost flex-1 py-2 rounded-md text-xs flex items-center justify-center gap-1.5" onclick="showToast('Starting all 3 devices in Commercial...', 'info', 'play')">
+                <i data-lucide="play" class="w-3.5 h-3.5 text-emerald"></i> Start All
+              </button>
+              <button class="btn-ghost flex-1 py-2 rounded-md text-xs flex items-center justify-center gap-1.5" onclick="showToast('Stopping all 3 devices in Commercial...', 'warning', 'square')">
+                <i data-lucide="square" class="w-3.5 h-3.5 text-crimson"></i> Stop All
+              </button>
+              <button class="btn-ghost flex-1 py-2 rounded-md text-xs flex items-center justify-center gap-1.5" onclick="showToast('Rebooting all 3 devices in Commercial...', 'warning', 'rotate-cw')">
+                <i data-lucide="rotate-cw" class="w-3.5 h-3.5 text-amber"></i> Reboot All
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ SHELL PANEL ============ -->
+      <div id="panel-shell" class="space-y-4" hidden>
+        <div class="grid grid-cols-12 gap-4">
+          <!-- Terminal -->
+          <div class="col-span-8 space-y-3">
+            <div class="flex items-center justify-between">
+              <div>
+                <h2 class="text-base font-semibold">Remote ADB Shell</h2>
+                <p class="text-xs text-text-muted">Direct shell access with command history & inline rendering</p>
+              </div>
+              <div class="flex items-center gap-2">
+                <select id="shell-device-select" class="w-48" style="height:32px;padding:4px 8px;">
+                  <option>TVB-001 · Living Room</option>
+                  <option>TVB-002 · Bedroom</option>
+                  <option>TVB-003 · Lobby</option>
+                  <option>TVB-004 · Conference A</option>
+                </select>
+                <button class="btn-ghost px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5" onclick="showToast('Shell session reconnected', 'success', 'refresh-cw')">
+                  <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                  <span>Reconnect</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="glass rounded-xl overflow-hidden">
+              <div class="flex items-center justify-between px-4 py-2.5 border-b border-bd bg-slate-2/50">
+                <div class="flex items-center gap-2">
+                  <div class="flex gap-1.5">
+                    <div class="w-2.5 h-2.5 rounded-full bg-crimson/70"></div>
+                    <div class="w-2.5 h-2.5 rounded-full bg-amber/70"></div>
+                    <div class="w-2.5 h-2.5 rounded-full bg-emerald/70"></div>
+                  </div>
+                  <span class="text-xs font-medium ml-2 mono">root@nexus-01:~$</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="text-[10px] mono text-text-muted">PID 4218</span>
+                  <button class="text-text-muted hover:text-cyan" onclick="clearTerminal()">
+                    <i data-lucide="eraser" class="w-3.5 h-3.5"></i>
+                  </button>
+                </div>
+              </div>
+
+              <div class="terminal p-4 h-96 overflow-y-auto" id="full-terminal"></div>
+
+              <div class="px-4 py-2.5 border-t border-bd bg-slate-2/30 flex items-center gap-2">
+                <span class="text-xs mono text-cyan">root@nexus-01:~$</span>
+                <input type="text" id="full-terminal-input" placeholder="enter command... (try: help, devices, cpu, screenshot, scrcpy)" class="flex-1 bg-transparent border-none focus:ring-0 focus:border-transparent focus:shadow-none" style="background:transparent;border:none;padding:0;font-size:12px;font-family:'JetBrains Mono',monospace;" autocomplete="off">
+                <span class="text-[10px] text-text-muted">↑↓ history · Tab autocomplete</span>
+              </div>
+            </div>
+
+            <!-- Quick Shell Actions -->
+            <div class="glass rounded-xl p-4">
+              <div class="flex items-center justify-between mb-3">
+                <h3 class="text-xs font-semibold uppercase tracking-wider text-text-muted">Quick Shell Actions</h3>
+                <span class="text-[10px] mono text-text-muted">one-click commands</span>
+              </div>
+              <div class="flex flex-wrap gap-2">
+                <button class="shell-action" onclick="runCommand('cpu')"><i data-lucide="cpu" class="w-3 h-3"></i>cpu info</button>
+                <button class="shell-action" onclick="runCommand('mem')"><i data-lucide="memory-stick" class="w-3 h-3"></i>memory</button>
+                <button class="shell-action" onclick="runCommand('battery')"><i data-lucide="battery-charging" class="w-3 h-3"></i>battery</button>
+                <button class="shell-action" onclick="runCommand('screenshot')"><i data-lucide="camera" class="w-3 h-3"></i>screenshot</button>
+                <button class="shell-action" onclick="runCommand('network')"><i data-lucide="wifi" class="w-3 h-3"></i>network</button>
+                <button class="shell-action" onclick="runCommand('processes')"><i data-lucide="activity" class="w-3 h-3"></i>top procs</button>
+                <button class="shell-action" onclick="runCommand('logcat')"><i data-lucide="file-text" class="w-3 h-3"></i>logcat</button>
+                <button class="shell-action" onclick="runCommand('props')"><i data-lucide="settings-2" class="w-3 h-3"></i>getprop</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Scrcpy Configurator -->
+          <div class="col-span-4 space-y-3">
+            <div class="glass rounded-xl p-4">
+              <div class="flex items-center justify-between mb-3">
+                <h3 class="text-sm font-semibold flex items-center gap-2">
+                  <i data-lucide="smartphone" class="w-4 h-4 text-cyan"></i>
+                  Scrcpy Configurator
+                </h3>
+                <span class="text-[10px] mono px-2 py-0.5 rounded bg-cyan/10 text-cyan border border-cyan/20">v2.4</span>
+              </div>
+
+              <!-- Version Switcher -->
+              <div class="mb-4">
+                <div class="text-[10px] text-text-muted uppercase tracking-wider mb-1.5">Version Manager</div>
+                <div class="space-y-1.5">
+                  <div class="flex items-center gap-2 p-2 rounded-md bg-cyan/5 border border-cyan/30">
+                    <div class="sd online" style="width:6px;height:6px"></div>
+                    <span class="text-xs mono flex-1">v2.4</span>
+                    <span class="text-[10px] mono text-cyan">ACTIVE</span>
+                  </div>
+                  <div class="flex items-center gap-2 p-2 rounded-md bg-slate-2/50 border border-bd">
+                    <div class="sd offline" style="width:6px;height:6px;background:#6E7681;box-shadow:none"></div>
+                    <span class="text-xs mono flex-1 text-text-dim">v2.3.1</span>
+                    <button class="text-[10px] text-cyan hover:underline" onclick="showToast('Switching to scrcpy v2.3.1...', 'info', 'refresh-cw')">activate</button>
+                  </div>
+                  <div class="flex items-center gap-2 p-2 rounded-md bg-slate-2/50 border border-bd">
+                    <div class="sd offline" style="width:6px;height:6px;background:#6E7681;box-shadow:none"></div>
+                    <span class="text-xs mono flex-1 text-text-dim">v2.2</span>
+                    <button class="text-[10px] text-cyan hover:underline" onclick="showToast('Switching to scrcpy v2.2...', 'info', 'refresh-cw')">activate</button>
+                  </div>
+                </div>
+                <div class="flex gap-1 mt-2">
+                  <button class="btn-ghost flex-1 py-1.5 rounded text-[10px] flex items-center justify-center gap-1" onclick="showToast('Scrcpy v2.5 installation started', 'info', 'download')">
+                    <i data-lucide="download" class="w-3 h-3"></i> Install New
+                  </button>
+                  <button class="btn-danger flex-1 py-1.5 rounded text-[10px] flex items-center justify-center gap-1" onclick="showToast('Removed scrcpy v2.2 from registry', 'warning', 'trash-2')">
+                    <i data-lucide="trash-2" class="w-3 h-3"></i> Delete
+                  </button>
+                </div>
+              </div>
+
+              <!-- Arguments -->
+              <div class="mb-4">
+                <div class="text-[10px] text-text-muted uppercase tracking-wider mb-2">Launch Arguments</div>
+                <div class="space-y-2.5">
+                  <div>
+                    <div class="flex justify-between text-xs mb-1">
+                      <span class="text-text-dim">Bitrate</span>
+                      <span class="mono text-cyan" id="bitrate-val">8M</span>
+                    </div>
+                    <input type="range" min="1" max="20" value="8" id="bitrate-slider" oninput="document.getElementById('bitrate-val').textContent=this.value+'M'">
+                  </div>
+                  <div>
+                    <div class="flex justify-between text-xs mb-1">
+                      <span class="text-text-dim">Max FPS</span>
+                      <span class="mono text-cyan" id="fps-val">60</span>
+                    </div>
+                    <input type="range" min="15" max="120" value="60" id="fps-slider" oninput="document.getElementById('fps-val').textContent=this.value">
+                  </div>
+                  <div>
+                    <div class="text-xs text-text-dim mb-1">Video Codec</div>
+                    <select style="height:32px;padding:4px 8px;">
+                      <option>H264 (default)</option>
+                      <option>H265 / HEVC</option>
+                      <option>AV1</option>
+                    </select>
+                  </div>
+                  <div class="space-y-1.5">
+                    <label class="flex items-center gap-2 text-xs cursor-pointer">
+                      <input type="checkbox" class="cb" checked>
+                      <span>Audio forwarding</span>
+                    </label>
+                    <label class="flex items-center gap-2 text-xs cursor-pointer">
+                      <input type="checkbox" class="cb">
+                      <span>Headless mode (no window)</span>
+                    </label>
+                    <label class="flex items-center gap-2 text-xs cursor-pointer">
+                      <input type="checkbox" class="cb" checked>
+                      <span>Stay awake while mirroring</span>
+                    </label>
+                    <label class="flex items-center gap-2 text-xs cursor-pointer">
+                      <input type="checkbox" class="cb">
+                      <span>Turn screen off physically</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Launch -->
+              <div class="space-y-2">
+                <button class="btn-primary w-full py-2.5 rounded-md text-xs flex items-center justify-center gap-2" onclick="showToast('Scrcpy mirror launched (floating window)', 'success', 'play')">
+                  <i data-lucide="monitor" class="w-4 h-4"></i>
+                  Mirror (Floating Window)
+                </button>
+                <button class="btn-ghost w-full py-2.5 rounded-md text-xs flex items-center justify-center gap-2" onclick="showToast('RTMP stream started on rtmp://localhost/live/tvb001', 'success', 'radio')">
+                  <i data-lucide="radio" class="w-4 h-4 text-cyan"></i>
+                  Stream (RTMP)
+                </button>
+              </div>
+            </div>
+
+            <!-- Preview Window -->
+            <div class="glass rounded-xl overflow-hidden">
+              <div class="flex items-center justify-between px-4 py-2.5 border-b border-bd bg-slate-2/50">
+                <span class="text-xs font-medium">Live Mirror Preview</span>
+                <span class="live-badge text-[10px] mono px-2 py-0.5 rounded flex items-center gap-1">
+                  <span class="live-dot"></span>
+                  60 FPS
+                </span>
+              </div>
+              <div class="stream-preview h-44 relative flex items-center justify-center">
+                <div class="noise"></div>
+                <div class="scan-line"></div>
+                <div class="relative z-10 text-center">
+                  <div class="text-xs mono text-emerald/70 mb-1">▶ MIRRORING · 1920×1080</div>
+                  <div class="text-[10px] mono text-text-muted">bitrate 8M · codec H264 · 60fps</div>
+                </div>
+                <div class="absolute bottom-2 left-2 right-2 flex justify-between text-[10px] mono">
+                  <span class="text-cyan">► TVB-001</span>
+                  <span class="text-emerald">●REC 00:12:34</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ STREAM ENGINE PANEL ============ -->
+      <div id="panel-stream" class="space-y-4" hidden>
+        <div class="grid grid-cols-12 gap-4">
+          <!-- MediaMTX Health -->
+          <div class="col-span-8 glass rounded-xl p-4">
+            <div class="flex items-center justify-between mb-4">
+              <div>
+                <h2 class="text-base font-semibold flex items-center gap-2">
+                  <i data-lucide="radio" class="w-5 h-5 text-cyan"></i>
+                  MediaMTX Stream Engine
+                </h2>
+                <p class="text-xs text-text-muted mt-0.5">Real-time media routing and path management</p>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="live-badge text-[10px] mono px-2 py-0.5 rounded flex items-center gap-1">
+                  <span class="live-dot"></span>
+                  STREAMING
+                </span>
+                <button class="btn-ghost px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5" onclick="showToast('MediaMTX restarted', 'success', 'refresh-cw')">
+                  <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                  <span>Restart</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-4 gap-3 mb-4">
+              <div class="glass-2 rounded-lg p-3">
+                <div class="text-[10px] text-text-muted uppercase tracking-wider mb-1">Active Paths</div>
+                <div class="text-2xl font-bold mono text-cyan">7</div>
+                <div class="text-[10px] mono text-emerald mt-1">▲ 2 in last hour</div>
+              </div>
+              <div class="glass-2 rounded-lg p-3">
+                <div class="text-[10px] text-text-muted uppercase tracking-wider mb-1">Readers</div>
+                <div class="text-2xl font-bold mono text-emerald">14</div>
+                <div class="text-[10px] mono text-text-muted mt-1">peak: 23</div>
+              </div>
+              <div class="glass-2 rounded-lg p-3">
+                <div class="text-[10px] text-text-muted uppercase tracking-wider mb-1">Bytes Sent</div>
+                <div class="text-2xl font-bold mono text-violet">2.4 GB</div>
+                <div class="text-[10px] mono text-text-muted mt-1">↑ 142 Mbps avg</div>
+              </div>
+              <div class="glass-2 rounded-lg p-3">
+                <div class="text-[10px] text-text-muted uppercase tracking-wider mb-1">A/V Tracks</div>
+                <div class="text-2xl font-bold mono">12/7</div>
+                <div class="text-[10px] mono text-text-muted mt-1">audio / video</div>
+              </div>
+            </div>
+
+            <!-- Path Table -->
+            <div class="text-[10px] text-text-muted uppercase tracking-wider mb-2">Active Stream Paths</div>
+            <div class="space-y-1.5">
+              <div class="glass-2 rounded-lg p-3 flex items-center gap-3">
+                <div class="sd online pulse-dot"></div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-xs mono text-cyan">/stream/living-room</div>
+                  <div class="text-[10px] text-text-muted">H264 · 1920×1080 · 60fps · 8Mbps</div>
+                </div>
+                <div class="text-right">
+                  <div class="text-xs font-medium text-emerald">3 readers</div>
+                  <div class="text-[10px] mono text-text-muted">412 MB sent</div>
+                </div>
+                <button class="btn-ghost px-2 py-1 rounded text-xs"><i data-lucide="settings-2" class="w-3 h-3"></i></button>
+              </div>
+              <div class="glass-2 rounded-lg p-3 flex items-center gap-3">
+                <div class="sd online pulse-dot"></div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-xs mono text-cyan">/stream/bedroom</div>
+                  <div class="text-[10px] text-text-muted">H264 · 1280×720 · 30fps · 4Mbps</div>
+                </div>
+                <div class="text-right">
+                  <div class="text-xs font-medium text-emerald">2 readers</div>
+                  <div class="text-[10px] mono text-text-muted">128 MB sent</div>
+                </div>
+                <button class="btn-ghost px-2 py-1 rounded text-xs"><i data-lucide="settings-2" class="w-3 h-3"></i></button>
+              </div>
+              <div class="glass-2 rounded-lg p-3 flex items-center gap-3">
+                <div class="sd degraded pulse-dot"></div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-xs mono text-amber">/stream/conference-a</div>
+                  <div class="text-[10px] text-text-muted">H265 · 1920×1080 · 60fps · 12Mbps · HIGH LATENCY</div>
+                </div>
+                <div class="text-right">
+                  <div class="text-xs font-medium text-amber">1 reader</div>
+                  <div class="text-[10px] mono text-text-muted">89 MB sent</div>
+                </div>
+                <button class="btn-ghost px-2 py-1 rounded text-xs"><i data-lucide="settings-2" class="w-3 h-3"></i></button>
+              </div>
+              <div class="glass-2 rounded-lg p-3 flex items-center gap-3">
+                <div class="sd online pulse-dot"></div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-xs mono text-cyan">/stream/bar-display</div>
+                  <div class="text-[10px] text-text-muted">H264 · 1920×1080 · 60fps · 8Mbps</div>
+                </div>
+                <div class="text-right">
+                  <div class="text-xs font-medium text-emerald">4 readers</div>
+                  <div class="text-[10px] mono text-text-muted">621 MB sent</div>
+                </div>
+                <button class="btn-ghost px-2 py-1 rounded text-xs"><i data-lucide="settings-2" class="w-3 h-3"></i></button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Config Preview -->
+          <div class="col-span-4 glass rounded-xl p-4">
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="text-sm font-semibold">mediamtx.yml</h3>
+              <div class="flex items-center gap-1">
+                <button class="btn-ghost px-2 py-1 rounded text-xs"><i data-lucide="copy" class="w-3 h-3"></i></button>
+                <button class="btn-ghost px-2 py-1 rounded text-xs"><i data-lucide="save" class="w-3 h-3"></i></button>
+              </div>
+            </div>
+            <div class="code-block text-[10px] leading-relaxed">
+              <div><span class="term-key">pathDefaults</span>:</div>
+              <div class="pl-3"><span class="term-path">sourceProtocol</span>: <span class="term-string">rtsp</span></div>
+              <div class="pl-3"><span class="term-path">rtspAddress</span>: <span class="term-string">:8554</span></div>
+              <div class="pl-3"><span class="term-path">hlsAlwaysRemux</span>: <span class="term-num">true</span></div>
+              <div class="mt-2"><span class="term-key">paths</span>:</div>
+              <div class="pl-3"><span class="term-path">all_others</span>:</div>
+              <div class="pl-6"><span class="term-path">source</span>: <span class="term-string">publisher</span></div>
+              <div class="pl-6"><span class="term-path">sourceProtocol</span>: <span class="term-string">rtsp</span></div>
+              <div class="pl-6"><span class="term-path">rtspAddress</span>: <span class="term-string">:8554</span></div>
+              <div class="pl-3"><span class="term-path">living-room</span>:</div>
+              <div class="pl-6"><span class="term-path">source</span>: <span class="term-string">rtsp://192.168.1.101</span></div>
+              <div class="pl-6 diff-add"><span class="term-path">maxReaders</span>: <span class="term-num">10</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ LOGS PANEL ============ -->
+      <div id="panel-logs" class="space-y-4" hidden>
+        <div class="glass rounded-xl overflow-hidden">
+          <div class="px-4 py-3 border-b border-bd flex items-center gap-3">
+            <div class="flex items-center gap-1">
+              <div class="tab-pill active px-3 py-1.5 text-xs font-medium text-cyan border-cyan" data-logtab="system">System</div>
+              <div class="tab-pill px-3 py-1.5 text-xs font-medium text-text-dim" data-logtab="adb">ADB</div>
+              <div class="tab-pill px-3 py-1.5 text-xs font-medium text-text-dim" data-logtab="mediamtx">MediaMTX</div>
+              <div class="tab-pill px-3 py-1.5 text-xs font-medium text-text-dim" data-logtab="watchdog">Watchdog</div>
+              <div class="tab-pill px-3 py-1.5 text-xs font-medium text-text-dim" data-logtab="user">User</div>
+              <div class="tab-pill px-3 py-1.5 text-xs font-medium text-text-dim" data-logtab="api">API</div>
+            </div>
+            <div class="ml-auto flex items-center gap-2">
+              <label class="flex items-center gap-1.5 text-xs text-text-muted cursor-pointer">
+                <input type="checkbox" class="cb" checked>
+                <span>Auto-refresh 5s</span>
+              </label>
+              <span class="tag bg-amber/10 text-amber border border-amber/30">5MB rotate</span>
+            </div>
+          </div>
+
+          <div class="px-4 py-3 border-b border-bd bg-slate-2/30 flex items-center gap-3">
+            <div class="flex items-center gap-2 flex-1">
+              <i data-lucide="search" class="w-4 h-4 text-text-muted"></i>
+              <input type="text" placeholder="Search logs by text, device ID, or pattern..." class="flex-1 bg-transparent border-none focus:ring-0 focus:border-transparent focus:shadow-none" style="background:transparent;border:none;padding:0;font-size:13px;">
+            </div>
+            <select class="w-28" style="height:32px;padding:4px 8px;">
+              <option>All Levels</option>
+              <option>INFO</option>
+              <option>WARN</option>
+              <option>ERROR</option>
+              <option>DEBUG</option>
+            </select>
+            <select class="w-32" style="height:32px;padding:4px 8px;">
+              <option>All Sources</option>
+              <option>TVB-001</option>
+              <option>TVB-002</option>
+              <option>TVB-003</option>
+            </select>
+            <input type="date" class="w-36" style="height:32px;padding:4px 8px;">
+            <button class="btn-ghost px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5" onclick="showToast('Log file downloaded (2.3 MB)', 'success', 'download')">
+              <i data-lucide="download" class="w-3.5 h-3.5"></i>
+              <span>Download</span>
+            </button>
+          </div>
+
+          <div class="terminal p-4 h-96 overflow-y-auto" id="log-viewer">
+            <div class="log-line">
+              <span class="log-time">14:32:18.412</span>
+              <span class="log-level info">INFO</span>
+              <span class="log-source">[mediamtx]</span>
+              <span class="log-msg">New path registered: /stream/living-room (rtsp://192.168.1.101:8554)</span>
+            </div>
+            <div class="log-line">
+              <span class="log-time">14:32:18.398</span>
+              <span class="log-level success">OK</span>
+              <span class="log-source">[adb]</span>
+              <span class="log-msg">Connected to TVB-001 @ 192.168.1.101:5555 (auth: ok)</span>
+            </div>
+            <div class="log-line">
+              <span class="log-time">14:32:17.841</span>
+              <span class="log-level info">INFO</span>
+              <span class="log-source">[system]</span>
+              <span class="log-msg">Watchdog armed for device TVB-003 (degraded state detected)</span>
+            </div>
+            <div class="log-line">
+              <span class="log-time">14:32:15.203</span>
+              <span class="log-level warn">WARN</span>
+              <span class="log-source">[mediamtx]</span>
+              <span class="log-msg">High latency detected on /stream/conference-a: 480ms (threshold: 300ms)</span>
+            </div>
+            <div class="log-line">
+              <span class="log-time">14:32:14.012</span>
+              <span class="log-level info">INFO</span>
+              <span class="log-source">[api]</span>
+              <span class="log-msg">GET /api/devices → 200 OK (12ms) — 8 entries returned</span>
+            </div>
+            <div class="log-line">
+              <span class="log-time">14:32:12.587</span>
+              <span class="log-level error">ERR</span>
+              <span class="log-source">[adb]</span>
+              <span class="log-msg">TVB-005 connection timeout — device unreachable at 192.168.1.105:5555</span>
+            </div>
+            <div class="log-line">
+              <span class="log-time">14:32:12.103</span>
+              <span class="log-level warn">WARN</span>
+              <span class="log-source">[watchdog]</span>
+              <span class="log-msg">Cascade triggered for TVB-005: step 1 (reopen stream) → step 2 (wi-fi restart)</span>
+            </div>
+            <div class="log-line">
+              <span class="log-time">14:32:10.421</span>
+              <span class="log-level info">INFO</span>
+              <span class="log-source">[user]</span>
+              <span class="log-msg">User 'admin@nexus' triggered git-pull from main branch</span>
+            </div>
+            <div class="log-line">
+              <span class="log-time">14:32:08.992</span>
+              <span class="log-level debug">DBG</span>
+              <span class="log-source">[system]</span>
+              <span class="log-msg">Memory pressure: 4.2GB / 16GB (26.2%) — within nominal range</span>
+            </div>
+            <div class="log-line">
+              <span class="log-time">14:32:06.118</span>
+              <span class="log-level success">OK</span>
+              <span class="log-source">[mediamtx]</span>
+              <span class="log-msg">Reader connected to /stream/bar-display (total readers: 4)</span>
+            </div>
+            <div class="log-line">
+              <span class="log-time">14:32:04.503</span>
+              <span class="log-level info">INFO</span>
+              <span class="log-source">[api]</span>
+              <span class="log-msg">POST /api/devices/TVB-006/stream/start → 201 Created (340ms)</span>
+            </div>
+            <div class="log-line">
+              <span class="log-time">14:32:02.871</span>
+              <span class="log-level info">INFO</span>
+              <span class="log-source">[system]</span>
+              <span class="log-msg">Auto-rotation: log file size 4.8MB / 5MB — approaching threshold</span>
+            </div>
+          </div>
+
+          <div class="px-4 py-3 border-t border-bd flex items-center justify-between text-xs text-text-muted">
+            <div class="flex items-center gap-3">
+              <span><span class="text-emerald">●</span> Live tail active</span>
+              <span>12,847 lines</span>
+              <span>4.8 MB / 5 MB</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <button class="btn-ghost px-2 py-1 rounded text-xs" onclick="showToast('Log rotation triggered manually', 'info', 'refresh-cw')">Rotate now</button>
+              <button class="btn-ghost px-2 py-1 rounded text-xs" onclick="showToast('Full log archive downloaded (48.2 MB)', 'success', 'download')">Download full</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ WATCHDOG PANEL ============ -->
+      <div id="panel-watchdog" class="space-y-4" hidden>
+        <div class="grid grid-cols-12 gap-4">
+          <div class="col-span-7 glass rounded-xl p-5">
+            <div class="flex items-center justify-between mb-4">
+              <div>
+                <h2 class="text-base font-semibold flex items-center gap-2">
+                  <i data-lucide="shield-alert" class="w-5 h-5 text-cyan"></i>
+                  Watchdog Cascade Visualizer
+                </h2>
+                <p class="text-xs text-text-muted mt-0.5">Diagnostic escalation tree — current target: TVB-003</p>
+              </div>
+              <span class="text-[10px] mono px-2 py-0.5 rounded bg-amber/10 text-amber border border-amber/20">CASCADE ACTIVE</span>
+            </div>
+
+            <div class="space-y-4 pl-2">
+              <div class="cascade-step done" style="padding-left:48px;">
+                <div class="absolute left-0 w-9 h-9 rounded-full bg-emerald/15 border-2 border-emerald flex items-center justify-center">
+                  <i data-lucide="check" class="w-4 h-4 text-emerald"></i>
+                </div>
+                <div class="glass-2 rounded-lg p-3">
+                  <div class="flex items-center justify-between mb-1">
+                    <span class="text-sm font-medium">Step 1: Reopen Stream</span>
+                    <span class="tag bg-emerald/10 text-emerald border border-emerald/30">PASSED · 1.2s</span>
+                  </div>
+                  <div class="text-xs text-text-muted">Attempted to restart RTSP stream on /stream/lobby-1. Stream reopened successfully but signal degraded within 8 seconds.</div>
+                </div>
+              </div>
+
+              <div class="cascade-step active" style="padding-left:48px;">
+                <div class="absolute left-0 w-9 h-9 rounded-full bg-amber/15 border-2 border-amber flex items-center justify-center">
+                  <i data-lucide="loader" class="w-4 h-4 text-amber animate-spin"></i>
+                </div>
+                <div class="glass-2 rounded-lg p-3 halo-degraded">
+                  <div class="flex items-center justify-between mb-1">
+                    <span class="text-sm font-medium">Step 2: Wi-Fi Restart</span>
+                    <span class="tag bg-amber/10 text-amber border border-amber/30">ACTIVE · 45s elapsed</span>
+                  </div>
+                  <div class="text-xs text-text-muted mb-2">Triggering <span class="mono text-cyan">adb shell svc wifi disable && svc wifi enable</span> — waiting for reconnection.</div>
+                  <div class="h-1.5 bg-slate rounded-full overflow-hidden">
+                    <div class="h-full bg-amber rounded-full" style="width: 75%; box-shadow: 0 0 8px #FFB300;"></div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="cascade-step" style="padding-left:48px; opacity:0.5;">
+                <div class="absolute left-0 w-9 h-9 rounded-full bg-slate border-2 border-bd flex items-center justify-center">
+                  <i data-lucide="circle" class="w-4 h-4"></i>
+                </div>
+                <div class="glass-2 rounded-lg p-3">
+                  <div class="flex items-center justify-between mb-1">
+                    <span class="text-sm font-medium">Step 3: Ethernet Toggle</span>
+                    <span class="tag bg-slate text-text-muted border border-bd">PENDING</span>
+                  </div>
+                  <div class="text-xs text-text-muted">Will execute <span class="mono">ifconfig eth0 down && ifconfig eth0 up</span> if Wi-Fi restart fails.</div>
+                </div>
+              </div>
+
+              <div class="cascade-step" style="padding-left:48px; opacity:0.5;">
+                <div class="absolute left-0 w-9 h-9 rounded-full bg-slate border-2 border-bd flex items-center justify-center">
+                  <i data-lucide="power" class="w-4 h-4"></i>
+                </div>
+                <div class="glass-2 rounded-lg p-3">
+                  <div class="flex items-center justify-between mb-1">
+                    <span class="text-sm font-medium">Step 4: Hard Reboot</span>
+                    <span class="tag bg-slate text-text-muted border border-bd">PENDING</span>
+                  </div>
+                  <div class="text-xs text-text-muted">Final fallback — full device reboot via <span class="mono">adb reboot</span>. Requires manual confirmation.</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="mt-5 pt-4 border-t border-bd grid grid-cols-3 gap-4">
+              <div>
+                <div class="text-[10px] text-text-muted uppercase tracking-wider">Grace Period</div>
+                <div class="text-xl font-bold mono text-cyan">60s</div>
+                <div class="text-[10px] text-text-muted">time between steps</div>
+              </div>
+              <div>
+                <div class="text-[10px] text-text-muted uppercase tracking-wider">Cooldown</div>
+                <div class="text-xl font-bold mono text-violet">2m 00s</div>
+                <div class="text-[10px] text-text-muted">between full cascades</div>
+              </div>
+              <div>
+                <div class="text-[10px] text-text-muted uppercase tracking-wider">Total Runtime</div>
+                <div class="text-xl font-bold mono">3m 12s</div>
+                <div class="text-[10px] text-text-muted">since trigger</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-span-5 space-y-4">
+            <div class="glass rounded-xl p-4">
+              <h3 class="text-sm font-semibold mb-3 flex items-center gap-2">
+                <i data-lucide="history" class="w-4 h-4 text-cyan"></i>
+                Cascade History (24h)
+              </h3>
+              <div class="space-y-2 text-xs">
+                <div class="flex items-center gap-2 p-2 rounded bg-slate-2/50">
+                  <i data-lucide="check-circle" class="w-3.5 h-3.5 text-emerald flex-shrink-0"></i>
+                  <span class="flex-1">TVB-001 · Step 1 resolved</span>
+                  <span class="mono text-[10px] text-text-muted">2h ago</span>
+                </div>
+                <div class="flex items-center gap-2 p-2 rounded bg-slate-2/50">
+                  <i data-lucide="check-circle" class="w-3.5 h-3.5 text-emerald flex-shrink-0"></i>
+                  <span class="flex-1">TVB-006 · Step 1 resolved</span>
+                  <span class="mono text-[10px] text-text-muted">5h ago</span>
+                </div>
+                <div class="flex items-center gap-2 p-2 rounded bg-slate-2/50">
+                  <i data-lucide="alert-triangle" class="w-3.5 h-3.5 text-amber flex-shrink-0"></i>
+                  <span class="flex-1">TVB-007 · Step 2 resolved</span>
+                  <span class="mono text-[10px] text-text-muted">8h ago</span>
+                </div>
+                <div class="flex items-center gap-2 p-2 rounded bg-slate-2/50">
+                  <i data-lucide="x-circle" class="w-3.5 h-3.5 text-crimson flex-shrink-0"></i>
+                  <span class="flex-1">TVB-005 · Step 4 (reboot)</span>
+                  <span class="mono text-[10px] text-text-muted">14h ago</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="glass rounded-xl p-4">
+              <h3 class="text-sm font-semibold mb-3 flex items-center gap-2">
+                <i data-lucide="sliders-horizontal" class="w-4 h-4 text-cyan"></i>
+                Watchdog Configuration
+              </h3>
+              <div class="space-y-3">
+                <div>
+                  <div class="flex justify-between text-xs mb-1">
+                    <span class="text-text-dim">Stream Health Threshold</span>
+                    <span class="mono text-cyan">300ms</span>
+                  </div>
+                  <input type="range" min="100" max="1000" value="300">
+                </div>
+                <div>
+                  <div class="flex justify-between text-xs mb-1">
+                    <span class="text-text-dim">Grace Period</span>
+                    <span class="mono text-cyan">60s</span>
+                  </div>
+                  <input type="range" min="30" max="180" value="60">
+                </div>
+                <div>
+                  <div class="flex justify-between text-xs mb-1">
+                    <span class="text-text-dim">Cooldown</span>
+                    <span class="mono text-cyan">120s</span>
+                  </div>
+                  <input type="range" min="60" max="600" value="120">
+                </div>
+                <div class="space-y-1.5 pt-2 border-t border-bd">
+                  <label class="flex items-center gap-2 text-xs cursor-pointer">
+                    <input type="checkbox" class="cb" checked>
+                    <span>Auto-escalate without confirmation</span>
+                  </label>
+                  <label class="flex items-center gap-2 text-xs cursor-pointer">
+                    <input type="checkbox" class="cb">
+                    <span>Require manual approval for Step 4 (reboot)</span>
+                  </label>
+                  <label class="flex items-center gap-2 text-xs cursor-pointer">
+                    <input type="checkbox" class="cb" checked>
+                    <span>Notify on cascade trigger</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ APK PANEL ============ -->
+      <div id="panel-apk" class="space-y-4" hidden>
+        <div class="grid grid-cols-12 gap-4">
+          <div class="col-span-5 space-y-4">
+            <div class="glass rounded-xl p-4">
+              <h3 class="text-sm font-semibold mb-3 flex items-center gap-2">
+                <i data-lucide="upload-cloud" class="w-4 h-4 text-cyan"></i>
+                Upload APK
+              </h3>
+              <div class="dropzone p-8 text-center cursor-pointer" id="apk-dropzone">
+                <div class="w-14 h-14 mx-auto rounded-full bg-cyan/10 border border-cyan/30 flex items-center justify-center mb-3">
+                  <i data-lucide="package-plus" class="w-7 h-7 text-cyan"></i>
+                </div>
+                <div class="text-sm font-medium mb-1">Drop APK file here</div>
+                <div class="text-xs text-text-muted mb-3">or click to browse · max 200MB · .apk only</div>
+                <button class="btn-primary px-4 py-1.5 rounded-md text-xs">Choose File</button>
+              </div>
+              <div class="mt-3 text-[10px] mono text-text-muted flex items-center justify-between">
+                <span>Supports: APK, APKM, XAPK, APKS</span>
+                <span class="flex items-center gap-1"><i data-lucide="shield-check" class="w-3 h-3 text-emerald"></i> signature verified</span>
+              </div>
+            </div>
+
+            <div class="glass rounded-xl p-4">
+              <h3 class="text-sm font-semibold mb-3 flex items-center gap-2">
+                <i data-lucide="hard-drive-upload" class="w-4 h-4 text-violet"></i>
+                Upload Progress
+              </h3>
+              <div class="space-y-3">
+                <div>
+                  <div class="flex items-center justify-between text-xs mb-1.5">
+                    <span class="mono">netflix-8.124.2.apk</span>
+                    <span class="text-cyan mono">82%</span>
+                  </div>
+                  <div class="h-1.5 bg-slate rounded-full overflow-hidden">
+                    <div class="h-full bg-gradient-to-r from-cyan to-violet rounded-full" style="width:82%; box-shadow: 0 0 8px rgba(0,242,254,0.5);"></div>
+                  </div>
+                  <div class="text-[10px] text-text-muted mt-1">18.4 MB/s · 4.2s remaining</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-span-7 glass rounded-xl p-4">
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="text-sm font-semibold">Installed Applications Matrix</h3>
+              <div class="flex items-center gap-2">
+                <select class="w-40" style="height:30px;padding:4px 8px;">
+                  <option>All Devices</option>
+                  <option>TVB-001</option>
+                  <option>TVB-002</option>
+                </select>
+                <button class="btn-ghost px-2 py-1 rounded text-xs"><i data-lucide="filter" class="w-3.5 h-3.5"></i></button>
+              </div>
+            </div>
+
+            <div class="space-y-2">
+              <div class="glass-2 rounded-lg p-3 flex items-center gap-3">
+                <div class="apk-icon" style="background:linear-gradient(135deg,#E50914,#B20710);">N</div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-sm font-medium">Netflix</div>
+                  <div class="text-[10px] text-text-muted mono">com.netflix.ninja · v8.124.2 · 24.1 MB</div>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <span class="tag bg-emerald/10 text-emerald border border-emerald/20">7 devices</span>
+                  <button class="btn-danger px-2 py-1 rounded text-xs flex items-center gap-1" onclick="showToast('Uninstalling Netflix from 7 devices...', 'warning', 'trash-2')">
+                    <i data-lucide="trash-2" class="w-3 h-3"></i>
+                  </button>
+                </div>
+              </div>
+
+              <div class="glass-2 rounded-lg p-3 flex items-center gap-3">
+                <div class="apk-icon" style="background:linear-gradient(135deg,#1DB954,#1ed760);">S</div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-sm font-medium">Spotify</div>
+                  <div class="text-[10px] text-text-muted mono">com.spotify.tv · v8.9.4.321 · 18.7 MB</div>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <span class="tag bg-emerald/10 text-emerald border border-emerald/20">5 devices</span>
+                  <button class="btn-danger px-2 py-1 rounded text-xs flex items-center gap-1" onclick="showToast('Uninstalling Spotify from 5 devices...', 'warning', 'trash-2')">
+                    <i data-lucide="trash-2" class="w-3 h-3"></i>
+                  </button>
+                </div>
+              </div>
+
+              <div class="glass-2 rounded-lg p-3 flex items-center gap-3">
+                <div class="apk-icon" style="background:linear-gradient(135deg,#FF9F0A,#FF6B00);">K</div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-sm font-medium">Kodi Media Center</div>
+                  <div class="text-[10px] text-text-muted mono">org.xbmc.kodi · v21.0-Omega · 68.3 MB</div>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <span class="tag bg-emerald/10 text-emerald border border-emerald/20">8 devices</span>
+                  <button class="btn-danger px-2 py-1 rounded text-xs flex items-center gap-1" onclick="showToast('Uninstalling Kodi from 8 devices...', 'warning', 'trash-2')">
+                    <i data-lucide="trash-2" class="w-3 h-3"></i>
+                  </button>
+                </div>
+              </div>
+
+              <div class="glass-2 rounded-lg p-3 flex items-center gap-3">
+                <div class="apk-icon" style="background:linear-gradient(135deg,#FF0000,#CC0000);">▶</div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-sm font-medium">YouTube</div>
+                  <div class="text-[10px] text-text-muted mono">com.google.android.youtube.tv · v2.4.16 · 32.1 MB</div>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <span class="tag bg-emerald/10 text-emerald border border-emerald/20">8 devices</span>
+                  <button class="btn-danger px-2 py-1 rounded text-xs flex items-center gap-1" onclick="showToast('Uninstalling YouTube from 8 devices...', 'warning', 'trash-2')">
+                    <i data-lucide="trash-2" class="w-3 h-3"></i>
+                  </button>
+                </div>
+              </div>
+
+              <div class="glass-2 rounded-lg p-3 flex items-center gap-3">
+                <div class="apk-icon" style="background:linear-gradient(135deg,#7C4DFF,#448AFF);">V</div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-sm font-medium">VLC for Android</div>
+                  <div class="text-[10px] text-text-muted mono">org.videolan.vlc · v3.5.2 · 42.8 MB</div>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <span class="tag bg-emerald/10 text-emerald border border-emerald/20">6 devices</span>
+                  <button class="btn-danger px-2 py-1 rounded text-xs flex items-center gap-1" onclick="showToast('Uninstalling VLC from 6 devices...', 'warning', 'trash-2')">
+                    <i data-lucide="trash-2" class="w-3 h-3"></i>
+                  </button>
+                </div>
+              </div>
+
+              <div class="glass-2 rounded-lg p-3 flex items-center gap-3">
+                <div class="apk-icon" style="background:linear-gradient(135deg,#00E5FF,#0288D1);">D</div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-sm font-medium">Disney+</div>
+                  <div class="text-[10px] text-text-muted mono">com.disney.disneyplus · v2.18.0 · 38.4 MB</div>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <span class="tag bg-amber/10 text-amber border border-amber/20">3 devices</span>
+                  <button class="btn-danger px-2 py-1 rounded text-xs flex items-center gap-1" onclick="showToast('Uninstalling Disney+ from 3 devices...', 'warning', 'trash-2')">
+                    <i data-lucide="trash-2" class="w-3 h-3"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ BACKUP PANEL ============ -->
+      <div id="panel-backup" class="space-y-4" hidden>
+        <div class="grid grid-cols-12 gap-4">
+          <div class="col-span-4 space-y-4">
+            <div class="glass rounded-xl p-4">
+              <h3 class="text-sm font-semibold mb-3 flex items-center gap-2">
+                <i data-lucide="archive" class="w-4 h-4 text-cyan"></i>
+                Create Backup
+              </h3>
+              <div class="space-y-2 mb-4">
+                <label class="flex items-center gap-2 text-xs cursor-pointer">
+                  <input type="checkbox" class="cb" checked>
+                  <span>Server configuration (mediamtx.yml, .env)</span>
+                </label>
+                <label class="flex items-center gap-2 text-xs cursor-pointer">
+                  <input type="checkbox" class="cb" checked>
+                  <span>Device registry (8 devices, 2 groups)</span>
+                </label>
+                <label class="flex items-center gap-2 text-xs cursor-pointer">
+                  <input type="checkbox" class="cb" checked>
+                  <span>Scrcpy profiles & arguments</span>
+                </label>
+                <label class="flex items-center gap-2 text-xs cursor-pointer">
+                  <input type="checkbox" class="cb">
+                  <span>Historical logs (last 30 days)</span>
+                </label>
+                <label class="flex items-center gap-2 text-xs cursor-pointer">
+                  <input type="checkbox" class="cb">
+                  <span>APK repository (1.2 GB)</span>
+                </label>
+              </div>
+              <button class="btn-primary w-full py-2.5 rounded-md text-xs flex items-center justify-center gap-2" onclick="showToast('Backup started: cfg_v342.zip (estimated 4.2 MB)', 'success', 'archive')">
+                <i data-lucide="download" class="w-4 h-4"></i>
+                Export Backup (ZIP)
+              </button>
+            </div>
+
+            <div class="glass rounded-xl p-4">
+              <h3 class="text-sm font-semibold mb-3 flex items-center gap-2">
+                <i data-lucide="settings-2" class="w-4 h-4 text-violet"></i>
+                Auto-Maintenance
+              </h3>
+              <div class="space-y-3">
+                <label class="flex items-center justify-between text-xs cursor-pointer">
+                  <span>Auto-cleanup old backups</span>
+                  <input type="checkbox" class="cb" checked>
+                </label>
+                <div>
+                  <div class="flex justify-between text-xs mb-1">
+                    <span class="text-text-dim">Keep last N backups</span>
+                    <span class="mono text-cyan">10</span>
+                  </div>
+                  <input type="range" min="3" max="30" value="10">
+                </div>
+                <label class="flex items-center justify-between text-xs cursor-pointer">
+                  <span>Schedule weekly backup</span>
+                  <input type="checkbox" class="cb" checked>
+                </label>
+                <div>
+                  <div class="text-xs text-text-dim mb-1">Next scheduled</div>
+                  <div class="text-xs mono text-cyan">Sun · 03:00 AM UTC</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-span-8 glass rounded-xl p-4">
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="text-sm font-semibold">Backup Restoration Timeline</h3>
+              <button class="btn-ghost px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5" onclick="showToast('Restoration started from cfg_v341.zip', 'info', 'rotate-ccw')">
+                <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+                <span>Restore Selected</span>
+              </button>
+            </div>
+
+            <div class="relative pl-6">
+              <div class="absolute left-[5px] top-2 bottom-2 w-0.5 bg-bd"></div>
+
+              <div class="relative mb-6">
+                <div class="timeline-dot active absolute -left-6 top-1"></div>
+                <div class="glass-2 rounded-lg p-3">
+                  <div class="flex items-center justify-between mb-1">
+                    <div class="flex items-center gap-2">
+                      <span class="text-sm font-medium mono">cfg_v341.zip</span>
+                      <span class="tag bg-cyan/10 text-cyan border border-cyan/30">LATEST</span>
+                    </div>
+                    <span class="text-[10px] mono text-text-muted">2.4 MB · 1h ago</span>
+                  </div>
+                  <div class="text-xs text-text-muted">Config + Devices + Scrcpy profiles · created by auto-scheduler</div>
+                  <div class="mt-2 flex gap-1.5">
+                    <button class="btn-ghost px-2 py-1 rounded text-[10px] flex items-center gap-1" onclick="showToast('Downloading cfg_v341.zip', 'info', 'download')"><i data-lucide="download" class="w-3 h-3"></i> Download</button>
+                    <button class="btn-ghost px-2 py-1 rounded text-[10px] flex items-center gap-1" onclick="showToast('Restore preview opened', 'info', 'eye')"><i data-lucide="eye" class="w-3 h-3"></i> Preview</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="relative mb-6">
+                <div class="timeline-dot done absolute -left-6 top-1"></div>
+                <div class="glass-2 rounded-lg p-3">
+                  <div class="flex items-center justify-between mb-1">
+                    <span class="text-sm font-medium mono">cfg_v340.zip</span>
+                    <span class="text-[10px] mono text-text-muted">2.1 MB · 1d ago</span>
+                  </div>
+                  <div class="text-xs text-text-muted">Config + Devices · manual export by admin@nexus</div>
+                </div>
+              </div>
+
+              <div class="relative mb-6">
+                <div class="timeline-dot done absolute -left-6 top-1"></div>
+                <div class="glass-2 rounded-lg p-3">
+                  <div class="flex items-center justify-between mb-1">
+                    <span class="text-sm font-medium mono">cfg_v339.zip</span>
+                    <span class="text-[10px] mono text-text-muted">2.0 MB · 2d ago</span>
+                  </div>
+                  <div class="text-xs text-text-muted">Pre-update backup · auto-created before git-pull</div>
+                </div>
+              </div>
+
+              <div class="relative mb-6">
+                <div class="timeline-dot done absolute -left-6 top-1"></div>
+                <div class="glass-2 rounded-lg p-3">
+                  <div class="flex items-center justify-between mb-1">
+                    <span class="text-sm font-medium mono">cfg_v338.zip</span>
+                    <span class="text-[10px] mono text-text-muted">1.9 MB · 3d ago</span>
+                  </div>
+                  <div class="text-xs text-text-muted">Weekly scheduled backup</div>
+                </div>
+              </div>
+
+              <div class="relative">
+                <div class="timeline-dot done absolute -left-6 top-1"></div>
+                <div class="glass-2 rounded-lg p-3">
+                  <div class="flex items-center justify-between mb-1">
+                    <span class="text-sm font-medium mono">cfg_v337.zip</span>
+                    <span class="text-[10px] mono text-text-muted">1.8 MB · 4d ago</span>
+                  </div>
+                  <div class="text-xs text-text-muted">Config + Devices · manual export</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<!-- ============ ADD DEVICE MODAL ============ -->
+<div id="modal-add-device" class="fixed inset-0 z-50 hidden items-center justify-center modal-backdrop">
+  <div class="glass-2 rounded-xl w-full max-w-md slide-up" style="margin:0 1rem;">
+    <div class="px-5 py-4 border-b border-bd flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <i data-lucide="tv" class="w-4 h-4 text-cyan"></i>
+        <h3 class="text-sm font-semibold">Register New Device</h3>
+      </div>
+      <button class="text-text-muted hover:text-text" onclick="closeAddDevice()">
+        <i data-lucide="x" class="w-4 h-4"></i>
+      </button>
+    </div>
+    <div class="p-5 space-y-3">
+      <div>
+        <label class="text-[10px] text-text-muted uppercase tracking-wider mb-1 block">Device Name</label>
+        <input type="text" placeholder="e.g. Living Room Main">
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-[10px] text-text-muted uppercase tracking-wider mb-1 block">IP Address</label>
+          <input type="text" placeholder="192.168.1.xxx" class="mono">
+        </div>
+        <div>
+          <label class="text-[10px] text-text-muted uppercase tracking-wider mb-1 block">ADB Port</label>
+          <input type="text" placeholder="5555" value="5555" class="mono">
+        </div>
+      </div>
+      <div>
+        <label class="text-[10px] text-text-muted uppercase tracking-wider mb-1 block">Active Player</label>
+        <select>
+          <option>ExoPlayer</option>
+          <option>VLC</option>
+          <option>mpv</option>
+          <option>Kodi</option>
+        </select>
+      </div>
+      <div>
+        <label class="text-[10px] text-text-muted uppercase tracking-wider mb-1 block">RTSP Stream Path</label>
+        <input type="text" placeholder="/stream/device-name" class="mono">
+      </div>
+      <div>
+        <label class="text-[10px] text-text-muted uppercase tracking-wider mb-1 block">Group Assignment</label>
+        <select>
+          <option>Residential</option>
+          <option>Commercial</option>
+          <option>+ Create new group...</option>
+        </select>
+      </div>
+    </div>
+    <div class="px-5 py-4 border-t border-bd flex items-center justify-between bg-slate-2/30 rounded-b-xl">
+      <div class="text-[10px] text-text-muted flex items-center gap-1.5">
+        <i data-lucide="shield-check" class="w-3 h-3 text-emerald"></i>
+        Auto-validates connection on save
+      </div>
+      <div class="flex gap-2">
+        <button class="btn-ghost px-4 py-1.5 rounded-md text-xs" onclick="closeAddDevice()">Cancel</button>
+        <button class="btn-primary px-4 py-1.5 rounded-md text-xs flex items-center gap-1.5" onclick="closeAddDevice(); showToast('Device registered — connection test passed (124ms)', 'success', 'check-circle')">
+          <i data-lucide="check" class="w-3.5 h-3.5"></i>
+          Register Device
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SETUP WIZARD MODAL ============ -->
+<div id="modal-wizard" class="fixed inset-0 z-50 hidden items-center justify-center modal-backdrop">
+  <div class="glass-2 rounded-xl w-full max-w-3xl slide-up" style="margin:0 1rem;">
+    <div class="px-5 py-4 border-b border-bd flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <i data-lucide="sparkles" class="w-4 h-4 text-cyan"></i>
+        <h3 class="text-sm font-semibold">First-Time Setup Wizard</h3>
+        <span class="text-[10px] mono text-text-muted ml-2">Step <span id="wizard-current">1</span> of 10</span>
+      </div>
+      <button class="text-text-muted hover:text-text" onclick="closeWizard()">
+        <i data-lucide="x" class="w-4 h-4"></i>
+      </button>
+    </div>
+
+    <!-- Stepper -->
+    <div class="px-5 py-4 border-b border-bd">
+      <div class="flex items-center" id="wizard-steps">
+        <div class="wizard-step active flex flex-col items-center">
+          <div class="wizard-step-circle">1</div>
+          <div class="text-[9px] text-text-muted mt-1">Server</div>
+        </div>
+        <div class="wizard-step-line"></div>
+        <div class="wizard-step flex flex-col items-center">
+          <div class="wizard-step-circle">2</div>
+          <div class="text-[9px] text-text-muted mt-1">MediaMTX</div>
+        </div>
+        <div class="wizard-step-line"></div>
+        <div class="wizard-step flex flex-col items-center">
+          <div class="wizard-step-circle">3</div>
+          <div class="text-[9px] text-text-muted mt-1">ADB</div>
+        </div>
+        <div class="wizard-step-line"></div>
+        <div class="wizard-step flex flex-col items-center">
+          <div class="wizard-step-circle">4</div>
+          <div class="text-[9px] text-text-muted mt-1">Players</div>
+        </div>
+        <div class="wizard-step-line"></div>
+        <div class="wizard-step flex flex-col items-center">
+          <div class="wizard-step-circle">5</div>
+          <div class="text-[9px] text-text-muted mt-1">Stream</div>
+        </div>
+        <div class="wizard-step-line"></div>
+        <div class="wizard-step flex flex-col items-center">
+          <div class="wizard-step-circle">6</div>
+          <div class="text-[9px] text-text-muted mt-1">Discovery</div>
+        </div>
+        <div class="wizard-step-line"></div>
+        <div class="wizard-step flex flex-col items-center">
+          <div class="wizard-step-circle">7</div>
+          <div class="text-[9px] text-text-muted mt-1">Watchdog</div>
+        </div>
+        <div class="wizard-step-line"></div>
+        <div class="wizard-step flex flex-col items-center">
+          <div class="wizard-step-circle">8</div>
+          <div class="text-[9px] text-text-muted mt-1">YAML</div>
+        </div>
+        <div class="wizard-step-line"></div>
+        <div class="wizard-step flex flex-col items-center">
+          <div class="wizard-step-circle">9</div>
+          <div class="text-[9px] text-text-muted mt-1">Validate</div>
+        </div>
+        <div class="wizard-step-line"></div>
+        <div class="wizard-step flex flex-col items-center">
+          <div class="wizard-step-circle">10</div>
+          <div class="text-[9px] text-text-muted mt-1">Done</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Content -->
+    <div class="p-5 min-h-[280px]" id="wizard-content">
+      <h4 class="text-base font-semibold mb-1">Server Configuration</h4>
+      <p class="text-xs text-text-muted mb-4">Define how the NEXUS control plane binds to network interfaces.</p>
+
+      <div class="space-y-3">
+        <div>
+          <label class="text-[10px] text-text-muted uppercase tracking-wider mb-1 block">Bind Address</label>
+          <input type="text" value="0.0.0.0" class="mono">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-[10px] text-text-muted uppercase tracking-wider mb-1 block">API Port</label>
+            <input type="text" value="8080" class="mono">
+          </div>
+          <div>
+            <label class="text-[10px] text-text-muted uppercase tracking-wider mb-1 block">WebSocket Port</label>
+            <input type="text" value="8081" class="mono">
+          </div>
+        </div>
+        <div>
+          <label class="text-[10px] text-text-muted uppercase tracking-wider mb-1 block">TLS Certificate (optional)</label>
+          <input type="text" placeholder="/etc/nexus/cert.pem" class="mono">
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="px-5 py-4 border-t border-bd flex items-center justify-between bg-slate-2/30 rounded-b-xl">
+      <button class="btn-ghost px-4 py-1.5 rounded-md text-xs flex items-center gap-1.5" onclick="wizardPrev()">
+        <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i>
+        Previous
+      </button>
+      <div class="text-[10px] text-text-muted">Press <span class="kbd">Esc</span> to dismiss</div>
+      <button class="btn-primary px-4 py-1.5 rounded-md text-xs flex items-center gap-1.5" onclick="wizardNext()">
+        Next Step
+        <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast Container -->
+<div id="toasts" class="fixed top-20 right-6 z-50 space-y-2"></div>
+
+<script>
+// =================== STATE ===================
+const devices = [
+  { id: 'TVB-001', name: 'Living Room Main', ip: '192.168.1.101', port: 5555, player: 'ExoPlayer', group: 'Residential', status: 'online', reason: 'Stream Active', uptime: '14d 6h', temp: 42, fps: 60 },
+  { id: 'TVB-002', name: 'Bedroom Stream Unit', ip: '192.168.1.102', port: 5555, player: 'VLC', group: 'Residential', status: 'online', reason: 'Stream Active', uptime: '14d 6h', temp: 38, fps: 60 },
+  { id: 'TVB-003', name: 'Lobby Display #1', ip: '192.168.1.103', port: 5555, player: 'ExoPlayer', group: 'Commercial', status: 'degraded', reason: 'No Stream', uptime: '2d 11h', temp: 51, fps: 0 },
+  { id: 'TVB-004', name: 'Conference Room A', ip: '192.168.1.104', port: 5555, player: 'mpv', group: 'Commercial', status: 'online', reason: 'Stream Active', uptime: '7d 3h', temp: 44, fps: 60 },
+  { id: 'TVB-005', name: 'Reception Kiosk', ip: '192.168.1.105', port: 5555, player: 'ExoPlayer', group: 'Commercial', status: 'offline', reason: 'Connection Lost', uptime: '—', temp: 0, fps: 0 },
+  { id: 'TVB-006', name: 'Bar Display', ip: '192.168.1.106', port: 5555, player: 'VLC', group: 'Commercial', status: 'online', reason: 'Stream Active', uptime: '21d 9h', temp: 47, fps: 60 },
+  { id: 'TVB-007', name: 'Patio Outdoor TV', ip: '192.168.1.107', port: 5555, player: 'ExoPlayer', group: 'Residential', status: 'degraded', reason: 'High Latency 480ms', uptime: '5d 2h', temp: 53, fps: 24 },
+  { id: 'TVB-008', name: 'Gym Display Unit', ip: '192.168.1.108', port: 5555, player: 'mpv', group: 'Residential', status: 'online', reason: 'Stream Active', uptime: '9d 18h', temp: 40, fps: 60 },
+];
+
+const statusColor = { online: 'text-emerald', degraded: 'text-amber', offline: 'text-crimson' };
+const statusHalo = { online: 'halo-online', degraded: 'halo-degraded', offline: 'halo-offline' };
+
+// =================== DEVICE CARDS ===================
+function deviceCard(d) {
+  const preview = d.status === 'online'
+    ? `<div class="stream-preview stream-active h-16 rounded-md mb-3 relative flex items-center justify-center overflow-hidden">
+        <div class="noise"></div>
+        <div class="relative z-10 flex items-center gap-2">
+          <span class="live-dot"></span>
+          <span class="text-[10px] mono text-emerald">RTSP LIVE · ${d.fps} FPS</span>
+        </div>
+        <div class="absolute bottom-1 left-2 text-[9px] mono text-text-muted">${d.temp}°C</div>
+        <div class="absolute bottom-1 right-2 text-[9px] mono text-text-muted">${d.uptime}</div>
+      </div>`
+    : d.status === 'degraded'
+    ? `<div class="stream-preview h-16 rounded-md mb-3 relative flex items-center justify-center overflow-hidden border border-amber/20">
+        <div class="noise"></div>
+        <div class="relative z-10 flex items-center gap-2">
+          <i data-lucide="alert-triangle" class="w-3 h-3 text-amber"></i>
+          <span class="text-[10px] mono text-amber">SIGNAL DEGRADED</span>
+        </div>
+      </div>`
+    : `<div class="stream-preview h-16 rounded-md mb-3 relative flex items-center justify-center overflow-hidden border border-crimson/20">
+        <div class="relative z-10 flex items-center gap-2">
+          <i data-lucide="video-off" class="w-3 h-3 text-crimson"></i>
+          <span class="text-[10px] mono text-crimson">NO SIGNAL</span>
+        </div>
+      </div>`;
+
+  return `
+    <div class="device-card glass rounded-xl p-3.5 ${statusHalo[d.status]} relative">
+      <div class="flex items-start justify-between mb-2">
+        <div class="flex items-center gap-2 min-w-0">
+          <div class="sd ${d.status} pulse-dot"></div>
+          <div class="min-w-0">
+            <div class="text-sm font-semibold truncate">${d.name}</div>
+            <div class="text-[10px] text-text-muted mono">${d.id}</div>
+          </div>
+        </div>
+        <button class="text-text-muted hover:text-cyan transition-colors flex-shrink-0" onclick="copyId('${d.id}')" title="Copy ID for scrcpy">
+          <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+        </button>
+      </div>
+
+      <div class="text-[11px] mb-2.5 flex items-center gap-1.5 ${statusColor[d.status]}">
+        ${d.status === 'online' ? '<i data-lucide="check-circle" class="w-3 h-3"></i>' : d.status === 'degraded' ? '<i data-lucide="alert-circle" class="w-3 h-3"></i>' : '<i data-lucide="x-circle" class="w-3 h-3"></i>'}
+        <span>${d.reason}</span>
+      </div>
+
+      ${preview}
+
+      <div class="flex flex-wrap gap-1 mb-2.5">
+        <span class="tag bg-slate text-text-muted">${d.ip}</span>
+        <span class="tag bg-slate text-text-muted">${d.player}</span>
+        <span class="tag bg-violet/10 text-violet border border-violet/20">${d.group}</span>
+      </div>
+
+      <div class="flex gap-1">
+        <button class="btn-ghost flex-1 py-1.5 rounded text-[11px] flex items-center justify-center gap-1" onclick="deviceAction('${d.id}', 'start')">
+          <i data-lucide="play" class="w-3 h-3 text-emerald"></i>
+          Start
+        </button>
+        <button class="btn-ghost flex-1 py-1.5 rounded text-[11px] flex items-center justify-center gap-1" onclick="deviceAction('${d.id}', 'stop')">
+          <i data-lucide="square" class="w-3 h-3 text-crimson"></i>
+          Stop
+        </button>
+        <button class="btn-ghost flex-1 py-1.5 rounded text-[11px] flex items-center justify-center gap-1" onclick="deviceAction('${d.id}', 'reboot')">
+          <i data-lucide="rotate-cw" class="w-3 h-3 text-amber"></i>
+          Reboot
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+function renderDevices() {
+  const grid = document.getElementById('device-grid');
+  if (grid) grid.innerHTML = devices.map(deviceCard).join('');
+
+  const tbody = document.getElementById('device-table-body');
+  if (tbody) {
+    tbody.innerHTML = devices.map(d => `
+      <tr class="border-b border-bd/50 hover:bg-slate-2/30 transition-colors">
+        <td class="px-4 py-3"><input type="checkbox" class="cb"></td>
+        <td class="px-4 py-3">
+          <div class="flex items-center gap-2">
+            <div class="sd ${d.status}"></div>
+            <div>
+              <div class="text-sm font-medium">${d.name}</div>
+              <div class="text-[10px] text-text-muted mono">${d.id}</div>
+            </div>
+          </div>
+        </td>
+        <td class="px-4 py-3 mono text-xs text-text-dim">${d.ip}:${d.port}</td>
+        <td class="px-4 py-3 text-xs">${d.player}</td>
+        <td class="px-4 py-3"><span class="tag bg-violet/10 text-violet border border-violet/20">${d.group}</span></td>
+        <td class="px-4 py-3">
+          <span class="tag ${d.status === 'online' ? 'bg-emerald/10 text-emerald border border-emerald/30' : d.status === 'degraded' ? 'bg-amber/10 text-amber border border-amber/30' : 'bg-crimson/10 text-crimson border border-crimson/30'}">${d.status.toUpperCase()}</span>
+        </td>
+        <td class="px-4 py-3 mono text-xs text-text-dim">${d.uptime}</td>
+        <td class="px-4 py-3">
+          <div class="flex items-center justify-end gap-1">
+            <button class="btn-ghost w-7 h-7 rounded flex items-center justify-center" onclick="copyId('${d.id}')" title="Copy ID"><i data-lucide="copy" class="w-3 h-3"></i></button>
+            <button class="btn-ghost w-7 h-7 rounded flex items-center justify-center" title="Edit"><i data-lucide="pencil" class="w-3 h-3"></i></button>
+            <button class="btn-ghost w-7 h-7 rounded flex items-center justify-center" title="Terminal"><i data-lucide="terminal" class="w-3 h-3"></i></button>
+            <button class="btn-danger w-7 h-7 rounded flex items-center justify-center" title="Delete"><i data-lucide="trash-2" class="w-3 h-3"></i></button>
+          </div>
+        </td>
+      </tr>
+    `).join('');
+  }
+
+  if (window.lucide) lucide.createIcons();
+}
+
+// =================== TABS ===================
+function switchTab(tab) {
+  document.querySelectorAll('[data-tab]').forEach(el => {
+    el.classList.toggle('active', el.dataset.tab === tab);
+  });
+  document.querySelectorAll('[id^="panel-"]').forEach(p => {
+    p.hidden = p.id !== `panel-${tab}`;
+    if (!p.hidden) p.classList.add('fade-in');
+  });
+  const titles = {
+    overview: 'Command Overview',
+    devices: 'Device Management',
+    groups: 'Group Management',
+    shell: 'Remote Shell & Scrcpy',
+    stream: 'Stream Engine',
+    logs: 'Log Viewer',
+    watchdog: 'Watchdog & Diagnostics',
+    apk: 'APK Manager',
+    backup: 'Backup & Recovery',
+  };
+  const titleEl = document.getElementById('page-title');
+  if (titleEl) titleEl.textContent = titles[tab] || 'Overview';
+  if (window.lucide) lucide.createIcons();
+}
+
+// =================== TOAST ===================
+function showToast(message, type = 'info', icon = 'info') {
+  const container = document.getElementById('toasts');
+  const colors = {
+    info: 'border-cyan/40 text-cyan',
+    success: 'border-emerald/40 text-emerald',
+    warning: 'border-amber/40 text-amber',
+    error: 'border-crimson/40 text-crimson',
+  };
+  const toast = document.createElement('div');
+  toast.className = `glass-2 rounded-lg px-4 py-3 flex items-center gap-3 toast border ${colors[type]} min-w-[280px] max-w-md`;
+  toast.innerHTML = `<i data-lucide="${icon}" class="w-4 h-4 flex-shrink-0"></i><span class="text-sm flex-1">${message}</span><button class="text-text-muted hover:text-text" onclick="this.parentElement.remove()"><i data-lucide="x" class="w-3 h-3"></i></button>`;
+  container.appendChild(toast);
+  if (window.lucide) lucide.createIcons();
+  setTimeout(() => {
+    toast.style.transition = 'all 0.3s';
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateX(20px)';
+    setTimeout(() => toast.remove(), 300);
+  }, 3500);
+}
+
+// =================== ACTIONS ===================
+function copyId(id) {
+  if (navigator.clipboard) navigator.clipboard.writeText(id);
+  showToast(`Copied <strong class="mono">${id}</strong> for scrcpy`, 'success', 'clipboard-check');
+}
+
+function deviceAction(id, action) {
+  const msgs = {
+    start: { msg: `Stream started on <strong>${id}</strong>`, type: 'success', icon: 'play' },
+    stop: { msg: `Stream stopped on <strong>${id}</strong>`, type: 'warning', icon: 'square' },
+    reboot: { msg: `Reboot signal sent to <strong>${id}</strong>`, type: 'warning', icon: 'rotate-cw' },
+  };
+  const m = msgs[action];
+  showToast(m.msg, m.type, m.icon);
+}
+
+// =================== TERMINAL ===================
+const termHistory = [];
+let termHistoryIdx = -1;
+
+const commands = {
+  help: () => `<span class="term-comment"># Available commands:</span>
+  <span class="term-key">help</span>          Show this help
+  <span class="term-key">devices</span>       List connected devices
+  <span class="term-key">cpu</span>           Show CPU information
+  <span class="term-key">mem</span>           Show memory usage
+  <span class="term-key">battery</span>       Show battery stats
+  <span class="term-key">network</span>       Show network interfaces
+  <span class="term-key">screenshot</span>    Capture device screenshot
+  <span class="term-key">scrcpy</span>        Launch scrcpy mirror
+  <span class="term-key">logcat</span>        Show recent logcat
+  <span class="term-key">props</span>         Show system properties
+  <span class="term-key">clear</span>         Clear terminal`,
+  devices: () => `<span class="term-comment"># Connected devices (8 total, 5 online)</span>
+ID          NAME                    STATUS     IP              
+<span class="term-ok">TVB-001</span>     Living Room Main        <span class="term-ok">ONLINE</span>     192.168.1.101
+<span class="term-ok">TVB-002</span>     Bedroom Stream Unit     <span class="term-ok">ONLINE</span>     192.168.1.102
+<span class="term-warn">TVB-003</span>     Lobby Display #1        <span class="term-warn">DEGRADED</span>  192.168.1.103
+<span class="term-ok">TVB-004</span>     Conference Room A       <span class="term-ok">ONLINE</span>     192.168.1.104
+<span class="term-err">TVB-005</span>     Reception Kiosk         <span class="term-err">OFFLINE</span>    192.168.1.105
+<span class="term-ok">TVB-006</span>     Bar Display             <span class="term-ok">ONLINE</span>     192.168.1.106
+<span class="term-warn">TVB-007</span>     Patio Outdoor TV        <span class="term-warn">DEGRADED</span>  192.168.1.107
+<span class="term-ok">TVB-008</span>     Gym Display Unit        <span class="term-ok">ONLINE</span>     192.168.1.108
+
+<span class="term-comment"># Exit code: 0 — execution time: 142ms</span>`,
+  cpu: () => `<span class="term-comment"># CPU Information — TVB-001</span>
+Model:      <span class="term-string">Amlogic S905X4</span>
+Cores:      <span class="term-num">4</span> (Cortex-A55 @ 2.0GHz)
+Usage:      <span class="term-num">23.4%</span> (user: 12.1% + kernel: 8.3% + iowait: 3.0%)
+Temperature: <span class="term-warn">42°C</span>
+Governor:   <span class="term-string">ondemand</span>
+
+<span class="term-comment"># Top processes by CPU</span>
+  <span class="term-num">8.2%</span>  com.android.exoplayer
+  <span class="term-num">4.1%</span>  com.mediamtx.streamer
+  <span class="term-num">2.3%</span>  system_server
+  <span class="term-num">1.8%</span>  com.android.systemui
+
+<span class="term-ok"># Exit code: 0</span>`,
+  mem: () => `<span class="term-comment"># Memory Usage — TVB-001</span>
+Total RAM:   <span class="term-num">3.7 GB</span>
+Used:        <span class="term-num">2.1 GB</span> (<span class="term-warn">56.8%</span>)
+Free:        <span class="term-num">1.6 GB</span>
+Buffers:     <span class="term-num">142 MB</span>
+Cached:      <span class="term-num">824 MB</span>
+
+Swap:        <span class="term-num">512 MB</span> / <span class="term-num">512 MB</span> (<span class="term-ok">0% used</span>)
+
+<span class="term-comment"># Memory pressure: NOMINAL</span>
+<span class="term-ok"># Exit code: 0</span>`,
+  battery: () => `<span class="term-comment"># Battery Stats — TVB-001</span>
+Status:      <span class="term-ok">Charging (AC)</span>
+Level:       <span class="term-num">100%</span>
+Health:      <span class="term-ok">Good</span>
+Voltage:     <span class="term-num">4.235V</span>
+Temperature: <span class="term-num">32.1°C</span>
+Technology:  <span class="term-string">Li-ion</span>
+
+<span class="term-comment"># Power source: AC adapter (5V / 2A)</span>
+<span class="term-ok"># Exit code: 0</span>`,
+  network: () => `<span class="term-comment"># Network Interfaces — TVB-001</span>
+<span class="term-key">eth0</span>      Link encap:Ethernet  HWaddr: 00:1A:2B:3C:4D:5E
+          inet addr:<span class="term-num">192.168.1.101</span>  Bcast:192.168.1.255  Mask:255.255.255.0
+          UP BROADCAST RUNNING MULTICAST  MTU:1500  Speed:<span class="term-ok">1000Mbps</span>
+          RX bytes:<span class="term-num">2.4 GB</span>  TX bytes:<span class="term-num">1.8 GB</span>
+
+<span class="term-key">wlan0</span>     Link encap:Ethernet  HWaddr: 00:1A:2B:3C:4D:5F
+          inet addr:<span class="term-num">192.168.1.201</span>  Mask:255.255.255.0
+          UP BROADCAST RUNNING  Speed:<span class="term-warn">433Mbps</span>
+
+<span class="term-comment"># Default gateway: 192.168.1.1</span>
+<span class="term-comment"># DNS: 8.8.8.8, 1.1.1.1</span>
+<span class="term-ok"># Exit code: 0</span>`,
+  screenshot: () => `<span class="term-comment"># Capturing screenshot from TVB-001...</span>
+<span class="term-out">adb shell screencap -p /sdcard/screen.png</span>
+<span class="term-out">adb pull /sdcard/screen.png /tmp/screen_tvb001.png</span>
+<span class="term-ok">✓ Captured: /tmp/screen_tvb001.png (2.1 MB · 1920×1080)</span>
+
+<div class="my-2 p-2 rounded border border-bd bg-slate-2/50">
+  <div class="text-[10px] text-text-muted mb-1.5 flex items-center justify-between">
+    <span>screen_tvb001.png · 1920×1080 · PNG</span>
+    <span class="text-cyan mono">14:32:18</span>
+  </div>
+  <div class="stream-preview h-32 rounded relative flex items-center justify-center overflow-hidden">
+    <div class="noise"></div>
+    <div class="scan-line"></div>
+    <div class="relative z-10 text-center">
+      <i data-lucide="image" class="w-8 h-8 text-cyan/40 mx-auto mb-1"></i>
+      <div class="text-[10px] mono text-text-muted">1920 × 1080 · 60 FPS capture</div>
+    </div>
+  </div>
+</div>
+
+<span class="term-ok"># Exit code: 0</span>`,
+  scrcpy: () => `<span class="term-comment"># Launching scrcpy v2.4...</span>
+<span class="term-out">scrcpy --bitrate 8M --max-fps 60 --codec H264 --stay-awake</span>
+<span class="term-out">INFO: scrcpy 2.4</span>
+<span class="term-out">INFO: Device: Amlogic S905X4 (Android 11, API 30)</span>
+<span class="term-out">INFO: Video codec: H264</span>
+<span class="term-out">INFO: Bitrate: 8 Mbps</span>
+<span class="term-out">INFO: Max FPS: 60</span>
+<span class="term-out">INFO: Audio forwarding: enabled</span>
+<span class="term-out">INFO: Stream started on port 27183</span>
+<span class="term-ok">✓ Mirroring started (floating window)</span>
+<span class="term-ok"># Exit code: 0</span>`,
+  logcat: () => `<span class="term-comment"># Recent logcat — TVB-001 (last 10 lines)</span>
+<span class="term-num">14:32:18.412</span> <span class="term-ok">I</span> MediaMTX     Stream path registered: /stream/living-room
+<span class="term-num">14:32:18.398</span> <span class="term-ok">I</span> ADB          Connection established (auth: ok)
+<span class="term-num">14:32:17.841</span> <span class="term-warn">W</span> Watchdog     Armed for TVB-003 (degraded)
+<span class="term-num">14:32:15.203</span> <span class="term-warn">W</span> MediaMTX     High latency: 480ms on /stream/conference-a
+<span class="term-num">14:32:14.012</span> <span class="term-ok">I</span> API          GET /api/devices → 200 (12ms)
+<span class="term-num">14:32:12.587</span> <span class="term-err">E</span> ADB          TVB-005 connection timeout
+<span class="term-num">14:32:12.103</span> <span class="term-warn">W</span> Watchdog     Cascade triggered for TVB-005
+<span class="term-num">14:32:10.421</span> <span class="term-ok">I</span> User         admin@nexus triggered git-pull
+<span class="term-num">14:32:08.992</span> <span class="term-key">D</span> System       Memory pressure: 26.2% (nominal)
+<span class="term-num">14:32:06.118</span> <span class="term-ok">I</span> MediaMTX     Reader connected: /stream/bar-display
+
+<span class="term-ok"># Exit code: 0</span>`,
+  props: () => `<span class="term-comment"># System Properties — TVB-001</span>
+<span class="term-key">ro.product.brand</span>=<span class="term-string">Amlogic</span>
+<span class="term-key">ro.product.model</span>=<span class="term-string">S905X4</span>
+<span class="term-key">ro.build.version.release</span>=<span class="term-num">11</span>
+<span class="term-key">ro.build.version.sdk</span>=<span class="term-num">30</span>
+<span class="term-key">ro.product.cpu.abi</span>=<span class="term-string">arm64-v8a</span>
+<span class="term-key">ro.serialno</span>=<span class="term-string">NEXUS-TVB-001</span>
+<span class="term-key">ro.bootloader</span>=<span class="term-string">U-Boot 2015.01</span>
+<span class="term-key">persist.sys.timezone</span>=<span class="term-string">Europe/London</span>
+
+<span class="term-ok"># Exit code: 0</span>`,
+  clear: () => '__CLEAR__',
+};
+
+function termPrint(html, target = 'mini-terminal') {
+  const term = document.getElementById(target === 'mini' ? 'mini-terminal' : target);
+  if (!term) return;
+  if (html === '__CLEAR__') { term.innerHTML = ''; return; }
+  const line = document.createElement('div');
+  line.innerHTML = html;
+  term.appendChild(line);
+  term.scrollTop = term.scrollHeight;
+  if (window.lucide) lucide.createIcons();
+}
+
+function termRun(cmd, target = 'mini-terminal') {
+  termPrint(`<span class="term-prompt">root@nexus-01:~$</span> <span class="term-cmd">${cmd}</span>`, target);
+  const fn = commands[cmd.trim().toLowerCase()];
+  if (fn) {
+    const out = fn();
+    if (out === '__CLEAR__') {
+      setTimeout(() => termPrint('__CLEAR__', target), 80);
+    } else {
+      setTimeout(() => termPrint(out, target), 120);
+    }
+  } else if (cmd.trim() === '') {
+    return;
+  } else {
+    setTimeout(() => termPrint(`<span class="term-err">command not found: ${cmd}</span> <span class="term-comment">— type 'help' for available commands</span>`, target), 100);
+  }
+}
+
+function initTerminal() {
+  // Mini terminal
+  const mini = document.getElementById('mini-terminal');
+  if (mini) {
+    mini.innerHTML = `<div class="term-comment"># NEXUS ADB Shell — connected to TVB-001 @ 192.168.1.101:5555</div>
+<div class="term-comment"># Type 'help' for available commands</div>
+<div>&nbsp;</div>`;
+    setTimeout(() => termRun('devices', 'mini-terminal'), 300);
+  }
+
+  // Mini input
+  const miniInput = document.getElementById('mini-terminal-input');
+  if (miniInput) {
+    miniInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const cmd = miniInput.value;
+        if (cmd.trim()) {
+          termHistory.push(cmd);
+          termHistoryIdx = termHistory.length;
+        }
+        termRun(cmd, 'mini-terminal');
+        miniInput.value = '';
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (termHistoryIdx > 0) {
+          termHistoryIdx--;
+          miniInput.value = termHistory[termHistoryIdx] || '';
+        }
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (termHistoryIdx < termHistory.length - 1) {
+          termHistoryIdx++;
+          miniInput.value = termHistory[termHistoryIdx] || '';
+        } else {
+          termHistoryIdx = termHistory.length;
+          miniInput.value = '';
+        }
+      }
+    });
+  }
+
+  // Full terminal
+  const full = document.getElementById('full-terminal');
+  if (full) {
+    full.innerHTML = `<div class="term-comment"># NEXUS Remote Shell v3.4.1 — root@nexus-01</div>
+<div class="term-comment"># Connection: ADB over TCP (192.168.1.101:5555)</div>
+<div class="term-comment"># Type 'help' for available commands · ↑↓ for history</div>
+<div>&nbsp;</div>`;
+    setTimeout(() => termRun('help', 'full-terminal'), 300);
+  }
+
+  const fullInput = document.getElementById('full-terminal-input');
+  if (fullInput) {
+    fullInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const cmd = fullInput.value;
+        if (cmd.trim()) {
+          termHistory.push(cmd);
+          termHistoryIdx = termHistory.length;
+        }
+        termRun(cmd, 'full-terminal');
+        fullInput.value = '';
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (termHistoryIdx > 0) {
+          termHistoryIdx--;
+          fullInput.value = termHistory[termHistoryIdx] || '';
+        }
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (termHistoryIdx < termHistory.length - 1) {
+          termHistoryIdx++;
+          fullInput.value = termHistory[termHistoryIdx] || '';
+        } else {
+          termHistoryIdx = termHistory.length;
+          fullInput.value = '';
+        }
+      }
+    });
+  }
+}
+
+function runCommand(cmd) {
+  switchTab('shell');
+  setTimeout(() => termRun(cmd, 'full-terminal'), 200);
+}
+
+function clearTerminal() {
+  const mini = document.getElementById('mini-terminal');
+  const full = document.getElementById('full-terminal');
+  if (mini) mini.innerHTML = '';
+  if (full) full.innerHTML = '';
+}
+
+// =================== MODALS ===================
+function openAddDevice() {
+  const m = document.getElementById('modal-add-device');
+  m.classList.remove('hidden');
+  m.classList.add('flex');
+}
+function closeAddDevice() {
+  const m = document.getElementById('modal-add-device');
+  m.classList.add('hidden');
+  m.classList.remove('flex');
+}
+
+function openWizard() {
+  const m = document.getElementById('modal-wizard');
+  m.classList.remove('hidden');
+  m.classList.add('flex');
+  wizardGoTo(0);
+}
+function closeWizard() {
+  const m = document.getElementById('modal-wizard');
+  m.classList.add('hidden');
+  m.classList.remove('flex');
+}
+
+const wizardSteps = [
+  { title: 'Server Configuration', desc: 'Define how the NEXUS control plane binds to network interfaces.', content: `
+    <h4 class="text-base font-semibold mb-1">Server Configuration</h4>
+    <p class="text-xs text-text-muted mb-4">Define how the NEXUS control plane binds to network interfaces.</p>
+    <div class="space-y-3">
+      <div><label class="text-[10px] text-text-muted uppercase tracking-wider mb-1 block">Bind Address</label><input type="text" value="0.0.0.0" class="mono"></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="text-[10px] text-text-muted uppercase tracking-wider mb-1 block">API Port</label><input type="text" value="8080" class="mono"></div>
+        <div><label class="text-[10px] text-text-muted uppercase tracking-wider mb-1 block">WebSocket Port</label><input type="text" value="8081" class="mono"></div>
+      </div>
+      <div><label class="text-[10px] text-text-muted uppercase tracking-wider mb-1 block">TLS Certificate (optional)</label><input type="text" placeholder="/etc/nexus/cert.pem" class="mono"></div>
+    </div>` },
+  { title: 'MediaMTX Setup', desc: 'Configure the MediaMTX stream engine for RTSP routing.', content: `
+    <h4 class="text-base font-semibold mb-1">MediaMTX Setup</h4>
+    <p class="text-xs text-text-muted mb-4">Configure the MediaMTX stream engine for RTSP routing.</p>
+    <div class="space-y-3">
+      <div><label class="text-[10px] text-text-muted uppercase tracking-wider mb-1 block">RTSP Listen Port</label><input type="text" value="8554" class="mono"></div>
+      <div><label class="text-[10px] text-text-muted uppercase tracking-wider mb-1 block">HLS Segment Duration</label><input type="text" value="1s" class="mono"></div>
+      <div class="space-y-1.5">
+        <label class="flex items-center gap-2 text-xs cursor-pointer"><input type="checkbox" class="cb" checked><span>Enable HLS output</span></label>
+        <label class="flex items-center gap-2 text-xs cursor-pointer"><input type="checkbox" class="cb" checked><span>Enable WebRTC output</span></label>
+        <label class="flex items-center gap-2 text-xs cursor-pointer"><input type="checkbox" class="cb"><span>Enable recording (MP4)</span></label>
+      </div>
+    </div>` },
+  { title: 'ADB Configuration', desc: 'Set up Android Debug Bridge connections to TV boxes.', content: `
+    <h4 class="text-base font-semibold mb-1">ADB Configuration</h4>
+    <p class="text-xs text-text-muted mb-4">Set up Android Debug Bridge connections to TV boxes.</p>
+    <div class="space-y-3">
+      <div><label class="text-[10px] text-text-muted uppercase tracking-wider mb-1 block">Default ADB Port</label><input type="text" value="5555" class="mono"></div>
+      <div><label class="text-[10px] text-text-muted uppercase tracking-wider mb-1 block">Connection Timeout</label><input type="text" value="10s" class="mono"></div>
+      <div class="space-y-1.5">
+        <label class="flex items-center gap-2 text-xs cursor-pointer"><input type="checkbox" class="cb" checked><span>Auto-reconnect on disconnect</span></label>
+        <label class="flex items-center gap-2 text-xs cursor-pointer"><input type="checkbox" class="cb" checked><span>Enable mDNS discovery</span></label>
+      </div>
+    </div>` },
+  { title: 'Player Selection', desc: 'Choose default media players for stream playback.', content: `
+    <h4 class="text-base font-semibold mb-1">Player Selection</h4>
+    <p class="text-xs text-text-muted mb-4">Choose default media players for stream playback.</p>
+    <div class="space-y-2">
+      <label class="flex items-center gap-3 p-2 rounded-md bg-slate-2/50 border border-cyan/30 cursor-pointer"><input type="radio" name="player" class="cb" checked><div><div class="text-sm font-medium">ExoPlayer</div><div class="text-[10px] text-text-muted">Recommended · adaptive streaming · DASH/HLS</div></div></label>
+      <label class="flex items-center gap-3 p-2 rounded-md bg-slate-2/50 border border-bd cursor-pointer"><input type="radio" name="player" class="cb"><div><div class="text-sm font-medium">VLC</div><div class="text-[10px] text-text-muted">Multi-codec support · network streaming</div></div></label>
+      <label class="flex items-center gap-3 p-2 rounded-md bg-slate-2/50 border border-bd cursor-pointer"><input type="radio" name="player" class="cb"><div><div class="text-sm font-medium">mpv</div><div class="text-[10px] text-text-muted">Lightweight · high-quality scaling</div></div></label>
+    </div>` },
+  { title: 'Stream Configuration', desc: 'Define RTSP stream paths and encoding defaults.', content: `
+    <h4 class="text-base font-semibold mb-1">Stream Configuration</h4>
+    <p class="text-xs text-text-muted mb-4">Define RTSP stream paths and encoding defaults.</p>
+    <div class="space-y-3">
+      <div><label class="text-[10px] text-text-muted uppercase tracking-wider mb-1 block">Path Naming Convention</label><input type="text" value="/stream/{device-name}" class="mono"></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="text-[10px] text-text-muted uppercase tracking-wider mb-1 block">Default Bitrate</label><input type="text" value="8M" class="mono"></div>
+        <div><label class="text-[10px] text-text-muted uppercase tracking-wider mb-1 block">Default FPS</label><input type="text" value="60" class="mono"></div>
+      </div>
+      <div><label class="text-[10px] text-text-muted uppercase tracking-wider mb-1 block">Video Codec</label><select><option>H264 (compatibility)</option><option>H265 / HEVC (efficiency)</option><option>AV1 (future)</option></select></div>
+    </div>` },
+  { title: 'Device Discovery', desc: 'Scan the network for available TV box endpoints.', content: `
+    <h4 class="text-base font-semibold mb-1">Device Discovery</h4>
+    <p class="text-xs text-text-muted mb-4">Scan the network for available TV box endpoints.</p>
+    <div class="space-y-3">
+      <div><label class="text-[10px] text-text-muted uppercase tracking-wider mb-1 block">Network Range (CIDR)</label><input type="text" value="192.168.1.0/24" class="mono"></div>
+      <div class="glass-2 rounded-lg p-3 text-center">
+        <i data-lucide="radar" class="w-8 h-8 text-cyan mx-auto mb-2"></i>
+        <div class="text-xs text-text-muted">Ready to scan — 254 addresses</div>
+        <button class="btn-primary px-3 py-1 rounded text-xs mt-2">Start Scan</button>
+      </div>
+    </div>` },
+  { title: 'Watchdog Setup', desc: 'Configure automatic recovery cascades.', content: `
+    <h4 class="text-base font-semibold mb-1">Watchdog Setup</h4>
+    <p class="text-xs text-text-muted mb-4">Configure automatic recovery cascades.</p>
+    <div class="space-y-3">
+      <div><label class="text-[10px] text-text-muted uppercase tracking-wider mb-1 block">Stream Health Threshold</label><input type="text" value="300ms" class="mono"></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="text-[10px] text-text-muted uppercase tracking-wider mb-1 block">Grace Period</label><input type="text" value="60s" class="mono"></div>
+        <div><label class="text-[10px] text-text-muted uppercase tracking-wider mb-1 block">Cooldown</label><input type="text" value="120s" class="mono"></div>
+      </div>
+      <div class="space-y-1.5">
+        <label class="flex items-center gap-2 text-xs cursor-pointer"><input type="checkbox" class="cb" checked><span>Enable cascade escalation</span></label>
+        <label class="flex items-center gap-2 text-xs cursor-pointer"><input type="checkbox" class="cb"><span>Require manual approval for hard reboot</span></label>
+      </div>
+    </div>` },
+  { title: 'YAML Generation', desc: 'Auto-generate configuration files from your settings.', content: `
+    <h4

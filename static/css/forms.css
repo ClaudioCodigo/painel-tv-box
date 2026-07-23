@@ -1,0 +1,52 @@
+/* Form components */
+.form-group {
+    margin-bottom: 14px;
+}
+
+.form-label {
+    display: block;
+    font-size: 0.8em;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.form-input,
+.form-input[type="text"],
+.form-input[type="number"],
+.form-input[type="email"],
+.form-input[type="password"],
+select.form-input,
+textarea.form-input {
+    width: 100%;
+    padding: 10px 14px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-primary);
+    font-size: 0.9em;
+    font-family: inherit;
+    transition: border-color 0.2s;
+    box-sizing: border-box;
+}
+
+.form-input:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.form-input::placeholder {
+    color: var(--text-muted);
+}
+
+select.form-input {
+    cursor: pointer;
+}
+
+/* Modal form alignment */
+.modal-body .form-group:last-child {
+    margin-bottom: 0;
+}
