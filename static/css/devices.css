@@ -7,7 +7,8 @@
 
 .device-card {
     cursor: default;
-    transition: border-color 0.2s;
+    min-width: 0;
+    transition: border-color 0.2s, box-shadow 0.2s;
 }
 
 .device-card .card-actions {
@@ -16,9 +17,11 @@
     padding: 10px 14px;
     border-top: 1px solid var(--border);
     margin-top: 4px;
+    flex-wrap: wrap;
 }
 
 .device-card .card-actions .btn {
+    flex: 1 1 110px;
     font-size: 0.78em;
     padding: 5px 10px;
 }
@@ -30,6 +33,7 @@
     padding: 6px 14px;
     font-size: 0.75em;
     border-top: 1px solid var(--border);
+    min-width: 0;
 }
 
 .card-id-label {
@@ -37,6 +41,8 @@
 }
 
 .card-id-value {
+    min-width: 0;
+    max-width: 100%;
     cursor: pointer;
     background: var(--bg-primary);
     padding: 2px 8px;
@@ -44,6 +50,9 @@
     font-family: 'Consolas', monospace;
     color: var(--accent);
     user-select: all;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .card-id-value:hover {
@@ -63,9 +72,18 @@
 
 .shell-controls {
     display: flex;
+    flex-wrap: wrap;
     gap: 12px;
     margin-bottom: 12px;
     align-items: flex-end;
+}
+
+.shell-controls .form-group {
+    flex: 1 1 220px;
+}
+
+.shell-controls .btn {
+    flex: 0 0 auto;
 }
 
 .shell-quick-actions {

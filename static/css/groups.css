@@ -17,6 +17,7 @@
     align-items: center;
     gap: 12px;
     padding: 14px;
+    min-width: 0;
 }
 
 .group-icon {
@@ -31,18 +32,24 @@
 .group-name {
     font-weight: 600;
     color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .group-meta {
     font-size: 0.8em;
     color: var(--text-muted);
     margin-top: 2px;
+    overflow-wrap: anywhere;
 }
 
 .group-actions-list {
     display: flex;
+    flex-wrap: wrap;
     gap: 4px;
     flex-shrink: 0;
+    justify-content: flex-end;
 }
 
 .group-devices {
@@ -61,8 +68,25 @@
     font-size: 0.78em;
     background: var(--bg-tertiary);
     color: var(--text-secondary);
+    max-width: 100%;
 }
 
 .group-device-tag.success { color: var(--success); }
 .group-device-tag.danger { color: var(--danger); }
 .group-device-tag.warning { color: var(--warning); }
+
+@media (max-width: 720px) {
+    .group-header {
+        align-items: flex-start;
+        flex-wrap: wrap;
+    }
+
+    .group-actions-list {
+        width: 100%;
+        justify-content: flex-start;
+    }
+
+    .group-actions-list .btn {
+        flex: 1 1 92px;
+    }
+}

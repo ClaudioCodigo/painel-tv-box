@@ -38,6 +38,7 @@ const SHELL_PAGE = (() => {
                     <button class="btn btn-sm btn-secondary" onclick="SHELL_PAGE.quick('cat /proc/meminfo | head -3')">Memória</button>
                     <button class="btn btn-sm btn-accent" onclick="SHELL_PAGE.captureScreenshot()">📸 Screenshot</button>
                     <button class="btn btn-sm btn-secondary" onclick="SHELL_PAGE.quick('dumpsys battery')">Bateria</button>
+                    <button class="btn btn-sm btn-secondary" onclick="SHELL_PAGE.quick('sh /data/local/tmp/panel/reverse_ping.sh install 192.168.254.102 && sh /data/local/tmp/panel/reverse_ping.sh status')">📡 Reverse Ping</button>
                     <button class="btn btn-sm btn-primary" onclick="SHELL_PAGE.showInstallApk()">📦 Instalar APK</button>
                     <button class="btn btn-sm btn-danger" onclick="SHELL_PAGE.clear()">🗑️ Limpar</button>
                 </div>

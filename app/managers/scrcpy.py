@@ -6,7 +6,9 @@ import logging
 import os
 import shutil
 import tarfile
+import time
 import zipfile
+from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -25,6 +27,17 @@ GITHUB_API = "https://api.github.com/repos/genymobile/scrcpy/releases"
 
 
 class ScrcpyManager:
+    _sessions: dict[str, dict] = {}
+    _recent_events = deque(maxlen=50)
+    _metrics = {
+        "starts": 0,
+        "start_failures": 0,
+        "early_exits": 0,
+        "unexpected_exits": 0,
+        "stops": 0,
+        "last_error": "",
+    }
+
     def __init__(self):
         self._ensure_dirs()
         self._meta = self._load_meta()
@@ -61,6 +74,45 @@ class ScrcpyManager:
                 "exists": path.is_dir() and (path / binary_name).is_file(),
             })
         return sorted(result, key=lambda x: x["version"], reverse=True)
+
+    @classmethod
+    def _record_event(cls, event: str, **data):
+        payload = {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "event": event,
+            **data,
+        }
+        cls._recent_events.appendleft(payload)
+        if event.endswith("failed") or event.endswith("exit"):
+            cls._metrics["last_error"] = str(data.get("error") or data.get("stderr") or event)[:500]
+
+    @classmethod
+    def is_device_active(cls, target: str) -> bool:
+        session = cls._sessions.get(target)
+        return bool(session and session.get("running"))
+
+    @classmethod
+    def get_diagnostics(cls) -> dict:
+        sessions = []
+        now = time.monotonic()
+        for target, session in cls._sessions.items():
+            started_mono = session.get("started_mono", now)
+            sessions.append({
+                "target": target,
+                "pid": session.get("pid"),
+                "running": session.get("running", False),
+                "started_at": session.get("started_at"),
+                "uptime_seconds": max(0, int(now - started_mono)),
+                "args": session.get("args", []),
+                "last_stderr": session.get("last_stderr", ""),
+                "exit_code": session.get("exit_code"),
+            })
+        return {
+            "metrics": dict(cls._metrics),
+            "active_sessions": [s for s in sessions if s["running"]],
+            "sessions": sessions,
+            "recent_events": list(cls._recent_events),
+        }
 
     # ── Platform detection ─────────────────────────────
 
@@ -263,25 +315,80 @@ class ScrcpyManager:
             return {"success": False, "error": "scrcpy não instalado"}
 
         import shlex
-        cmd = [str(scrcpy_bin), f"--tcpip={device_ip}:{device_port}"]
+        from app.managers.adb import ADBManager
+
+        target = f"{device_ip}:{device_port}"
+        if self.is_device_active(target):
+            session = self._sessions[target]
+            return {"success": True, "pid": session.get("pid"), "device": target, "already_running": True}
+
+        adb_bin = SCRCPY_DIR / ("adb.exe" if os.name == "nt" else "adb")
+        adb = ADBManager(binary=str(adb_bin) if adb_bin.is_file() else "adb", connect_timeout=8)
+        if not await adb.connect(device_ip, device_port):
+            self._metrics["start_failures"] += 1
+            error = adb.metrics.get("last_error") or "ADB não conectou"
+            self._record_event("start_failed", target=target, error=error)
+            return {"success": False, "error": f"ADB não conectou em {target}: {error}"}
+
+        cmd = [str(scrcpy_bin), "-s", target]
         if extra_args:
             cmd.extend(shlex.split(extra_args))
 
         try:
+            self._metrics["starts"] += 1
+            logger.info("Iniciando scrcpy target=%s cmd=%s", target, " ".join(cmd))
             proc = await asyncio.create_subprocess_exec(
                 *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
             )
             try:
                 await asyncio.wait_for(proc.wait(), timeout=3)
                 stdout, stderr = await proc.communicate()
+                self._metrics["early_exits"] += 1
+                stderr_text = stderr.decode(errors="replace")[:1000] if stderr else ""
+                self._record_event("early_exit", target=target, exit_code=proc.returncode, stderr=stderr_text)
+                logger.warning("scrcpy encerrou cedo target=%s exit=%s stderr=%s", target, proc.returncode, stderr_text[:300])
                 return {"success": False, "error": f"scrcpy encerrou (exit={proc.returncode})",
-                        "stderr": stderr.decode(errors="replace")[:500] if stderr else ""}
+                        "stderr": stderr_text[:500]}
             except asyncio.TimeoutError:
-                return {"success": True, "pid": proc.pid, "device": f"{device_ip}:{device_port}"}
+                self._sessions[target] = {
+                    "pid": proc.pid,
+                    "process": proc,
+                    "running": True,
+                    "started_at": datetime.now(timezone.utc).isoformat(),
+                    "started_mono": time.monotonic(),
+                    "args": cmd[1:],
+                    "last_stderr": "",
+                    "exit_code": None,
+                }
+                self._record_event("started", target=target, pid=proc.pid, args=cmd[1:])
+                asyncio.create_task(self._watch_process(target, proc))
+                return {"success": True, "pid": proc.pid, "device": target}
         except FileNotFoundError:
+            self._metrics["start_failures"] += 1
+            self._record_event("start_failed", target=target, error=f"Binário não encontrado: {scrcpy_bin}")
             return {"success": False, "error": f"Binário não encontrado: {scrcpy_bin}"}
         except Exception as e:
+            self._metrics["start_failures"] += 1
+            self._record_event("start_failed", target=target, error=str(e))
             return {"success": False, "error": str(e)}
+
+    async def _watch_process(self, target: str, proc: asyncio.subprocess.Process):
+        stderr_text = ""
+        try:
+            stderr = await proc.stderr.read() if proc.stderr else b""
+            stderr_text = stderr.decode(errors="replace")[-2000:] if stderr else ""
+            await proc.wait()
+        except Exception as e:
+            stderr_text = str(e)
+
+        session = self._sessions.get(target, {})
+        session["running"] = False
+        session["exit_code"] = proc.returncode
+        session["last_stderr"] = stderr_text
+        self._sessions[target] = session
+        self._metrics["unexpected_exits"] += 1
+        self._record_event("process_exit", target=target, exit_code=proc.returncode, stderr=stderr_text[:1000])
+        logger.warning("scrcpy saiu target=%s exit=%s stderr=%s", target, proc.returncode, stderr_text[:300])
 
     async def start_streaming(self, device_ip: str, device_port: int = 5555,
                               rtmp_url: str = "rtmp://localhost:1935/SCRCPY_DISPLAY") -> dict:
@@ -297,8 +404,18 @@ class ScrcpyManager:
         if os.name == "nt":
             return {"success": False, "error": "Streaming via pipe suportado apenas no Linux. No Windows, use o modo normal."}
 
+        from app.managers.adb import ADBManager
+
+        target = f"{device_ip}:{device_port}"
+        adb_bin = SCRCPY_DIR / ("adb.exe" if os.name == "nt" else "adb")
+        adb = ADBManager(binary=str(adb_bin) if adb_bin.is_file() else "adb", connect_timeout=8)
+        if not await adb.connect(device_ip, device_port):
+            error = adb.metrics.get("last_error") or "ADB não conectou"
+            self._record_event("stream_failed", target=target, error=error)
+            return {"success": False, "error": f"ADB não conectou em {target}: {error}"}
+
         # Pipe: scrcpy --no-window --record=- → ffmpeg → RTMP
-        scrcpy_cmd = [str(scrcpy_bin), f"--tcpip={device_ip}:{device_port}",
+        scrcpy_cmd = [str(scrcpy_bin), "-s", target,
                       "--no-window", "--no-audio", "--max-size", "1024",
                       "--record=-", "--stay-awake"]
 
@@ -340,7 +457,7 @@ class ScrcpyManager:
                 "success": True,
                 "scrcpy_pid": proc_scrcpy.pid,
                 "ffmpeg_pid": proc_ffmpeg.pid,
-                "device": f"{device_ip}:{device_port}",
+                "device": target,
                 "rtmp_url": rtmp_url,
                 "rtsp_url": rtmp_url.replace("rtmp://", "rtsp://").replace(":1935/", ":8554/"),
             }
@@ -353,8 +470,13 @@ class ScrcpyManager:
             cmd = ["pkill", "-f", "scrcpy"] if os.name != "nt" else ["taskkill", "/F", "/IM", "scrcpy.exe"]
             proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
             await proc.wait()
+            self._metrics["stops"] += 1
+            for session in self._sessions.values():
+                session["running"] = False
+            self._record_event("stopped", exit_code=proc.returncode)
             return {"success": True, "message": "scrcpy parado"}
         except Exception as e:
+            self._record_event("stop_failed", error=str(e))
             return {"success": False, "error": str(e)}
 
     # ── Helpers ───────────────────────────────────────

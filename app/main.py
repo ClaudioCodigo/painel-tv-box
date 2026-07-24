@@ -121,7 +121,6 @@ async def websocket_shell(ws: WebSocket, device_id: str):
     import asyncio
 
     await ws.accept()
-    config = app.main.config if hasattr(app.main, 'config') else None
     device = config.get_device(device_id) if config else None
     if not device:
         await ws.send_json({"type": "error", "message": "Dispositivo não encontrado"})

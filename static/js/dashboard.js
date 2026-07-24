@@ -9,17 +9,28 @@ const DASHBOARD = (() => {
         UI.setPageTitle('Dashboard');
 
         el.innerHTML = `
-            <div class="section-title">📺 TV Boxes <span class="text-muted text-sm">— comandos rápidos</span></div>
+            <div class="section-title">
+                Sistema
+                <span class="section-subtitle">uso do servidor em tempo real</span>
+            </div>
+            <div class="stat-grid" id="system-grid">
+                <div class="loading">Carregando metricas...</div>
+            </div>
+            <div class="section-title">
+                TV Boxes
+                <span class="dashboard-summary" id="device-summary">comandos rapidos</span>
+            </div>
             <div class="card-grid" id="device-grid">
                 <div class="loading">Carregando...</div>
             </div>
-            <div class="section-title mt-md">📋 Eventos</div>
+            <div class="section-title mt-md">Eventos</div>
             <div class="log-list" id="event-list"><div class="text-muted text-sm">Aguardando...</div></div>
         `;
 
+        await loadSystemMetrics();
         await loadDevices();
         startAutoRefresh();
-        WS.on('health', (data) => updateDeviceCard(data.device_id, data.status));
+        WS.on('health', (data) => updateDeviceCard(data.device_id, data.status, data.reason));
         WS.on('system_metrics', (data) => updateSystemMetrics(data));
     }
 
@@ -32,10 +43,12 @@ const DASHBOARD = (() => {
         try {
             const devices = await API.get('/devices');
             if (!devices || devices.length === 0) {
-                grid.innerHTML = '<div class="empty-state">📺 Nenhum TV Box. Use a aba <a href="#/devices">Dispositivos</a> para adicionar.</div>';
+                updateSummary([]);
+                grid.innerHTML = '<div class="empty-state">Nenhum TV Box. Use a aba <a href="#/devices">Dispositivos</a> para adicionar.</div>';
                 return;
             }
             grid.innerHTML = '';
+            updateSummary(devices);
 
             devices.forEach(d => {
                 const card = document.createElement('div');
@@ -43,7 +56,6 @@ const DASHBOARD = (() => {
                 const status = d.state?.status || 'unknown';
                 const reason = d.state?.reason || '';
                 const icon = UI.statusIcon(status); const sClass = UI.statusClass(status);
-                const isOnline = status === 'online';
 
                 card.innerHTML = `
                     <div class="card-header">
@@ -65,10 +77,7 @@ const DASHBOARD = (() => {
                         </div>
                     </div>
                     <div class="card-stream-status ${sClass}" id="status-${d.id}">
-                        <div class="card-stream-indicator ${isOnline ? 'stream-live' : 'stream-off'}">
-                            ${isOnline ? '<span class="live-dot"></span> STREAM ATIVA' : '<span class="sd-offline" style="width:6px;height:6px;display:inline-block;border-radius:50%"></span> SEM STREAM'}
-                        </div>
-                        ${reason ? `<div class="card-stream-reason">${reason}</div>` : ''}
+                        ${renderStreamStatus(status, reason)}
                     </div>
                     <div class="card-info">
                         <div class="card-info-item"><span class="card-info-key">IP</span><span class="card-info-val">${d.ip || '--'}</span></div>
@@ -127,12 +136,34 @@ const DASHBOARD = (() => {
         setTimeout(loadDevices, 2000);
     }
 
-    function updateDeviceCard(deviceId, newStatus) {
+    function renderStreamStatus(status, reason = '') {
+        const isOnline = status === 'online';
+        const label = isOnline ? 'STREAM ATIVA' : (status === 'degraded' ? 'ATENCAO' : 'SEM STREAM');
+        const dotClass = isOnline ? 'live-dot' : 'status-mini-dot';
+        return `
+            <div class="card-stream-indicator ${isOnline ? 'stream-live' : 'stream-off'}">
+                <span class="${dotClass}"></span> ${label}
+            </div>
+            ${reason ? `<div class="card-stream-reason">${reason}</div>` : ''}
+        `;
+    }
+
+    function updateDeviceCard(deviceId, newStatus, reason = '') {
         const el = document.getElementById(`status-${deviceId}`);
         if (el) {
-            el.textContent = newStatus.toUpperCase();
-            el.className = `card-status ${UI.statusClass(newStatus)}`;
+            el.className = `card-stream-status ${UI.statusClass(newStatus)}`;
+            el.innerHTML = renderStreamStatus(newStatus, reason);
         }
+    }
+
+    function updateSummary(devices) {
+        const el = document.getElementById('device-summary');
+        if (!el) return;
+        const total = devices.length;
+        const online = devices.filter(d => d.state?.status === 'online').length;
+        const degraded = devices.filter(d => d.state?.status === 'degraded').length;
+        const offline = devices.filter(d => d.state?.status === 'offline').length;
+        el.textContent = `${total} total | ${online} online | ${degraded} atencao | ${offline} offline`;
     }
 
     function copyDeviceId(deviceId) {
@@ -222,7 +253,15 @@ const DASHBOARD = (() => {
         if (statusInterval) clearInterval(statusInterval);
         statusInterval = setInterval(() => {
             loadDevices();
+            loadSystemMetrics();
         }, 15000);
+    }
+
+    function destroy() {
+        if (statusInterval) {
+            clearInterval(statusInterval);
+            statusInterval = null;
+        }
     }
 
     // ── Dropdown ─────────────────────────────────
@@ -329,5 +368,5 @@ const DASHBOARD = (() => {
         });
     }
 
-    return { render, copyDeviceId, toggleMenu, rename, renameStream, createGroup, moveGroup, cmd, deleteDevice, deleteGroup };
+    return { render, destroy, copyDeviceId, toggleMenu, rename, renameStream, createGroup, moveGroup, cmd, deleteDevice, deleteGroup };
 })();

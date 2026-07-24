@@ -21,6 +21,7 @@ const DEVICES = (() => {
             </div>
         `;
         await loadDevices();
+        if (refreshTimer) clearInterval(refreshTimer);
         refreshTimer = setInterval(loadDevices, 15000);
     }
 
@@ -161,5 +162,12 @@ const DEVICES = (() => {
         );
     }
 
-    return { render, showAddDialog, renameDialog, groupDialog, remove };
+    function destroy() {
+        if (refreshTimer) {
+            clearInterval(refreshTimer);
+            refreshTimer = null;
+        }
+    }
+
+    return { render, destroy, showAddDialog, renameDialog, groupDialog, remove };
 })();

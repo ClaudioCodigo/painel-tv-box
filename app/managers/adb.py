@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -17,6 +18,24 @@ class ADBManager:
         self.binary = binary
         self.connect_timeout = connect_timeout
         self._connected: set[str] = set()
+        self._locks: dict[str, asyncio.Lock] = {}
+        self._last_connect_attempt: dict[str, float] = {}
+        self.metrics = {
+            "connect_attempts": 0,
+            "connect_success": 0,
+            "connect_failures": 0,
+            "connect_skipped_cached": 0,
+            "shell_calls": 0,
+            "timeouts": 0,
+            "last_error": "",
+        }
+
+    def _lock_for(self, target: str) -> asyncio.Lock:
+        lock = self._locks.get(target)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._locks[target] = lock
+        return lock
 
     async def _run(self, *args, timeout: int = 15) -> tuple[str, int]:
         cmd = [self.binary, *args]
@@ -32,19 +51,48 @@ class ADBManager:
                 output += "\n" + stderr.decode(errors="replace").strip()
             return output, proc.returncode
         except asyncio.TimeoutError:
+            self.metrics["timeouts"] += 1
+            self.metrics["last_error"] = f"timeout: {' '.join(cmd)}"
+            try:
+                proc.kill()
+            except Exception:
+                pass
             return "timeout", -1
         except FileNotFoundError:
+            self.metrics["last_error"] = f"adb binary not found: {self.binary}"
             return "adb binary not found", -2
 
-    async def connect(self, ip: str, port: int = 5555) -> bool:
+    async def connect(self, ip: str, port: int = 5555, force: bool = False) -> bool:
         target = f"{ip}:{port}"
-        output, code = await self._run("connect", target, timeout=self.connect_timeout)
-        if code == 0 or "connected" in output.lower() or "already connected" in output.lower():
-            self._connected.add(target)
-            logger.info("ADB connected: %s", target)
+        if target in self._connected and not force:
+            self.metrics["connect_skipped_cached"] += 1
             return True
-        logger.warning("ADB connect failed: %s -> %s", target, output.strip())
-        return False
+
+        async with self._lock_for(target):
+            if target in self._connected and not force:
+                self.metrics["connect_skipped_cached"] += 1
+                return True
+
+            now = time.monotonic()
+            last_attempt = self._last_connect_attempt.get(target, 0)
+            if not force and now - last_attempt < 2:
+                self.metrics["connect_skipped_cached"] += 1
+                return target in self._connected
+
+            self._last_connect_attempt[target] = now
+            self.metrics["connect_attempts"] += 1
+            output, code = await self._run("connect", target, timeout=self.connect_timeout)
+            normalized = output.lower()
+            if code == 0 or "connected" in normalized or "already connected" in normalized:
+                self._connected.add(target)
+                self.metrics["connect_success"] += 1
+                logger.info("ADB connected: %s", target)
+                return True
+
+            self.metrics["connect_failures"] += 1
+            self.metrics["last_error"] = output.strip()
+            logger.warning("ADB connect failed: %s -> %s", target, output.strip())
+            return False
 
     async def disconnect(self, ip: str, port: int = 5555):
         target = f"{ip}:{port}"
@@ -53,8 +101,14 @@ class ADBManager:
 
     async def shell(self, ip: str, command: str, port: int = 5555, timeout: int = 15) -> tuple[str, int]:
         target = f"{ip}:{port}"
+        self.metrics["shell_calls"] += 1
         await self.connect(ip, port)
-        return await self._run("-s", target, "shell", command, timeout=timeout)
+        output, code = await self._run("-s", target, "shell", command, timeout=timeout)
+        if code in {-1, -2} or "device offline" in output.lower() or "not found" in output.lower():
+            self._connected.discard(target)
+            await self.connect(ip, port, force=True)
+            output, code = await self._run("-s", target, "shell", command, timeout=timeout)
+        return output, code
 
     async def push(self, ip: str, local: str, remote: str, port: int = 5555, timeout: int = 30) -> bool:
         """Faz adb push de um arquivo local para o dispositivo."""

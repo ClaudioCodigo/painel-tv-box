@@ -58,6 +58,10 @@ const APP = (() => {
         const container = document.getElementById('view-container');
         if (!container) return;
 
+        if (activeView && typeof activeView.destroy === 'function') {
+            activeView.destroy();
+        }
+
         // Match rotas exatas
         let handler = routes[hash];
 

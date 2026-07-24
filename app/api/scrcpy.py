@@ -21,6 +21,7 @@ async def scrcpy_status():
         "binary_exists": binary is not None and binary.is_file() if binary else False,
         "installed_versions": versions,
         "versions_count": len(versions),
+        "diagnostics": mgr.get_diagnostics(),
     }
 
 
@@ -96,11 +97,20 @@ async def scrcpy_versions():
     return {"versions": mgr.get_installed_versions()}
 
 
+@router.get("/diagnostics")
+async def scrcpy_diagnostics():
+    """Diagnósticos de sessões e quedas recentes do scrcpy."""
+    mgr = ScrcpyManager()
+    return mgr.get_diagnostics()
+
+
 @router.delete("/versions/{version}")
 async def scrcpy_delete_version(version: str):
     """Remove uma versão específica."""
     mgr = ScrcpyManager()
-    ver_dir = mgr.VERSIONS_DIR / version  # type: ignore
+    from app.managers.scrcpy import VERSIONS_DIR
+
+    ver_dir = VERSIONS_DIR / version
     if not ver_dir.is_dir():
         raise HTTPException(404, f"Versão {version} não encontrada")
 

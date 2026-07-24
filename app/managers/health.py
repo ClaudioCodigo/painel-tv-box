@@ -2,10 +2,12 @@
 
 import asyncio
 import logging
+import os
 from datetime import datetime
 from typing import Optional
 
 from app.models.device import DeviceConfig
+from app.managers.scrcpy import ScrcpyManager
 
 logger = logging.getLogger("health")
 
@@ -32,11 +34,15 @@ class HealthManager:
             "status": "unknown",
             "error": None,
         }
+        target = f"{device.ip}:{device.adb_port}"
+        scrcpy_active = ScrcpyManager.is_device_active(target)
+        results["scrcpy_active"] = scrcpy_active
 
         # 1. Ping (informativo, NÃO usado para determinar offline)
         try:
+            ping_args = ["-n", "1", "-w", "1000", device.ip] if os.name == "nt" else ["-c", "1", "-W", "1", device.ip]
             proc = await asyncio.create_subprocess_exec(
-                "ping", "-c", "1", "-W", "1", device.ip,
+                "ping", *ping_args,
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.DEVNULL,
             )
@@ -81,17 +87,21 @@ class HealthManager:
         # ADB OK — marca como último bom
         self._last_good[device.id] = datetime.now()
 
-        # 4. Activity check
-        try:
-            output, _ = await self.adb.shell(
-                device.ip,
-                "dumpsys activity activities 2>/dev/null | grep -i ResumedActivity | head -1",
-                port=device.adb_port,
-                timeout=5,
-            )
-            results["activity"] = output.strip() if output and "ResumedActivity" in output else ""
-        except Exception:
+        # 4. Activity check. Evita um segundo adb shell enquanto scrcpy está ativo.
+        if scrcpy_active:
             results["activity"] = ""
+            logger.debug("Activity check pulado para %s: scrcpy ativo em %s", device.id, target)
+        else:
+            try:
+                output, _ = await self.adb.shell(
+                    device.ip,
+                    "dumpsys activity activities 2>/dev/null | grep -i ResumedActivity | head -1",
+                    port=device.adb_port,
+                    timeout=5,
+                )
+                results["activity"] = output.strip() if output and "ResumedActivity" in output else ""
+            except Exception:
+                results["activity"] = ""
 
         # 5. MediaMTX path — readers indicam stream ativa
         if self.mediamtx:
