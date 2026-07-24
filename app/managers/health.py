@@ -53,19 +53,25 @@ class HealthManager:
 
         # 2. ADB — tenta 2 vezes (scrcpy pode estar usando a conexão)
         adb_ok = False
-        for attempt in range(2):
-            if self.adb:
-                try:
-                    output, code = await self.adb.shell(device.ip, "echo ok", port=device.adb_port, timeout=5)
-                    if code == 0 and "ok" in output.lower():
-                        adb_ok = True
-                        break
-                except Exception:
-                    pass
-            if not adb_ok and attempt == 0:
-                await asyncio.sleep(2)  # espera 2s antes de retry
-
-        results["adb"] = adb_ok
+        if scrcpy_active:
+            # scrcpy já confirmou ADB OK — pula shell check pra não causar ConnectionReset
+            adb_ok = True
+            results["adb"] = True
+            results["adb_skipped_for_scrcpy"] = True
+            logger.debug("Health check pulou ADB shell para %s — scrcpy ativo", device.id)
+        else:
+            for attempt in range(2):
+                if self.adb:
+                    try:
+                        output, code = await self.adb.shell(device.ip, "echo ok", port=device.adb_port, timeout=5)
+                        if code == 0 and "ok" in output.lower():
+                            adb_ok = True
+                            break
+                    except Exception:
+                        pass
+                if not adb_ok and attempt == 0:
+                    await asyncio.sleep(2)  # espera 2s antes de retry
+            results["adb"] = adb_ok
 
         # 3. Determina status
         if not adb_ok:

@@ -345,7 +345,7 @@ class ScrcpyManager:
             return {"success": True, "pid": session.get("pid"), "device": target, "already_running": True}
 
         adb_bin = SCRCPY_DIR / ("adb.exe" if os.name == "nt" else "adb")
-        adb = ADBManager(binary=str(adb_bin) if adb_bin.is_file() else "adb", connect_timeout=8)
+        adb = ADBManager(binary=str(adb_bin) if adb_bin.is_file() else "adb", connect_timeout=7200)
         if not await adb.connect(device_ip, device_port):
             self._metrics["start_failures"] += 1
             error = adb.metrics.get("last_error") or "ADB não conectou"
@@ -471,7 +471,7 @@ class ScrcpyManager:
 
         target = f"{device_ip}:{device_port}"
         adb_bin = SCRCPY_DIR / ("adb.exe" if os.name == "nt" else "adb")
-        adb = ADBManager(binary=str(adb_bin) if adb_bin.is_file() else "adb", connect_timeout=8)
+        adb = ADBManager(binary=str(adb_bin) if adb_bin.is_file() else "adb", connect_timeout=7200)
         if not await adb.connect(device_ip, device_port):
             error = adb.metrics.get("last_error") or "ADB não conectou"
             self._record_event("stream_failed", target=target, error=error)

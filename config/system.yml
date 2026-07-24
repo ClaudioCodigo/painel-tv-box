@@ -7,7 +7,7 @@ host:
 adb:
   binary: adb
   default_port: 5555
-  connect_timeout: 60
+  connect_timeout: 7200
   command_delay: 0.5
 paths:
   devices_dir: devices
