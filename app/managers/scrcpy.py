@@ -354,9 +354,9 @@ class ScrcpyManager:
 
         # Verifica compatibilidade do Android (API level)
         api_level = await self._check_android_api(target, adb)
-        if api_level and api_level < 30:
+        if api_level and api_level < 21:
             self._record_event("start_failed", target=target, error=f"API level {api_level} muito baixo")
-            return {"success": False, "error": f"Android API {api_level} não suportado. Mínimo: API 30 (Android 11). Versão sugerida: scrcpy v2.x"}
+            return {"success": False, "error": f"Android API {api_level} não suportado. Mínimo: API 21 (Android 5.0)."}
 
         # 1. Limpeza de resíduos
         await self._cleanup_server(target, adb)
