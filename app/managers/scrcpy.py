@@ -309,6 +309,28 @@ class ScrcpyManager:
         return {"success": True, "version": previous, "rolled_back_from": old}
 
     # ── Mirroring ─────────────────────────────────────
+    async def _cleanup_server(self, target: str, adb: 'ADBManager'):
+        """Mata processos scrcpy-server residuais e limpa arquivos."""
+        ip, port = target.split(":")
+        for cmd in [
+            "killall -9 scrcpy-server 2>/dev/null",
+            "rm -f /data/local/tmp/scrcpy-server",
+        ]:
+            try:
+                await adb.shell(ip, cmd, port=int(port), timeout=5)
+            except Exception:
+                pass
+
+    async def _check_android_api(self, target: str, adb: 'ADBManager') -> int:
+        """Retorna API level do Android (ex: 30=Android 11, 31=Android 12)."""
+        ip, port = target.split(":")
+        try:
+            out, code = await adb.shell(ip, "getprop ro.build.version.sdk", port=int(port), timeout=5)
+            api = int(out.strip())
+            return api
+        except Exception:
+            return 0
+
     async def start_mirroring(self, device_ip: str, device_port: int = 5555, extra_args: str = "") -> dict:
         scrcpy_bin = self._get_scrcpy_bin()
         if not scrcpy_bin:
@@ -330,47 +352,88 @@ class ScrcpyManager:
             self._record_event("start_failed", target=target, error=error)
             return {"success": False, "error": f"ADB não conectou em {target}: {error}"}
 
+        # Verifica compatibilidade do Android (API level)
+        api_level = await self._check_android_api(target, adb)
+        if api_level and api_level < 30:
+            self._record_event("start_failed", target=target, error=f"API level {api_level} muito baixo")
+            return {"success": False, "error": f"Android API {api_level} não suportado. Mínimo: API 30 (Android 11). Versão sugerida: scrcpy v2.x"}
+
+        # 1. Limpeza de resíduos
+        await self._cleanup_server(target, adb)
+
         cmd = [str(scrcpy_bin), "-s", target]
         if extra_args:
             cmd.extend(shlex.split(extra_args))
 
-        try:
-            self._metrics["starts"] += 1
-            logger.info("Iniciando scrcpy target=%s cmd=%s", target, " ".join(cmd))
-            proc = await asyncio.create_subprocess_exec(
-                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
-            )
+        # 2. Retry com backoff
+        max_attempts = 3
+        base_delay = 2
+
+        for attempt in range(1, max_attempts + 1):
             try:
-                await asyncio.wait_for(proc.wait(), timeout=3)
-                stdout, stderr = await proc.communicate()
-                self._metrics["early_exits"] += 1
-                stderr_text = stderr.decode(errors="replace")[:1000] if stderr else ""
-                self._record_event("early_exit", target=target, exit_code=proc.returncode, stderr=stderr_text)
-                logger.warning("scrcpy encerrou cedo target=%s exit=%s stderr=%s", target, proc.returncode, stderr_text[:300])
-                return {"success": False, "error": f"scrcpy encerrou (exit={proc.returncode})",
-                        "stderr": stderr_text[:500]}
-            except asyncio.TimeoutError:
-                self._sessions[target] = {
-                    "pid": proc.pid,
-                    "process": proc,
-                    "running": True,
-                    "started_at": datetime.now(timezone.utc).isoformat(),
-                    "started_mono": time.monotonic(),
-                    "args": cmd[1:],
-                    "last_stderr": "",
-                    "exit_code": None,
-                }
-                self._record_event("started", target=target, pid=proc.pid, args=cmd[1:])
-                asyncio.create_task(self._watch_process(target, proc))
-                return {"success": True, "pid": proc.pid, "device": target}
-        except FileNotFoundError:
-            self._metrics["start_failures"] += 1
-            self._record_event("start_failed", target=target, error=f"Binário não encontrado: {scrcpy_bin}")
-            return {"success": False, "error": f"Binário não encontrado: {scrcpy_bin}"}
-        except Exception as e:
-            self._metrics["start_failures"] += 1
-            self._record_event("start_failed", target=target, error=str(e))
-            return {"success": False, "error": str(e)}
+                self._metrics["starts"] += 1
+                logger.info("scrcpy tentativa %d/%d target=%s cmd=%s", attempt, max_attempts, target, " ".join(cmd))
+                proc = await asyncio.create_subprocess_exec(
+                    *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+                )
+                try:
+                    await asyncio.wait_for(proc.wait(), timeout=5)
+                    # 3. Captura stdout+stderr combinado
+                    stdout_b, stderr_b = await proc.communicate()
+                    combined = (stdout_b + stderr_b).decode(errors="replace")[:1000]
+                    self._metrics["early_exits"] += 1
+                    self._record_event("early_exit", target=target, attempt=attempt,
+                                       exit_code=proc.returncode, details=combined[:500])
+                    logger.warning("scrcpy tentativa %d/%d falhou (exit=%d): %s",
+                                   attempt, max_attempts, proc.returncode, combined[:300])
+
+                    if attempt < max_attempts:
+                        delay = base_delay * attempt
+                        logger.info("Aguardando %ds antes da tentativa %d...", delay, attempt + 1)
+                        # Limpa resíduos novamente antes de tentar de novo
+                        await self._cleanup_server(target, adb)
+                        await asyncio.sleep(delay)
+                        continue
+                    else:
+                        # Última tentativa falhou
+                        self._record_event("start_failed", target=target,
+                                           error=f"Falhou após {max_attempts} tentativas")
+                        return {
+                            "success": False,
+                            "error": f"scrcpy falhou após {max_attempts} tentativas (último exit={proc.returncode})",
+                            "details": combined[:500],
+                        }
+
+                except asyncio.TimeoutError:
+                    # Processo passou dos 5s → sucesso
+                    self._sessions[target] = {
+                        "pid": proc.pid,
+                        "process": proc,
+                        "running": True,
+                        "started_at": datetime.now(timezone.utc).isoformat(),
+                        "started_mono": time.monotonic(),
+                        "args": cmd[1:],
+                        "last_stderr": "",
+                        "exit_code": None,
+                        "attempts": attempt,
+                    }
+                    self._record_event("started", target=target, pid=proc.pid, args=cmd[1:], attempts=attempt)
+                    asyncio.create_task(self._watch_process(target, proc))
+                    return {"success": True, "pid": proc.pid, "device": target, "attempts": attempt}
+
+            except FileNotFoundError:
+                self._metrics["start_failures"] += 1
+                self._record_event("start_failed", target=target, error=f"Binário não encontrado: {scrcpy_bin}")
+                return {"success": False, "error": f"Binário não encontrado: {scrcpy_bin}"}
+            except Exception as e:
+                self._metrics["start_failures"] += 1
+                self._record_event("start_failed", target=target, error=str(e))
+                if attempt < max_attempts:
+                    await asyncio.sleep(base_delay * attempt)
+                    continue
+                return {"success": False, "error": str(e)}
+
+        return {"success": False, "error": "Falha ao iniciar scrcpy (inesperado)"}
 
     async def _watch_process(self, target: str, proc: asyncio.subprocess.Process):
         stderr_text = ""
