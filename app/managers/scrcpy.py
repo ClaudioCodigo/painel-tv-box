@@ -310,16 +310,22 @@ class ScrcpyManager:
 
     # ── Mirroring ─────────────────────────────────────
     async def _cleanup_server(self, target: str, adb: 'ADBManager'):
-        """Mata processos scrcpy-server residuais e limpa arquivos."""
+        """Mata processos scrcpy-server residuais e limpa portas ADB."""
         ip, port = target.split(":")
-        for cmd in [
+        commands = [
             "killall -9 scrcpy-server 2>/dev/null",
             "rm -f /data/local/tmp/scrcpy-server",
-        ]:
+        ]
+        for cmd in commands:
             try:
-                await adb.shell(ip, cmd, port=int(port), timeout=5)
+                await adb.shell(ip, cmd, port=int(port), timeout=5, force=True)
             except Exception:
                 pass
+        # Limpa portas ADB forward (comum causar conflito 27186)
+        try:
+            await adb._run("forward", "--remove-all", timeout=5)
+        except Exception:
+            pass
 
     async def _check_android_api(self, target: str, adb: 'ADBManager') -> int:
         """Retorna API level do Android (ex: 30=Android 11, 31=Android 12)."""
