@@ -1,5 +1,5 @@
 /**
- * Scrcpy Page — gestão de versões + mirroring com checklist.
+ * Scrcpy Page — gestão de versões + mirroring com seletor de dispositivos.
  */
 const SCRCPY = (() => {
     let refreshTimer = null;
@@ -15,7 +15,12 @@ const SCRCPY = (() => {
         {id:'arg-awake',label:'Manter acordado',desc:'--stay-awake',cmd:'--stay-awake',grp:'exib'},
     ];
 
-    const GRP = {rede:{icon:'⚡',lbl:'Rede / Desempenho'},codec:{icon:'🎞️',lbl:'Codec'},audio:{icon:'🔇',lbl:'Áudio'},exib:{icon:'🖥️',lbl:'Exibição'}};
+    const GRP = {
+        rede:{icon:'⚡',lbl:'Rede / Desempenho'},
+        codec:{icon:'🎞️',lbl:'Codec'},
+        audio:{icon:'🔇',lbl:'Áudio'},
+        exib:{icon:'🖥️',lbl:'Exibição'}
+    };
 
     function buildArgs() {
         const checks = PRESET_ARGS.filter(a => document.getElementById(a.id)?.checked).map(a => a.cmd);
@@ -24,16 +29,38 @@ const SCRCPY = (() => {
         return checks.join(' ');
     }
 
+    // Renderização principal (agora async para carregar dispositivos)
     async function render(el) {
         UI.setPageTitle('scrcpy');
+
+        // 1. Buscar dispositivos cadastrados
+        let devices = [];
+        try {
+            devices = await API.get('/devices') || [];
+        } catch (e) {
+            // Se falhar, a lista ficará vazia
+        }
+
+        const deviceOptions = devices.map(d =>
+            `<option value="${d.id}">${d.name || d.id} (${d.ip})</option>`
+        ).join('');
+
+        // 2. Construir checkboxes de args
         let cb = '';
         for (const [k,g] of Object.entries(GRP)) {
             const items = PRESET_ARGS.filter(a => a.grp === k);
-            cb += `<div class="scrcpy-arg-grp"><div class="scrcpy-arg-title">${g.icon} ${g.lbl}</div><div class="scrcpy-arg-grid">`;
-            cb += items.map(a => `<label class="scrcpy-arg-item"><input type="checkbox" id="${a.id}"><span>${a.label}</span><code>${a.desc}</code></label>`).join('');
+            cb += `<div class="scrcpy-arg-grp">
+                     <div class="scrcpy-arg-title">${g.icon} ${g.lbl}</div>
+                     <div class="scrcpy-arg-grid">`;
+            cb += items.map(a =>
+                `<label class="scrcpy-arg-item">
+                    <input type="checkbox" id="${a.id}"><span>${a.label}</span><code>${a.desc}</code>
+                 </label>`
+            ).join('');
             cb += '</div></div>';
         }
 
+        // 3. Montar HTML completo com <select> em vez de <input>
         el.innerHTML = `
 <div class="scrcpy-page">
  <div class="section-title">📱 scrcpy <span class="badge badge-warning">⚠️ BETA</span></div>
@@ -41,8 +68,11 @@ const SCRCPY = (() => {
 
  <div class="settings-card full">
   <h3 style="margin-bottom:8px">🖥️ Mirroring</h3>
-  <div class="form-group"><label class="form-label">Device ID</label>
-   <input type="text" id="scrcpy-device" class="form-input" placeholder="tv-box-pier" value="tv-box-pier">
+  <div class="form-group">
+   <label class="form-label">Dispositivo</label>
+   <select id="scrcpy-device" class="form-input">
+     ${deviceOptions || '<option value="">Nenhum dispositivo</option>'}
+   </select>
   </div>
 
   <details style="margin-top:8px">
@@ -70,6 +100,7 @@ const SCRCPY = (() => {
  </div>
  <div id="scrcpy-update-info"></div>
 </div>`;
+        // 4. Carregar status de versões após o HTML estar pronto
         await loadStatus();
     }
 
@@ -90,8 +121,10 @@ const SCRCPY = (() => {
             if (!vv.length) { el.innerHTML = '<div class="empty-state">Nenhuma versão instalada</div>'; return; }
             el.innerHTML = vv.map(v => `
                 <div class="scrcpy-version-item">
-                    <div><div class="scrcpy-version-name">v${v.version} ${v.current?'<span class="badge badge-primary">ativo</span>':''}</div>
-                    <div class="scrcpy-version-meta">${(v.size_bytes/1048576).toFixed(1)} MB</div></div>
+                    <div>
+                        <div class="scrcpy-version-name">v${v.version} ${v.current?'<span class="badge badge-primary">ativo</span>':''}</div>
+                        <div class="scrcpy-version-meta">${(v.size_bytes/1048576).toFixed(1)} MB</div>
+                    </div>
                     <div class="scrcpy-version-actions">
                         ${!v.current?`<button class="btn btn-sm btn-secondary" onclick="SCRCPY.activateVersion('${v.version}')">Ativar</button>`:''}
                         <button class="btn btn-sm btn-danger" onclick="SCRCPY.deleteVersion('${v.version}')">🗑️</button>
@@ -101,7 +134,11 @@ const SCRCPY = (() => {
     }
 
     async function startMirroring() {
-        const deviceId = document.getElementById('scrcpy-device')?.value || 'tv-box-pier';
+        const deviceId = document.getElementById('scrcpy-device')?.value;
+        if (!deviceId) {
+            UI.createToast('Selecione um dispositivo primeiro', 'warning');
+            return;
+        }
         const allArgs = buildArgs();
         UI.createToast(`Iniciando mirror ${deviceId}...`,'info');
         try {
