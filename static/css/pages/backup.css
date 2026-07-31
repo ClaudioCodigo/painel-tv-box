@@ -1,0 +1,52 @@
+/* Backup — cards e lista de backups */
+.backup-card {
+    margin-bottom: var(--space-4);
+}
+
+.backup-card p {
+    margin-bottom: var(--space-3);
+    line-height: 1.5;
+}
+
+.backup-page .backup-items {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.backup-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+}
+
+.backup-item:hover {
+    background: var(--control-hover);
+}
+
+.backup-name {
+    font-weight: 600;
+    font-size: 0.85em;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+}
+
+.backup-meta {
+    font-size: 0.75em;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+.backup-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.backup-actions .btn {
+    font-size: 0.75em;
+    padding: 4px 10px;
+}

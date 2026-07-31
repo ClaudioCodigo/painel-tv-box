@@ -3,6 +3,7 @@
 import logging
 import os
 from pathlib import Path
+from typing import Optional
 
 from app.models.device import DeviceConfig
 
@@ -22,7 +23,10 @@ MANIFEST = [
     "healthcheck.sh",
     "install_apk.sh",
     "update.sh",
+    "heartbeat.sh",  # batida HTTP device→servidor (docs/09)
 ]
+
+HEARTBEAT_INTERVAL = 20  # s entre batidas
 
 
 class ProvisionService:
@@ -74,6 +78,23 @@ class ProvisionService:
         if code != 0:
             errors.append(f"chmod falhou: {output.strip()}")
 
+        # 3b. Heartbeat: gera heartbeat.conf + instala e inicia no device
+        try:
+            hb = self._heartbeat_conf(device)
+            if hb:
+                conf_remote = f"{REMOTE_DIR}/heartbeat.conf"
+                pushed = await self.adb.push(ip, hb, conf_remote, port=port)
+                if pushed:
+                    # conf já está no device — basta iniciar (start lê o heartbeat.conf)
+                    await self.adb.shell(
+                        ip, f"sh {REMOTE_DIR}/heartbeat.sh start", port=port, timeout=15
+                    )
+                    results.append("heartbeat.conf")
+                else:
+                    errors.append("push heartbeat.conf falhou")
+        except Exception as e:
+            errors.append(f"heartbeat: {e}")
+
         # 4. Verifica
         output, _ = await self.adb.shell(
             ip, f"ls -la {REMOTE_DIR}/", port=port, timeout=10
@@ -92,6 +113,31 @@ class ProvisionService:
             "errors": errors,
             "remote_ls": output.strip(),
         }
+
+    def _heartbeat_conf(self, device: DeviceConfig) -> Optional[str]:
+        """Gera conteúdo do heartbeat.conf ou None se config indisponível.
+        Usa a heartbeat_key dedicada (não o token do painel).
+        """
+        try:
+            import app.main
+
+            cfg = app.main.config
+            if not cfg or not cfg.system:
+                return None
+            host_ip = cfg.system.host.ip or ""
+            port = cfg.system.server.port or 8080
+            key = (cfg.system.security.heartbeat_key if cfg.system.security else "") or ""
+            if not host_ip or not key:
+                return None
+            url = f"http://{host_ip}:{port}"
+            return (
+                f"PANEL_URL={url}\n"
+                f"DEVICE_ID={device.id}\n"
+                f"KEY={key}\n"
+                f"INTERVAL={HEARTBEAT_INTERVAL}\n"
+            )
+        except Exception:
+            return None
 
     async def verify(self, device: DeviceConfig) -> dict:
         """Verifica quais scripts existem no dispositivo."""

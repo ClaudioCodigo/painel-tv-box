@@ -56,6 +56,20 @@ async def backup_import(file: UploadFile = File(...)):
         os.unlink(tmp_path)
 
 
+@router.get("/download/{backup_name}")
+async def backup_download(backup_name: str):
+    """Baixa um backup ZIP específico (nome validado contra traversal)."""
+    mgr = BackupManager()
+    path = mgr.get_backup_path(backup_name)
+    if not path:
+        raise HTTPException(404, "Backup não encontrado")
+    return FileResponse(
+        path,
+        media_type="application/zip",
+        filename=path.name,
+    )
+
+
 @router.post("/restore/{backup_name}")
 async def backup_restore(backup_name: str):
     """Restaura de um backup específico pelo nome."""

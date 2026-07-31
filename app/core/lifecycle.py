@@ -19,6 +19,11 @@ async def startup(fastapi_app):
     cm = ConfigurationManager()
     await cm.load()
 
+    # Garante token de acesso (gera + loga o caminho no 1º boot)
+    from app.core.auth import get_or_create_token
+
+    get_or_create_token()
+
     # Injeta no módulo main
     import app.main
 
@@ -59,7 +64,12 @@ async def startup(fastapi_app):
         )
         player_mgr = PlayerManager(adb_manager=adb, players_config=cm.players)
 
-        health_mgr = HealthManager(adb_manager=adb, mediamtx_manager=mtx_mgr, players_config=cm.players)
+        health_mgr = HealthManager(
+            adb_manager=adb,
+            mediamtx_manager=mtx_mgr,
+            players_config=cm.players,
+            heartbeat_timeout=cm.watchdog.heartbeat_timeout if cm.watchdog else 60,
+        )
 
         recovery_svc = RecoveryService(adb_manager=adb, player_manager=player_mgr, watchdog_config=cm.watchdog)
 

@@ -45,7 +45,10 @@ async def create_device(data: dict):
     except Exception as e:
         raise HTTPException(422, f"Erro de validação: {e}")
 
-    config.add_device(device)
+    try:
+        config.add_device(device)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
     # Auto-provision: tenta enviar scripts para o TV Box
     try:
@@ -85,7 +88,10 @@ async def delete_device(device_id: str):
     config = _get_config()
     if not config.get_device(device_id):
         raise HTTPException(404, "Dispositivo não encontrado")
-    config.delete_device(device_id)
+    try:
+        config.delete_device(device_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     return {"deleted": device_id}
 
 
@@ -209,7 +215,22 @@ async def device_status(device_id: str):
 
         device.state.status = "online"
         device.state.last_seen = datetime.now()
-        device.state.current_activity = f"Android {status['android']}"
+        # Activity real em foco (dumpsys) — quando não há scrcpy ativo
+        try:
+            from app.managers.scrcpy import ScrcpyManager
+
+            if ScrcpyManager.is_device_active(f"{device.ip}:{device.adb_port}"):
+                device.state.current_activity = device.state.current_activity or f"Android {status['android']}"
+            else:
+                out, _ = await adb.shell(
+                    device.ip,
+                    "dumpsys activity activities 2>/dev/null | grep -i ResumedActivity | head -1",
+                    port=device.adb_port,
+                    timeout=5,
+                )
+                device.state.current_activity = out.strip() if out and "ResumedActivity" in out else f"Android {status['android']}"
+        except Exception:
+            device.state.current_activity = f"Android {status['android']}"
 
     return {
         "device_id": device_id,

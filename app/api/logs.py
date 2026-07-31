@@ -3,9 +3,15 @@
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse
 
-from app.managers.log import LogManager
+from app.managers.log import LogManager, LOG_SOURCES
 
 router = APIRouter(prefix="/api/logs", tags=["logs"])
+
+
+def _validate_source(source: str | None):
+    """Garante que a fonte passada está na allowlist (anti path traversal)."""
+    if source and source not in LOG_SOURCES:
+        raise HTTPException(400, f"Fonte inválida: {source!r}. Válidas: {', '.join(LOG_SOURCES)}")
 
 
 def _get_log_manager():
@@ -31,6 +37,7 @@ async def list_logs(
     per_page: int = Query(50, ge=1, le=500),
 ):
     """Busca logs com filtros."""
+    _validate_source(source)
     mgr = _get_log_manager()
     result = mgr.search(
         source=source,
@@ -51,6 +58,7 @@ async def tail_logs(
     n: int = Query(50, ge=1, le=500, description="Número de linhas"),
 ):
     """Retorna as últimas N linhas de log."""
+    _validate_source(source)
     mgr = _get_log_manager()
     items = mgr.tail(source=source, n=n)
     return {"items": items, "count": len(items)}
@@ -68,6 +76,7 @@ async def download_logs(
     source: str = Query(None, description="Fonte específica. Se vazio, todos os logs."),
 ):
     """Download de arquivo de log."""
+    _validate_source(source)
     mgr = _get_log_manager()
     path = mgr.download(source=source)
     if path is None:

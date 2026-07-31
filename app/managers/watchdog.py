@@ -81,6 +81,7 @@ class WatchdogManager:
                         "type": "health",
                         "device_id": device.id,
                         "status": status,
+                        "reason": device.state.reason,
                         "checks": result,
                         "timestamp": datetime.now().isoformat(),
                     })
@@ -110,6 +111,7 @@ class WatchdogManager:
                                 "type": "health",
                                 "device_id": device.id,
                                 "status": "online",
+                                "reason": device.state.reason,
                                 "recovery": rec_result,
                                 "timestamp": datetime.now().isoformat(),
                             })

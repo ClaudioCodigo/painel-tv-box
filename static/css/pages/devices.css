@@ -1,0 +1,26 @@
+/* Devices — cards da lista */
+.devices-page .section-title {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.device-card {
+    cursor: default;
+    min-width: 0;
+}
+
+.device-card .card-actions {
+    display: flex;
+    gap: 6px;
+    padding: 10px 14px;
+    border-top: 1px solid var(--border-subtle);
+    margin-top: 4px;
+    flex-wrap: wrap;
+}
+
+.device-card .card-actions .btn {
+    flex: 1 1 110px;
+    font-size: 0.78em;
+    padding: 5px 10px;
+}

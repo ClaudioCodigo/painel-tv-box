@@ -8,9 +8,9 @@ const GROUPS = (() => {
         UI.setPageTitle('Grupos');
         el.innerHTML = `
             <div class="groups-page">
-                <div class="section-title">📁 Grupos</div>
+                <div class="section-title">${UI.icon('users')} Grupos</div>
                 <div class="groups-toolbar">
-                    <button class="btn btn-primary btn-sm" onclick="GROUPS.createForm()">+ Novo Grupo</button>
+                    <button class="btn btn-primary btn-sm" onclick="GROUPS.createForm()">${UI.icon('plus')} Novo Grupo</button>
                 </div>
                 <div id="groups-list" class="groups-list">
                     <div class="loading">Carregando...</div>
@@ -27,7 +27,7 @@ const GROUPS = (() => {
         try {
             const res = await API.get('/groups');
             if (!res || res.length === 0) {
-                el.innerHTML = '<div class="empty-state">📁 Nenhum grupo criado.</div>';
+                el.innerHTML = '<div class="empty-state">' + UI.icon('users', 44) + '<div class="empty-title">Nenhum grupo criado.</div></div>';
                 return;
             }
 
@@ -40,23 +40,23 @@ const GROUPS = (() => {
                 html += `
                     <div class="group-card">
                         <div class="group-header">
-                            <span class="group-icon">📁</span>
+                            <span class="group-icon">${UI.icon('users')}</span>
                             <div class="group-info">
-                                <div class="group-name">${g.name || g.id}</div>
-                                <div class="group-meta">${g.description || ''} — ${g.device_count} dispositivos (${onlineCount} online)</div>
+                                <div class="group-name">${UI.escapeHtml(g.name || g.id)}</div>
+                                <div class="group-meta">${UI.escapeHtml(g.description || '')} — ${g.device_count} dispositivos (${onlineCount} online)</div>
                             </div>
                             <div class="group-actions-list">
-                                <button class="btn btn-sm btn-primary" onclick="GROUPS.action('${g.id}', 'start-stream')" ${!hasDevices ? 'disabled' : ''}>▶ Start</button>
-                                <button class="btn btn-sm btn-secondary" onclick="GROUPS.action('${g.id}', 'stop-stream')" ${!hasDevices ? 'disabled' : ''}>⏹ Stop</button>
-                                <button class="btn btn-sm btn-warning" onclick="GROUPS.action('${g.id}', 'reboot')" ${!hasDevices ? 'disabled' : ''}>🔄 Reboot</button>
-                                <button class="btn btn-sm btn-danger" onclick="GROUPS.deleteGroup('${g.id}')">🗑️</button>
+                                <button class="btn btn-sm btn-primary" onclick="GROUPS.action('${g.id}', 'start-stream')" ${!hasDevices ? 'disabled' : ''}>${UI.icon('play')} Start</button>
+                                <button class="btn btn-sm btn-secondary" onclick="GROUPS.action('${g.id}', 'stop-stream')" ${!hasDevices ? 'disabled' : ''}>${UI.icon('stop')} Stop</button>
+                                <button class="btn btn-sm btn-warning" onclick="GROUPS.action('${g.id}', 'reboot')" ${!hasDevices ? 'disabled' : ''}>${UI.icon('reboot')} Reboot</button>
+                                <button class="btn btn-sm btn-danger" onclick="GROUPS.deleteGroup('${g.id}')">${UI.icon('trash')}</button>
                             </div>
                         </div>
                         ${hasDevices ? `
                         <div class="group-devices">
                             ${devices.map(d => `
                                 <span class="group-device-tag ${UI.statusClass(d.status)}">
-                                    ${UI.statusIcon(d.status)} ${d.name || d.id}
+                                    ${UI.statusIcon(d.status)} ${UI.escapeHtml(d.name || d.id)}
                                 </span>
                             `).join('')}
                         </div>` : '<div class="text-muted text-sm" style="padding:8px 14px">Nenhum dispositivo neste grupo</div>'}
@@ -66,7 +66,7 @@ const GROUPS = (() => {
 
             el.innerHTML = html;
         } catch (e) {
-            el.innerHTML = `<div class="error-state">Erro: ${e.message}</div>`;
+            el.innerHTML = `<div class="error-state">Erro: ${UI.escapeHtml(e.message)}</div>`;
         }
     }
 

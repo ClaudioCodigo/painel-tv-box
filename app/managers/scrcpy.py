@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import shutil
 import tarfile
 import time
@@ -24,6 +25,14 @@ DOWNLOADS_DIR = SCRCPY_DIR / "downloads"
 META_FILE = SCRCPY_DIR / "version.json"
 MAX_KEEP_VERSIONS = 3
 GITHUB_API = "https://api.github.com/repos/genymobile/scrcpy/releases"
+
+# Versões do scrcpy são numéricas pontuadas (ex: 2.4, 3.0.1)
+SAFE_VERSION_RE = re.compile(r"^[0-9]+(\.[0-9]+){0,4}$")
+
+
+def is_safe_version(version: str) -> bool:
+    """Valida versão para uso como nome de diretório (anti path traversal)."""
+    return bool(SAFE_VERSION_RE.match(version or ""))
 
 
 class ScrcpyManager:
@@ -184,6 +193,8 @@ class ScrcpyManager:
     # ── Download + Install ────────────────────────────
 
     async def download(self, version: str) -> dict:
+        if not is_safe_version(version):
+            return {"success": False, "error": f"Versão inválida: {version!r}"}
         ver_dir = VERSIONS_DIR / version
         bin_name = self._platform_binary_name()
 
@@ -262,6 +273,8 @@ class ScrcpyManager:
     # ── Activate / Rollback ───────────────────────────
 
     async def activate(self, version: str) -> dict:
+        if not is_safe_version(version):
+            return {"success": False, "error": f"Versão inválida: {version!r}"}
         ver_dir = VERSIONS_DIR / version
         bin_name = self._platform_binary_name()
         if not ver_dir.is_dir() or not (ver_dir / bin_name).is_file():

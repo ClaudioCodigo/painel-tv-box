@@ -107,9 +107,12 @@ async def scrcpy_diagnostics():
 @router.delete("/versions/{version}")
 async def scrcpy_delete_version(version: str):
     """Remove uma versão específica."""
-    mgr = ScrcpyManager()
-    from app.managers.scrcpy import VERSIONS_DIR
+    from app.managers.scrcpy import VERSIONS_DIR, is_safe_version
 
+    if not is_safe_version(version):
+        raise HTTPException(400, f"Versão inválida: {version!r}")
+
+    mgr = ScrcpyManager()
     ver_dir = VERSIONS_DIR / version
     if not ver_dir.is_dir():
         raise HTTPException(404, f"Versão {version} não encontrada")

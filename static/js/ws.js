@@ -12,11 +12,17 @@ const WS = (() => {
 
     function getUrl() {
         const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-        return `${proto}//${location.host}/ws`;
+        const token = (typeof AUTH !== 'undefined') ? AUTH.getToken() : '';
+        const q = token ? `?token=${encodeURIComponent(token)}` : '';
+        return `${proto}//${location.host}/ws${q}`;
     }
 
     function connect() {
         if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+            return;
+        }
+        // Não conecta sem token (backend exige autenticação)
+        if (typeof AUTH !== 'undefined' && !AUTH.getToken()) {
             return;
         }
 
@@ -89,8 +95,12 @@ const WS = (() => {
         return connected;
     }
 
-    // Auto-connect
-    connect();
+    // Auto-connect: só após login (token presente)
+    document.addEventListener('DOMContentLoaded', connect);
+    window.addEventListener('auth:logged-in', connect);
+    window.addEventListener('auth:logged-out', () => {
+        if (ws) { try { ws.close(); } catch (e) {} ws = null; }
+    });
 
     return { connect, on, off, send, isConnected };
 })();

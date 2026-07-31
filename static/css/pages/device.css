@@ -1,5 +1,4 @@
-/* Device page — detalhe do TV Box */
-
+/* Device — página de detalhe do TV Box */
 .device-detail {
     max-width: 800px;
     margin: 0 auto;
@@ -8,12 +7,13 @@
 .device-header {
     display: flex;
     align-items: center;
-    gap: 16px;
-    margin-bottom: 20px;
+    gap: var(--space-4);
+    margin-bottom: var(--space-5);
 }
 
 .device-header .device-icon {
     font-size: 2.5em;
+    color: var(--text-secondary);
 }
 
 .device-header .device-info h2 {
@@ -26,21 +26,11 @@
     color: var(--text-secondary);
 }
 
-.device-status-badge {
-    display: inline-block;
-    font-size: 0.7em;
-    font-weight: 700;
-    text-transform: uppercase;
-    padding: 4px 12px;
-    border-radius: var(--radius-sm);
-    margin-top: 4px;
-}
-
 .device-actions {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
-    margin-bottom: 20px;
+    gap: var(--space-2);
+    margin-bottom: var(--space-5);
 }
 
 .device-actions .btn {
@@ -51,19 +41,12 @@
 .device-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 14px;
-    margin-bottom: 20px;
+    gap: var(--space-3);
+    margin-bottom: var(--space-5);
 }
 
 .device-grid .full {
     grid-column: 1 / -1;
-}
-
-.device-info-card {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 14px 16px;
 }
 
 .device-info-card h3 {
@@ -71,77 +54,74 @@
     color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    margin-bottom: 10px;
+    margin-bottom: var(--space-3);
 }
 
-.device-info-card .info-row {
-    display: flex;
-    justify-content: space-between;
-    padding: 4px 0;
-    font-size: 0.85em;
-    border-bottom: 1px solid var(--border-muted);
-}
-
-.device-info-card .info-row:last-child {
-    border-bottom: none;
-}
-
-.device-info-card .info-key {
-    color: var(--text-muted);
-}
-
-.device-info-card .info-val {
-    color: var(--text-primary);
-    font-weight: 500;
-}
-
-/* Screenshot */
 .device-screenshot img {
     width: 100%;
     max-height: 300px;
     object-fit: contain;
-    background: #000;
+    background: var(--bg-inset);
     border-radius: var(--radius-sm);
     cursor: pointer;
 }
 
 .device-shell-output {
-    background: #000;
-    color: #0f0;
+    background: var(--bg-inset);
+    color: var(--text-primary);
     font-family: var(--font-mono);
     font-size: 0.8em;
-    padding: 12px;
+    padding: var(--space-3);
     border-radius: var(--radius-sm);
     max-height: 300px;
     overflow-y: auto;
     white-space: pre-wrap;
     word-break: break-all;
+    border: 1px solid var(--border-subtle);
 }
 
 .device-shell-input {
     display: flex;
-    gap: 8px;
-    margin-top: 8px;
+    gap: var(--space-2);
+    margin-top: var(--space-2);
 }
 
 .device-shell-input input {
     flex: 1;
-    background: #000;
-    color: #0f0;
+    background: var(--bg-inset);
+    color: var(--text-primary);
     font-family: var(--font-mono);
     font-size: 0.85em;
     padding: 8px 12px;
-    border: 1px solid var(--border);
+    border: 1px solid var(--border-strong);
     border-radius: var(--radius-sm);
     outline: none;
 }
 
 .device-shell-input input:focus {
-    border-color: var(--accent);
+    border-color: var(--focus-ring);
 }
 
 @media (max-width: 600px) {
     .device-grid {
         grid-template-columns: 1fr;
     }
+}
+
+/* Tabs do device (Fase B) */
+.device-tabs {
+    display: flex;
+    gap: 4px;
+    border-bottom: 1px solid var(--border-subtle);
+    margin: var(--space-4) 0 0;
+    overflow-x: auto;
+    padding-bottom: 0;
+}
+.device-tab-content {
+    margin-top: var(--space-4);
+}
+.device-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
 }

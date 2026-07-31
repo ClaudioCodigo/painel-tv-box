@@ -36,9 +36,9 @@ const SHELL_PAGE = (() => {
                 <div class="shell-quick-actions">
                     <button class="btn btn-sm btn-secondary" onclick="SHELL_PAGE.quick('cat /proc/cpuinfo | head -5')">CPU Info</button>
                     <button class="btn btn-sm btn-secondary" onclick="SHELL_PAGE.quick('cat /proc/meminfo | head -3')">Memória</button>
-                    <button class="btn btn-sm btn-accent" onclick="SHELL_PAGE.captureScreenshot()">📸 Screenshot</button>
+                    <button class="btn btn-sm btn-accent" onclick="SHELL_PAGE.captureScreenshot()">${UI.icon('camera')} Screenshot</button>
                     <button class="btn btn-sm btn-secondary" onclick="SHELL_PAGE.quick('dumpsys battery')">Bateria</button>
-                    <button class="btn btn-sm btn-secondary" onclick="SHELL_PAGE.quick('sh /data/local/tmp/panel/reverse_ping.sh install 192.168.254.102 && sh /data/local/tmp/panel/reverse_ping.sh status')">📡 Reverse Ping</button>
+                    <button class="btn btn-sm btn-secondary" onclick="SHELL_PAGE.quick('sh /data/local/tmp/panel/reverse_ping.sh install 192.168.254.102 && sh /data/local/tmp/panel/reverse_ping.sh status')">${UI.icon('wifi')} Reverse Ping</button>
                     <button class="btn btn-sm btn-primary" onclick="SHELL_PAGE.showInstallApk()">📦 Instalar APK</button>
                     <button class="btn btn-sm btn-danger" onclick="SHELL_PAGE.clear()">🗑️ Limpar</button>
                 </div>
@@ -178,16 +178,16 @@ const SHELL_PAGE = (() => {
     }
 
     async function captureScreenshotInternal(deviceId, outEl) {
-        outEl.innerHTML += `<div class="shell-prompt">📸 Capturando screenshot de ${deviceId}...</div>`;
+        outEl.innerHTML += `<div class="shell-prompt">Capturando screenshot de ${deviceId}...</div>`;
         try {
             const res = await API.post(`/devices/${deviceId}/screenshot`);
             if (res.success) {
-                const url = `/api/devices/${deviceId}/screenshot?t=${Date.now()}`;
+                const url = API.authUrl(`/api/devices/${deviceId}/screenshot`) + '&t=' + Date.now();
                 const kb = (res.size_bytes / 1024).toFixed(1);
                 outEl.innerHTML += `
                     <div class="shell-result">
-                        <div class="shell-line" style="color:#7ee787">✅ ${kb} KB — clique na imagem para ampliar</div>
-                        <img src="${url}" style="max-width:100%;max-height:400px;cursor:pointer;border:1px solid var(--border);border-radius:6px;margin-top:6px"
+                        <div class="shell-line term-ok">${kb} KB — clique na imagem para ampliar</div>
+                        <img src="${url}" style="max-width:100%;max-height:400px;cursor:pointer;border:1px solid var(--border-strong);border-radius:6px;margin-top:6px"
                              onclick="window.open('${url}')" onerror="this.nextElementSibling.style.display='block'">
                         <div style="display:none;color:var(--text-muted);margin-top:4px">🖼️ <a href="${url}" target="_blank">Abrir screenshot em nova aba</a></div>
                     </div>`;
@@ -202,11 +202,11 @@ const SHELL_PAGE = (() => {
 
     function showExistingScreenshot(deviceId) {
         const out = output();
-        const url = `/api/devices/${deviceId}/screenshot?t=${Date.now()}`;
+        const url = API.authUrl(`/api/devices/${deviceId}/screenshot`) + '&t=' + Date.now();
         out.innerHTML += `
             <div class="shell-result" style="margin-top:12px">
-                <div class="shell-line text-muted">📸 Último screenshot:</div>
-                <img src="${url}" style="max-width:100%;max-height:300px;cursor:pointer;border:1px solid var(--border);border-radius:6px;margin-top:4px"
+                <div class="shell-line text-muted">Último screenshot:</div>
+                <img src="${url}" style="max-width:100%;max-height:300px;cursor:pointer;border:1px solid var(--border-strong);border-radius:6px;margin-top:4px"
                      loading="lazy" onclick="window.open('${url}')">
             </div>`;
     }
@@ -266,20 +266,20 @@ const SHELL_PAGE = (() => {
                     const resp = await fetch(`/api/devices/${dev.value}/install-apk`, { method: 'POST', body: form });
                     const data = await resp.json();
                     if (data.success) {
-                        out.innerHTML += `<div class="shell-result"><span class="shell-line" style="color:var(--success)">✅ ${esc(f.name)} instalado com sucesso</span></div>`;
+                        out.innerHTML += `<div class="shell-result"><span class="shell-line term-ok">${esc(f.name)} instalado com sucesso</span></div>`;
                         showInstallApk(); // recarrega lista
                     } else {
-                        out.innerHTML += `<div class="shell-result"><span class="shell-line" style="color:var(--danger)">❌ ${esc(data.error || 'Falha na instalação')}</span></div>`;
+                        out.innerHTML += `<div class="shell-result"><span class="shell-line term-err">${esc(data.error || 'Falha na instalação')}</span></div>`;
                     }
                 } catch (err) {
-                    out.innerHTML += `<div class="shell-result"><span class="shell-line" style="color:var(--danger)">❌ ${esc(err.message)}</span></div>`;
+                    out.innerHTML += `<div class="shell-result"><span class="shell-line term-err">${esc(err.message)}</span></div>`;
                 }
                 out.scrollTop = out.scrollHeight;
                 e.target.value = '';
             };
         } catch (err) {
-            document.getElementById('shell-apps-status').innerHTML = `<span style="color:var(--danger)">Erro: ${esc(err.message)}</span>`;
-            out.innerHTML += `<div class="shell-result"><span class="shell-line" style="color:var(--danger)">❌ ${esc(err.message)}</span></div>`;
+            document.getElementById('shell-apps-status').innerHTML = `<span class="term-err">Erro: ${esc(err.message)}</span>`;
+            out.innerHTML += `<div class="shell-result"><span class="shell-line term-err">${esc(err.message)}</span></div>`;
         }
     }
 
@@ -292,13 +292,13 @@ const SHELL_PAGE = (() => {
             try {
                 const res = await API.post(`/devices/${dev.value}/uninstall-app`, { package: pkg });
                 if (res.success) {
-                    out.innerHTML += `<div class="shell-result"><span class="shell-line" style="color:var(--success)">✅ ${esc(pkg)} desinstalado (exit: ${res.exit_code})</span></div>`;
+                    out.innerHTML += `<div class="shell-result"><span class="shell-line term-ok">${esc(pkg)} desinstalado (exit: ${res.exit_code})</span></div>`;
                     showInstallApk();
                 } else {
-                    out.innerHTML += `<div class="shell-result"><span class="shell-line" style="color:var(--danger)">❌ ${esc(res.output || res.error || 'Falha')} (exit: ${res.exit_code})</span></div>`;
+                    out.innerHTML += `<div class="shell-result"><span class="shell-line term-err">${esc(res.output || res.error || 'Falha')} (exit: ${res.exit_code})</span></div>`;
                 }
             } catch (e) {
-                out.innerHTML += `<div class="shell-result"><span class="shell-line" style="color:var(--danger)">❌ ${esc(e.message)}</span></div>`;
+                out.innerHTML += `<div class="shell-result"><span class="shell-line term-err">${esc(e.message)}</span></div>`;
             }
             out.scrollTop = out.scrollHeight;
         });

@@ -1,13 +1,9 @@
-/* Scrcpy Page */
-
+/* Scrcpy — versões, checklist de args */
 .scrcpy-version-item {
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 10px 14px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
     margin-bottom: 6px;
 }
 
@@ -34,17 +30,16 @@
 }
 
 .badge-warning {
-    background: var(--warning-subtle);
-    color: var(--warning);
     font-size: 0.7em;
     font-weight: 700;
     padding: 2px 8px;
     border-radius: var(--radius-sm);
     margin-left: 8px;
     vertical-align: middle;
+    border: 1px solid var(--border-strong);
+    color: var(--text-secondary);
 }
 
-/* Checklist de args */
 .scrcpy-arg-grp {
     margin-bottom: 10px;
 }
@@ -66,30 +61,30 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    background: var(--bg-primary);
-    border: 1px solid var(--border);
+    background: var(--bg-base);
+    border: 1px solid var(--border-strong);
     border-radius: var(--radius-sm);
     padding: 5px 10px;
     cursor: pointer;
     font-size: 0.8em;
-    transition: border-color 0.15s;
+    transition: border-color var(--dur-fast) ease;
 }
 
 .scrcpy-arg-item:hover {
-    border-color: var(--accent);
+    border-color: var(--text-secondary);
 }
 
 .scrcpy-arg-item input[type="checkbox"] {
-    accent-color: var(--accent);
+    accent-color: var(--text-primary);
 }
 
 .scrcpy-arg-item code {
-    font-family: 'Consolas', monospace;
+    font-family: var(--font-mono);
     font-size: 0.85em;
     color: var(--text-muted);
 }
 
 .scrcpy-arg-item:has(input:checked) {
-    border-color: var(--accent);
-    background: color-mix(in srgb, var(--accent) 10%, var(--bg-primary));
+    border-color: var(--text-primary);
+    background: var(--control-hover);
 }

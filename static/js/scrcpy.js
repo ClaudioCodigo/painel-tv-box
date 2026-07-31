@@ -76,7 +76,7 @@ const SCRCPY = (() => {
   </div>
 
   <details style="margin-top:8px">
-   <summary style="cursor:pointer;font-weight:600;color:var(--accent)">🔧 Opções avançadas</summary>
+   <summary style="cursor:pointer;font-weight:600;color:var(--text-primary)">Opções avançadas</summary>
    ${cb}
    <div class="form-group" style="margin-top:8px">
     <label class="form-label">Args extras (custom)</label>
@@ -85,16 +85,16 @@ const SCRCPY = (() => {
   </details>
 
   <div style="display:flex;gap:8px;margin-top:12px">
-   <button class="btn btn-primary" onclick="SCRCPY.startMirroring()">▶ Iniciar Mirror</button>
-   <button class="btn btn-danger" onclick="SCRCPY.stopMirroring()">⏹ Parar</button>
+   <button class="btn btn-primary" onclick="SCRCPY.startMirroring()">${UI.icon('play')} Iniciar Mirror</button>
+   <button class="btn btn-danger" onclick="SCRCPY.stopMirroring()">${UI.icon('stop')} Parar</button>
   </div>
  </div>
 
- <div class="section-title mt-md">📦 Versões</div>
+ <div class="section-title mt-md">${UI.icon('archive')} Versões</div>
  <div class="settings-card">
   <div style="display:flex;gap:8px;margin-bottom:12px">
    <button class="btn btn-primary btn-sm" onclick="SCRCPY.checkUpdates()">🔍 Verificar</button>
-   <button class="btn btn-success btn-sm" onclick="SCRCPY.installLatest()">⬇ Instalar</button>
+   <button class="btn btn-success btn-sm" onclick="SCRCPY.installLatest()">${UI.icon('download')} Instalar</button>
   </div>
   <div id="scrcpy-versions"><div class="loading">Carregando...</div></div>
  </div>
@@ -127,7 +127,7 @@ const SCRCPY = (() => {
                     </div>
                     <div class="scrcpy-version-actions">
                         ${!v.current?`<button class="btn btn-sm btn-secondary" onclick="SCRCPY.activateVersion('${v.version}')">Ativar</button>`:''}
-                        <button class="btn btn-sm btn-danger" onclick="SCRCPY.deleteVersion('${v.version}')">🗑️</button>
+                        <button class="btn btn-sm btn-danger" onclick="SCRCPY.deleteVersion('${v.version}')">${UI.icon('trash')}</button>
                     </div>
                 </div>`).join('');
         } catch(e) { /* */ }

@@ -1,10 +1,27 @@
 /**
- * Devices Page — gerenciamento de dispositivos:
- *   renomear, adicionar, excluir, mover para grupo.
- *   (comandos de stream ficam no Dashboard)
+ * Devices Page — gerenciamento de dispositivos (padrão V2):
+ *   status bar com reason, frescura, toolbar (busca/filtro/sort), WS ao vivo.
+ *   Clique no card abre a página de detalhe do device.
  */
 const DEVICES = (() => {
     let refreshTimer = null;
+
+    // ── Estado da coleção ──
+    let devicesCache = [];
+    let groupNames = {};            // id -> name
+    const filters = { q: '', group: '', sort: 'name' };
+
+    function latestSeen(d) {
+        if (!d || (!d.last_seen && !d.last_heartbeat)) return null;
+        const a = d.last_seen ? new Date(d.last_seen).getTime() : 0;
+        const b = d.last_heartbeat ? new Date(d.last_heartbeat).getTime() : 0;
+        return new Date(Math.max(a, b)).toISOString();
+    }
+
+    function freshness(device) {
+        const seen = latestSeen(device);
+        return seen ? `visto há ${UI.timeAgo(seen)}` : 'nunca visto';
+    }
 
     async function render(el) {
         UI.setPageTitle('Dispositivos');
@@ -12,66 +29,160 @@ const DEVICES = (() => {
         el.innerHTML = `
             <div class="devices-page">
                 <div class="section-title">
-                    📺 Gerenciar Dispositivos
-                    <button class="btn btn-primary btn-sm" onclick="DEVICES.showAddDialog()">+ Novo TV Box</button>
+                    ${UI.icon('tv')} Gerenciar Dispositivos
+                    <button class="btn btn-primary btn-sm" onclick="DEVICES.showAddDialog()">${UI.icon('plus')} Novo TV Box</button>
+                </div>
+                <div class="dcard-toolbar" id="devices-toolbar">
+                    <div class="dcard-toolbar-counters" id="devices-counters"></div>
+                    <div class="dcard-toolbar-controls">
+                        <input type="text" class="form-input" id="devices-search" placeholder="Buscar nome ou IP..." aria-label="Buscar dispositivo">
+                        <select class="form-input" id="devices-group" aria-label="Filtrar por grupo"><option value="">Todos os grupos</option></select>
+                        <select class="form-input" id="devices-sort" aria-label="Ordenar">
+                            <option value="name">Nome</option>
+                            <option value="ip">IP</option>
+                            <option value="status">Status</option>
+                        </select>
+                    </div>
                 </div>
                 <div id="devices-grid" class="card-grid">
-                    <div class="loading">Carregando...</div>
+                    ${UI.skeletons('card', 3)}
                 </div>
             </div>
         `;
+
+        bindToolbar();
         await loadDevices();
         if (refreshTimer) clearInterval(refreshTimer);
         refreshTimer = setInterval(loadDevices, 15000);
     }
 
-    async function loadDevices() {
-        const grid = document.getElementById('devices-grid');
-        if (!grid) { clearInterval(refreshTimer); return; }
+    // Listener único (não acumula)
+    WS.on('health', (data) => {
+        if (!data.device_id) return;
+        const el = document.getElementById(`dstatus-${data.device_id}`);
+        if (el) {
+            el.className = `dcard-status ${UI.statusClass(data.status)}`;
+            el.innerHTML = UI.statusBar(data.status, data.reason);
+        }
+        const fresh = el && el.closest('.device-card')?.querySelector('.dcard-fresh');
+        if (fresh && data.timestamp) fresh.textContent = `visto há ${UI.timeAgo(data.timestamp)}`;
+    });
 
+    async function loadDevices() {
         try {
             const devices = await API.get('/devices');
-            if (!devices || devices.length === 0) {
-                grid.innerHTML = `<div class="empty-state"><div class="empty-icon">📺</div><div class="empty-title">Nenhum dispositivo</div><div class="empty-desc">Clique em "+ Novo TV Box" para começar.</div></div>`;
-                return;
+            devicesCache = Array.isArray(devices) ? devices : [];
+
+            if (Object.keys(groupNames).length === 0) {
+                const groups = await API.get('/groups').catch(() => []);
+                (Array.isArray(groups) ? groups : []).forEach(g => { groupNames[g.id] = g.name || g.id; });
+                populateGroupFilter(Object.keys(groupNames));
             }
 
-            const groupsRes = await API.get('/groups').catch(() => []);
-            const allGroups = Array.isArray(groupsRes) ? groupsRes : [];
-
-            let html = '';
-            for (const d of devices) {
-                const status = d.state?.status || 'unknown';
-                const sIcon = UI.statusIcon(status); const sClass = UI.statusClass(status);
-                const ip = d.ip || '—';
-                const group = d.group || '—';
-                const player = d.player || 'vlc';
-                const loc = d.location || '';
-
-                html += `
-                    <div class="card device-card">
-                        <div class="card-header">
-                            <div class="card-title">${sIcon} ${d.name || d.id}</div>
-                            <div class="badge ${sClass}">${status}</div>
-                        </div>
-                        <div class="card-info">
-                            <div class="card-info-item"><span class="card-info-key">IP</span><span class="card-info-val">${ip}</span></div>
-                            <div class="card-info-item"><span class="card-info-key">Player</span><span class="card-info-val">${player}</span></div>
-                            <div class="card-info-item"><span class="card-info-key">Grupo</span><span class="card-info-val">${group}</span></div>
-                            ${loc ? `<div class="card-info-item"><span class="card-info-key">Local</span><span class="card-info-val">${loc}</span></div>` : ''}
-                        </div>
-                        <div class="card-actions">
-                            <button class="btn btn-sm btn-secondary" onclick="DEVICES.renameDialog('${d.id}','${(d.name||'')}')">✏️ Renomear</button>
-                            <button class="btn btn-sm btn-secondary" onclick="DEVICES.groupDialog('${d.id}','${group}')">📁 Grupo</button>
-                            <button class="btn btn-sm btn-danger" onclick="DEVICES.remove('${d.id}')">🗑️</button>
-                        </div>
-                    </div>
-                `;
-            }
-            grid.innerHTML = html;
+            renderDevices();
         } catch (e) {
-            grid.innerHTML = `<div class="error-state">Erro: ${e.message}</div>`;
+            const grid = document.getElementById('devices-grid');
+            if (grid) grid.innerHTML = UI.stateView('error', e.message, { retry: true });
+            UI.bindStateRetry(grid, loadDevices);
         }
+    }
+
+    function applyFilters() {
+        const q = filters.q.trim().toLowerCase();
+        let list = devicesCache.filter(d => {
+            if (filters.group && d.group !== filters.group) return false;
+            if (q) {
+                const hay = `${d.name || ''} ${d.ip || ''}`.toLowerCase();
+                if (!hay.includes(q)) return false;
+            }
+            return true;
+        });
+        const sort = filters.sort;
+        list.sort((a, b) => {
+            if (sort === 'ip') return (a.ip || '').localeCompare(b.ip || '');
+            if (sort === 'status') return (a.state?.status || '').localeCompare(b.state?.status || '');
+            return (a.name || a.id).localeCompare(b.name || b.id);
+        });
+        return list;
+    }
+
+    function renderDevices() {
+        const grid = document.getElementById('devices-grid');
+        const counters = document.getElementById('devices-counters');
+        if (!grid) return;
+
+        if (counters) counters.innerHTML = UI.toolbarCounters(devicesCache);
+
+        if (devicesCache.length === 0) {
+            grid.innerHTML = UI.stateView('empty', 'Clique em "Novo TV Box" para começar.', { icon: 'tv', title: 'Nenhum dispositivo' });
+            return;
+        }
+        const list = applyFilters();
+        if (list.length === 0) {
+            grid.innerHTML = UI.stateView('empty', 'Nenhum dispositivo corresponde ao filtro.', { icon: 'search', title: 'Sem resultados' });
+            return;
+        }
+
+        grid.innerHTML = '';
+        list.forEach(d => grid.appendChild(buildCard(d)));
+    }
+
+    function buildCard(d) {
+        const card = document.createElement('div');
+        card.className = 'card device-card'; card.dataset.deviceId = d.id;
+        const status = d.state?.status || 'unknown';
+        const reason = d.state?.reason || '';
+        const sIcon = UI.statusIcon(status); const sClass = UI.statusClass(status);
+        const groupChip = d.group ? UI.groupChip(groupNames[d.group] || d.group, d.group) : '';
+        const loc = d.location || '';
+
+        card.innerHTML = `
+            <div class="card-header dcard-header">
+                <div class="card-title">${sIcon} ${UI.escapeHtml(d.name || d.id)}</div>
+                <div class="dcard-header-right">${groupChip}</div>
+            </div>
+            <div class="dcard-status ${sClass}" id="dstatus-${d.id}">
+                ${UI.statusBar(status, reason)}
+            </div>
+            <div class="card-info dcard-meta">
+                <div class="card-info-item"><span class="card-info-key">IP</span><span class="card-info-val">${UI.escapeHtml(d.ip || '--')}</span></div>
+                <div class="card-info-item"><span class="card-info-key">Player</span><span class="card-info-val">${UI.escapeHtml(d.player || 'vlc')}</span></div>
+                <div class="card-info-item"><span class="card-info-key">Grupo</span><span class="card-info-val">${UI.escapeHtml(groupNames[d.group] || d.group || '--')}</span></div>
+                ${loc ? `<div class="card-info-item"><span class="card-info-key">Local</span><span class="card-info-val">${UI.escapeHtml(loc)}</span></div>` : ''}
+            </div>
+            <div class="dcard-life">
+                <span class="dcard-fresh" title="Último health check / heartbeat">${freshness(d)}</span>
+            </div>
+            <div class="card-actions dcard-actions">
+                <button class="btn btn-sm btn-secondary" onclick="DEVICES.renameDialog('${d.id}','${UI.escAttr(d.name)}')">${UI.icon('edit')} Renomear</button>
+                <button class="btn btn-sm btn-secondary" onclick="DEVICES.groupDialog('${d.id}','${UI.escAttr(d.group)}')">${UI.icon('users')} Grupo</button>
+                <button class="btn btn-sm btn-danger" onclick="DEVICES.remove('${d.id}')">${UI.icon('trash')}</button>
+            </div>
+        `;
+
+        // Clique no card → página de detalhe do device
+        card.addEventListener('click', () => { window.location.hash = `#/device/${encodeURIComponent(d.id)}`; });
+        card.querySelectorAll('button, a').forEach(el => el.addEventListener('click', (e) => e.stopPropagation()));
+
+        return card;
+    }
+
+    function bindToolbar() {
+        const search = document.getElementById('devices-search');
+        const group = document.getElementById('devices-group');
+        const sort = document.getElementById('devices-sort');
+        if (search) search.addEventListener('input', () => { filters.q = search.value; renderDevices(); });
+        if (group) group.addEventListener('change', () => { filters.group = group.value; renderDevices(); });
+        if (sort) sort.addEventListener('change', () => { filters.sort = sort.value; renderDevices(); });
+    }
+
+    function populateGroupFilter(ids) {
+        const sel = document.getElementById('devices-group');
+        if (!sel) return;
+        const opts = ['<option value="">Todos os grupos</option>'].concat(
+            ids.sort().map(id => `<option value="${UI.escapeHtml(id)}">${UI.escapeHtml(groupNames[id] || id)}</option>`)
+        );
+        sel.innerHTML = opts.join('');
     }
 
     function showAddDialog() {
@@ -103,7 +214,7 @@ const DEVICES = (() => {
                 };
                 try {
                     await API.post('/devices', data);
-                    UI.createToast(`✅ "${name}" adicionado`, 'success');
+                    UI.createToast(`"${name}" adicionado`, 'success');
                     await loadDevices();
                 } catch (e) { UI.createToast(`❌ ${e.message}`, 'error'); }
             }
@@ -113,13 +224,13 @@ const DEVICES = (() => {
     function renameDialog(deviceId, currentName) {
         UI.showModal(
             `Renomear ${currentName}`,
-            `<div class="form-group"><label class="form-label">Novo nome</label><input type="text" id="ren-name" class="form-input" value="${currentName}"></div>`,
+            `<div class="form-group"><label class="form-label">Novo nome</label><input type="text" id="ren-name" class="form-input" value="${UI.escapeHtml(currentName)}"></div>`,
             async () => {
                 const newName = (document.getElementById('ren-name')?.value || '').trim();
                 if (!newName) { UI.createToast('Nome é obrigatório', 'error'); return; }
                 try {
                     await API.put(`/devices/${deviceId}`, { name: newName });
-                    UI.createToast(`✅ Renomeado para "${newName}"`, 'success');
+                    UI.createToast(`Renomeado para "${newName}"`, 'success');
                     await loadDevices();
                 } catch (e) { UI.createToast(`❌ ${e.message}`, 'error'); }
             }
@@ -129,7 +240,7 @@ const DEVICES = (() => {
     async function groupDialog(deviceId, currentGroup) {
         const groupsRes = await API.get('/groups').catch(() => []);
         const groups = Array.isArray(groupsRes) ? groupsRes : [];
-        const options = groups.map(g => `<option value="${g.id}" ${g.id === currentGroup ? 'selected' : ''}>${g.name || g.id}</option>`).join('');
+        const options = groups.map(g => `<option value="${UI.escapeHtml(g.id)}" ${g.id === currentGroup ? 'selected' : ''}>${UI.escapeHtml(g.name || g.id)}</option>`).join('');
         UI.showModal(
             'Mover para Grupo',
             `
@@ -143,7 +254,7 @@ const DEVICES = (() => {
                 const groupId = document.getElementById('grp-select')?.value || '';
                 try {
                     await API.put(`/devices/${deviceId}`, { group: groupId });
-                    UI.createToast(`✅ Grupo atualizado`, 'success');
+                    UI.createToast('Grupo atualizado', 'success');
                     await loadDevices();
                 } catch (e) { UI.createToast(`❌ ${e.message}`, 'error'); }
             }

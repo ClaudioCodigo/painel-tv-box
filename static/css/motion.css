@@ -1,0 +1,52 @@
+/* ============================================================
+   Painel TV Box — Motion (UI Redesign Spec §5)
+   Anima apenas transform/opacity · respeita prefers-reduced-motion
+   ============================================================ */
+
+/* ---------- View Transitions (troca de página) ---------- */
+::view-transition-old(root) {
+    animation: vt-out var(--dur-fast) var(--ease-in-out) both;
+}
+::view-transition-new(root) {
+    animation: vt-in var(--dur-slow) var(--ease-out) both;
+}
+@keyframes vt-out { to { opacity: 0; } }
+@keyframes vt-in { from { opacity: 0; transform: translateY(8px); } }
+
+/* ---------- Micro-interações ---------- */
+.toast { animation: toast-in var(--dur-base) var(--ease-out); }
+
+.nav-item { transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out); }
+
+/* Badges de status: pulsação sutil apenas em warning/offline (loop desligado em reduced-motion) */
+.badge.warning::before,
+.status-badge.warning::before,
+.device-status-badge.warning::before,
+.badge.offline::before,
+.status-badge.offline::before,
+.device-status-badge.offline::before {
+    animation: status-pulse 1.6s var(--ease-in-out) infinite;
+}
+@keyframes status-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.55; }
+}
+
+/* ---------- prefers-reduced-motion (§5.4) ---------- */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+    ::view-transition-old(root),
+    ::view-transition-new(root) { animation: none !important; }
+    .skeleton::after { animation: none !important; transform: none !important; }
+    .badge.warning::before,
+    .status-badge.warning::before,
+    .device-status-badge.warning::before,
+    .badge.offline::before,
+    .status-badge.offline::before,
+    .device-status-badge.offline::before { animation: none !important; }
+}

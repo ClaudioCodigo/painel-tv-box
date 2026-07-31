@@ -1,0 +1,283 @@
+/* ============================================================
+   Painel TV Box — Layout (shell: sidebar, header, main, grids)
+   UI Redesign Spec §6 · monocromático
+   ============================================================ */
+
+/* ---------- SIDEBAR ---------- */
+.sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: var(--sidebar-w);
+    height: 100vh;
+    background: var(--bg-surface);
+    border-right: 1px solid var(--border-subtle);
+    display: flex;
+    flex-direction: column;
+    z-index: 100;
+    transition: width var(--dur-base) var(--ease-out), transform var(--dur-base) var(--ease-out);
+    overflow: hidden;
+}
+
+.sidebar.collapsed {
+    width: var(--sidebar-collapsed-w);
+}
+
+.sidebar.collapsed .brand-text,
+.sidebar.collapsed .nav-label,
+.sidebar.collapsed .sidebar-footer {
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity var(--dur-fast) ease, visibility 0s var(--dur-fast);
+}
+
+.sidebar-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: var(--space-4) 18px;
+    border-bottom: 1px solid var(--border-subtle);
+    white-space: nowrap;
+    min-height: var(--header-h);
+}
+
+.brand-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-sm);
+    background: var(--text-primary);
+    color: var(--text-inverse);
+    font-size: 0.72em;
+    font-weight: 800;
+    flex-shrink: 0;
+}
+
+.brand-text {
+    font-weight: 700;
+    font-size: 1.05em;
+    color: var(--text-primary);
+}
+
+.sidebar-nav {
+    flex: 1;
+    padding: var(--space-3) var(--space-2);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    overflow-y: auto;
+}
+
+.nav-item {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 40px;
+    padding: 9px 12px;
+    border-radius: var(--radius);
+    color: var(--text-secondary);
+    font-size: 0.95em;
+    transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.nav-item:hover {
+    background: var(--control-hover);
+    color: var(--text-primary);
+}
+
+/* Item ativo = pill invertido (§6 Sidebar) */
+.nav-item.active {
+    background: var(--text-primary);
+    color: var(--text-inverse);
+    font-weight: 600;
+}
+
+.nav-item.active .nav-icon {
+    color: var(--text-inverse);
+}
+
+.nav-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 24px;
+    height: 24px;
+    color: var(--text-muted);
+    font-size: 20px;
+    transition: color var(--dur-fast) var(--ease-out);
+}
+
+.nav-item:hover .nav-icon,
+.nav-item.active .nav-icon {
+    color: currentColor;
+}
+
+.nav-label {
+    transition: opacity var(--dur-fast) ease;
+}
+
+.sidebar-footer {
+    padding: var(--space-3) var(--space-4);
+    border-top: 1px solid var(--border-subtle);
+    font-size: 0.75em;
+    color: var(--text-muted);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+/* ---------- HEADER ---------- */
+.header {
+    position: fixed;
+    top: 0;
+    left: var(--sidebar-w);
+    right: 0;
+    height: var(--header-h);
+    background: color-mix(in srgb, var(--bg-base) 82%, transparent);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    gap: 14px;
+    z-index: 90;
+    transition: left var(--dur-base) var(--ease-out);
+}
+
+.sidebar.collapsed ~ .header {
+    left: var(--sidebar-collapsed-w);
+}
+
+.sidebar-toggle {
+    background: var(--bg-surface);
+    color: var(--text-secondary);
+    font-size: 0.78em;
+    font-weight: 700;
+    padding: 7px 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    transition: color var(--dur-fast) ease, background var(--dur-fast) ease;
+}
+
+.sidebar-toggle:hover {
+    color: var(--text-primary);
+    background: var(--control-hover);
+}
+
+.toggle-icon {
+    line-height: 1;
+}
+
+.page-title {
+    font-size: 1.15em;
+    font-weight: 600;
+    color: var(--text-primary);
+    flex: 1;
+}
+
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.status-dot {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.82em;
+    color: var(--text-secondary);
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: 999px;
+    padding: 6px 10px;
+}
+
+.dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+/* Status monocromático: forma (preenchido/tracejado/vazio) + rótulo */
+.dot.online { background: var(--status-online); }
+.dot.degraded { background: var(--status-degraded); box-shadow: inset 0 0 0 1.5px var(--bg-base); }
+.dot.offline { background: transparent; border: 1.5px solid var(--status-offline); }
+.dot.unknown { background: var(--status-unknown); }
+
+/* ---------- MAIN ---------- */
+.main-content {
+    margin-left: var(--sidebar-w);
+    margin-top: var(--header-h);
+    min-height: calc(100vh - var(--header-h));
+    width: calc(100% - var(--sidebar-w));
+    padding: var(--space-5);
+    transition: margin-left var(--dur-base) var(--ease-out), width var(--dur-base) var(--ease-out);
+}
+
+.sidebar.collapsed ~ .main-content {
+    margin-left: var(--sidebar-collapsed-w);
+    width: calc(100% - var(--sidebar-collapsed-w));
+}
+
+.view-container {
+    max-width: 1320px;
+    margin: 0 auto;
+}
+
+/* ---------- GRIDS ---------- */
+.card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: var(--space-4);
+    margin-top: var(--space-4);
+}
+
+.stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: var(--space-4);
+    margin-bottom: var(--space-5);
+}
+
+/* ---------- RESPONSIVE ---------- */
+@media (max-width: 768px) {
+    .sidebar {
+        transform: translateX(-100%);
+        width: var(--sidebar-w);
+    }
+    .sidebar.mobile-open {
+        transform: translateX(0);
+    }
+    .sidebar.collapsed {
+        transform: translateX(-100%);
+    }
+    .header {
+        left: 0;
+    }
+    .main-content {
+        margin-left: 0;
+        width: 100%;
+        padding: var(--space-4);
+    }
+    .sidebar.collapsed ~ .header,
+    .sidebar.collapsed ~ .main-content {
+        left: 0;
+        margin-left: 0;
+        width: 100%;
+    }
+    .stat-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+    .card-grid {
+        grid-template-columns: 1fr;
+    }
+}

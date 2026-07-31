@@ -21,11 +21,8 @@ class DeviceCapabilities(BaseModel):
 class DeviceState(BaseModel):
     status: str = "unknown"  # online | degraded | warning | offline | unknown
     last_seen: Optional[datetime] = None
-    last_fail: Optional[datetime] = None
-    last_recovery: Optional[datetime] = None
+    last_heartbeat: Optional[datetime] = None  # batida HTTP do device (sem ADB)
     last_recovery_time: Optional[datetime] = None
-    uptime_seconds: int = 0
-    recovery_count: int = 0
     reboot_count: int = 0
     current_activity: str = ""
     screenshot_path: Optional[str] = None

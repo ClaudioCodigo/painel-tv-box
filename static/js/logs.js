@@ -4,6 +4,8 @@
 const LOGS = (() => {
     let refreshTimer = null;
     let currentQuery = {};
+    let inflight = false;
+    let autoRefresh = true;
 
     async function render(el) {
         UI.setPageTitle('Logs');
@@ -46,11 +48,15 @@ const LOGS = (() => {
                         </div>
                         <div class="form-group">
                             <label>&nbsp;</label>
-                            <button class="btn btn-primary btn-sm" onclick="LOGS.search()">🔍 Buscar</button>
+                            <button class="btn btn-primary btn-sm" onclick="LOGS.search()">${UI.icon('search')} Buscar</button>
                         </div>
                         <div class="form-group">
                             <label>&nbsp;</label>
-                            <button class="btn btn-secondary btn-sm" onclick="LOGS.download()">⬇ Download</button>
+                            <button class="btn btn-secondary btn-sm" onclick="LOGS.download()">${UI.icon('download')} Download</button>
+                        </div>
+                        <div class="form-group">
+                            <label>&nbsp;</label>
+                            <button class="btn btn-ghost btn-sm" id="log-refresh-toggle" onclick="LOGS.toggleAutoRefresh()" title="Pausar/retomar atualização automática">${UI.icon('pause')} Auto</button>
                         </div>
                     </div>
                     <div class="logs-info" id="logs-info"></div>
@@ -59,7 +65,7 @@ const LOGS = (() => {
                 <!-- Tabela de logs -->
                 <div class="logs-table-wrapper">
                     <div class="logs-table" id="logs-table">
-                        <div class="loading">Carregando logs...</div>
+                        ${UI.skeletons('row', 6)}
                     </div>
                 </div>
 
@@ -76,6 +82,17 @@ const LOGS = (() => {
     }
 
     async function search(page = 1) {
+        const el = document.getElementById('logs-table');
+        if (!el || inflight) return;
+        inflight = true;
+        try {
+            await doSearch(page);
+        } finally {
+            inflight = false;
+        }
+    }
+
+    async function doSearch(page = 1) {
         const el = document.getElementById('logs-table');
         if (!el) return;
 
@@ -115,10 +132,10 @@ const LOGS = (() => {
                 const levelClass = item.level === 'ERROR' || item.level === 'CRITICAL' ? 'log-error' :
                                    item.level === 'WARNING' ? 'log-warning' : 'log-info';
                 html += `<tr class="${levelClass}">
-                    <td class="log-ts">${item.timestamp || '--'}</td>
-                    <td><span class="log-badge ${levelClass}">${item.level || '-'}</span></td>
-                    <td>${item.source || '-'}</td>
-                    <td class="log-dev">${item.device && item.device !== '-' ? item.device : ''}</td>
+                    <td class="log-ts">${escapeHtml(item.timestamp || '--')}</td>
+                    <td><span class="log-badge ${levelClass}">${escapeHtml(item.level || '-')}</span></td>
+                    <td>${escapeHtml(item.source || '-')}</td>
+                    <td class="log-dev">${escapeHtml(item.device && item.device !== '-' ? item.device : '')}</td>
                     <td class="log-msg">${escapeHtml(item.message)}</td>
                 </tr>`;
             }
@@ -160,8 +177,27 @@ const LOGS = (() => {
     function startAutoRefresh() {
         if (refreshTimer) clearInterval(refreshTimer);
         refreshTimer = setInterval(() => {
-            search(currentQuery.page || 1);
+            if (autoRefresh) search(currentQuery.page || 1);
         }, 5000);
+    }
+
+    function toggleAutoRefresh() {
+        autoRefresh = !autoRefresh;
+        const btn = document.getElementById('log-refresh-toggle');
+        if (btn) {
+            btn.innerHTML = `${UI.icon(autoRefresh ? 'pause' : 'play')} Auto`;
+            btn.classList.toggle('btn-ghost', autoRefresh);
+            btn.classList.toggle('btn-secondary', !autoRefresh);
+            btn.title = autoRefresh ? 'Pausar atualização automática' : 'Retomar atualização automática';
+        }
+        UI.createToast(autoRefresh ? 'Auto-refresh ativado' : 'Auto-refresh pausado', 'info', 2000);
+    }
+
+    function destroy() {
+        if (refreshTimer) {
+            clearInterval(refreshTimer);
+            refreshTimer = null;
+        }
     }
 
     function escapeHtml(text) {
@@ -170,5 +206,5 @@ const LOGS = (() => {
         return div.innerHTML;
     }
 
-    return { render, search, download };
+    return { render, search, download, destroy, toggleAutoRefresh };
 })();

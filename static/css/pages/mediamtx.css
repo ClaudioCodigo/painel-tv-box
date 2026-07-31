@@ -1,0 +1,36 @@
+/* MediaMTX — lista de paths */
+.mediamtx-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.mediamtx-row {
+    display: grid;
+    grid-template-columns: 1.6fr 0.8fr 1fr 0.5fr 0.5fr 1fr;
+    gap: var(--space-3);
+    align-items: center;
+    padding: 10px 14px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    font-size: 0.85em;
+}
+
+.mediamtx-row:hover {
+    background: var(--control-hover);
+}
+
+.path-name {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    color: var(--text-primary);
+    word-break: break-all;
+}
+
+@media (max-width: 768px) {
+    .mediamtx-row {
+        grid-template-columns: 1fr 1fr;
+        gap: var(--space-2);
+    }
+}

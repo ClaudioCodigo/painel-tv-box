@@ -1,0 +1,180 @@
+/* ============================================================
+   Painel TV Box — Base (reset, tipografia, utilidades)
+   UI Redesign Spec §4.2 · monocromático
+   ============================================================ */
+
+/* ---------- Reset ---------- */
+*,
+*::before,
+*::after {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html {
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+}
+
+body {
+    font-family: var(--font-sans);
+    background: var(--bg-base);
+    color: var(--text-primary);
+    display: flex;
+    min-height: 100vh;
+    overflow-x: hidden;
+    line-height: 1.5;
+}
+
+h1, h2, h3, h4 {
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1.25;
+}
+
+a {
+    color: var(--text-primary);
+    text-decoration: none;
+    transition: color var(--dur-fast) var(--ease-out);
+}
+a:hover {
+    color: var(--text-secondary);
+    text-decoration: underline;
+}
+
+button {
+    font-family: var(--font-sans);
+    cursor: pointer;
+    border: none;
+    outline: none;
+    background: none;
+    color: inherit;
+}
+
+input, select, textarea {
+    font-family: var(--font-sans);
+    font-size: 0.95em;
+}
+
+code, pre, .mono {
+    font-family: var(--font-mono);
+}
+
+:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+}
+
+::selection {
+    background: var(--text-primary);
+    color: var(--text-inverse);
+}
+
+/* ---------- Scrollbar ---------- */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
+}
+*::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+    border-radius: 6px;
+    border: 2px solid var(--bg-base);
+}
+*::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+/* ---------- Utilidades ---------- */
+.flex { display: flex; }
+.flex-col { flex-direction: column; }
+.flex-wrap { flex-wrap: wrap; }
+.items-center { align-items: center; }
+.justify-between { justify-content: space-between; }
+.flex-1 { flex: 1; }
+.gap-sm { gap: var(--space-2); }
+.gap-md { gap: var(--space-4); }
+.gap-lg { gap: var(--space-5); }
+
+.text-center { text-align: center; }
+.text-right { text-align: right; }
+.text-muted { color: var(--text-muted); }
+/* Semânticos monocromáticos: variação tipográfica, nunca cor */
+.text-danger { color: var(--text-primary); font-weight: 600; }
+.text-success { color: var(--text-primary); }
+.text-warning { color: var(--text-secondary); font-weight: 600; }
+.text-sm { font-size: 0.85em; }
+.text-xs { font-size: 0.75em; }
+.text-lg { font-size: 1.15em; }
+.mono { font-family: var(--font-mono); }
+
+.mt-sm { margin-top: var(--space-2); }
+.mt-md { margin-top: var(--space-4); }
+.mt-lg { margin-top: var(--space-5); }
+.mb-sm { margin-bottom: var(--space-2); }
+.mb-md { margin-bottom: var(--space-4); }
+.p-sm { padding: var(--space-2); }
+.p-md { padding: var(--space-4); }
+.p-lg { padding: var(--space-5); }
+
+.hidden { display: none !important; }
+
+/* ---------- Loading (spinner + skeleton) ---------- */
+.loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 200px;
+    color: var(--text-muted);
+    font-size: 1em;
+}
+
+.loading::after {
+    content: '';
+    width: 20px;
+    height: 20px;
+    margin-left: 10px;
+    border: 2px solid var(--border-strong);
+    border-top-color: var(--text-primary);
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Skeleton (shimmer — ver motion.css para reduced-motion) */
+.skeleton {
+    position: relative;
+    overflow: hidden;
+    background: var(--bg-raised);
+    border-radius: var(--radius-sm);
+    min-height: 16px;
+}
+.skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, var(--control-hover), transparent);
+    transform: translateX(-100%);
+    animation: shimmer 1.2s infinite;
+}
+@keyframes shimmer {
+    100% { transform: translateX(100%); }
+}
+
+/* Ícones base */
+.icon {
+    width: 1em;
+    height: 1em;
+    display: inline-block;
+    vertical-align: -0.125em;
+    flex-shrink: 0;
+}

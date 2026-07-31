@@ -14,9 +14,23 @@ backups/
 scrcpy/versions/
 scrcpy/downloads/
 scrcpy/scrcpy*
+# Binários grandes que não pertencem ao git (são baixados pelo painel)
+scrcpy/*.apk
+scrcpy/mpv_splits/
+
+# Ferramentas/agente (não versionar)
+.reasonix/
+reasonix.toml
+docs/.obsidian/
+
+# Arquivos não relacionados ao projeto
+*.xlsx
 
 # Config (keep template, ignore generated)
 config/mediamtx.generated.yml
+
+# Segredos
+config/.panel_token
 
 # OS
 .DS_Store

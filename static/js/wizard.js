@@ -54,7 +54,7 @@ const WIZARD = (() => {
         if (step < TOTAL_STEPS) {
             navHtml += `<button class="btn btn-primary" id="wizard-next-btn" onclick="WIZARD.goNext()">Próximo →</button>`;
         } else {
-            navHtml += `<button class="btn btn-success" id="wizard-finish-btn" onclick="WIZARD.finish()">✅ Finalizar</button>`;
+            navHtml += `<button class="btn btn-success" id="wizard-finish-btn" onclick="WIZARD.finish()">Finalizar</button>`;
         }
 
         navHtml += '</div>';
@@ -111,19 +111,19 @@ const WIZARD = (() => {
 
     const STEP_RENDERERS = {
         1: () => `
-            <h2>👋 Boas-vindas!</h2>
+            <h2>Boas-vindas!</h2>
             <p>Este assistente vai configurar o Painel TV Box para gerenciar seus TV Boxes Android.</p>
             <p>Você vai precisar de:</p>
             <ul style="color:var(--text-secondary);font-size:0.9em;line-height:1.8;margin-bottom:16px">
-                <li>📡 <strong>IP do servidor</strong> onde o painel e MediaMTX rodam</li>
-                <li>📺 <strong>Pelo menos 1 TV Box</strong> com ADB via TCP habilitado</li>
+                <li><strong>IP do servidor</strong> onde o painel e MediaMTX rodam</li>
+                <li><strong>Pelo menos 1 TV Box</strong> com ADB via TCP habilitado</li>
                 <li>🔗 <strong>Configuração do MediaMTX</strong> (ou usar os defaults)</li>
             </ul>
             <p>O processo leva cerca de 2 minutos. Bora? 🚀</p>
         `,
 
         2: () => `
-            <h2>🖥️ Servidor</h2>
+            <h2>Servidor</h2>
             <p>Configure o endereço do servidor onde o painel está rodando.</p>
             <div class="form-group">
                 <label>IP do servidor</label>
@@ -143,7 +143,7 @@ const WIZARD = (() => {
         `,
 
         3: () => `
-            <h2>🔗 MediaMTX</h2>
+            <h2>MediaMTX</h2>
             <p>Configure o servidor de streaming MediaMTX.</p>
             <div class="form-group">
                 <label>URL da API</label>
@@ -162,7 +162,7 @@ const WIZARD = (() => {
         `,
 
         4: () => `
-            <h2>🔌 ADB</h2>
+            <h2>ADB</h2>
             <p>Configuração da conexão ADB com os TV Boxes.</p>
             ${_skipButton(4, 'Usar ADB padrão (porta 5555, timeout 10s)')}
             <div class="form-grid">
@@ -178,7 +178,7 @@ const WIZARD = (() => {
         `,
 
         5: () => `
-            <h2>🎬 Players</h2>
+            <h2>Players</h2>
             <p>Players de vídeo nos TV Boxes. Os valores abaixo já são os defaults recomendados.</p>
             ${_skipButton(5, 'Usar players padrão (VLC + MPV)')}
             <div class="form-grid">
@@ -209,7 +209,7 @@ const WIZARD = (() => {
         `,
 
         6: () => `
-            <h2>🛡️ Watchdog</h2>
+            <h2>Watchdog</h2>
             <p>Monitoramento automático e recuperação de falhas.</p>
             ${_skipButton(6, 'Usar configuração padrão do watchdog')}
             <div class="form-grid">
@@ -233,7 +233,7 @@ const WIZARD = (() => {
         `,
 
         7: () => `
-            <h2>📁 Grupos (opcional)</h2>
+            <h2>Grupos (opcional)</h2>
             <p>Organize seus TV Boxes em grupos para ações em lote.</p>
             ${_skipButton(7, 'Nenhum grupo (criar depois)')}
             <div id="w-groups-list">
@@ -258,12 +258,12 @@ const WIZARD = (() => {
         `,
 
         8: () => `
-            <h2>📺 Dispositivos</h2>
+            <h2>Dispositivos</h2>
             <p>Adicione pelo menos 1 TV Box para começar.</p>
             <div id="w-devices-list">
                 ${data.devices.map((d, i) => `
                     <div class="wizard-device-item">
-                        <div><span class="d-name">📺 ${d.name}</span> <span class="d-ip">${d.ip}</span></div>
+                        <div><span class="d-name">${d.name}</span> <span class="d-ip">${d.ip}</span></div>
                         <span class="d-remove" onclick="WIZARD.removeDevice(${i})">✕</span>
                     </div>
                 `).join('') || '<div class="text-muted text-sm" style="margin-bottom:12px">Nenhum dispositivo ainda.</div>'}
@@ -308,16 +308,16 @@ const WIZARD = (() => {
         9: () => {
             const hasDevices = data.devices.length > 0;
             return `
-                <h2>✅ Revisão</h2>
+                <h2>Revisão</h2>
                 <p>Confira os dados antes de finalizar.</p>
                 <div class="wizard-review">
                     <h3>🖥️ Servidor</h3>
                     <p>IP: ${data.server.ip || '(automático)'} — Porta: ${data.server.port}</p>
                     <h3>🔗 MediaMTX</h3>
                     <p>API: ${data.mediamtx.api_url} — RTSP: ${data.mediamtx.rtsp_port} — RTMP: ${data.mediamtx.rtmp_port}</p>
-                    <h3>📺 Dispositivos (${data.devices.length})</h3>
+                    <h3>Dispositivos (${data.devices.length})</h3>
                     ${data.devices.map(d => `
-                        <div class="review-device">📺 <strong>${d.name}</strong> — ${d.ip} — Path: ${d.rtsp_path || '—'}</div>
+                        <div class="review-device">${d.name} — ${d.ip} — Path: ${d.rtsp_path || '—'}</div>
                     `).join('')}
                     <h3>📁 Grupos (${data.groups.length})</h3>
                     ${data.groups.map(g => `<div class="review-device">📁 ${g.name}${g.description ? ': ' + g.description : ''}</div>`).join('') || '<p class="text-muted">Nenhum grupo</p>'}
@@ -335,7 +335,7 @@ const WIZARD = (() => {
         },
 
         10: () => `
-            <h2>🚀 Finalizar!</h2>
+            <h2>Finalizar!</h2>
             <p>Ao clicar em "Finalizar", o sistema vai:</p>
             <ol style="color:var(--text-secondary);font-size:0.9em;line-height:2;margin-bottom:16px">
                 <li>✅ Criar todos os arquivos de configuração</li>

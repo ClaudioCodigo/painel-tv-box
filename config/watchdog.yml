@@ -1,4 +1,5 @@
 check_interval: 10
+heartbeat_timeout: 60
 ping:
   count: 1
   timeout_ms: 800

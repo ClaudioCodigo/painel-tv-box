@@ -7,7 +7,7 @@ host:
 adb:
   binary: adb
   default_port: 5555
-  connect_timeout: 7200
+  connect_timeout: 10
   command_delay: 0.5
 paths:
   devices_dir: devices
@@ -20,4 +20,7 @@ paths:
 mediamtx:
   api_url: http://localhost:9997
   timeout: 5
-wizard_completed: true
+security:
+  enabled: true
+  heartbeat_key: FjIprUyL8y1MeZYJqou2pU6K9v48JkBSFdrKTD6cNPY
+wizard_completed: false

@@ -1,27 +1,25 @@
-/* Groups Page */
-
+/* Groups — cards de grupo */
 .groups-toolbar {
-    margin-bottom: 16px;
+    margin-bottom: var(--space-4);
 }
 
 .group-card {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    margin-bottom: 10px;
+    margin-bottom: var(--space-3);
     overflow: hidden;
 }
 
 .group-header {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 14px;
+    gap: var(--space-3);
+    padding: var(--space-4);
     min-width: 0;
 }
 
 .group-icon {
     font-size: 1.5em;
+    color: var(--text-secondary);
+    display: inline-flex;
 }
 
 .group-info {
@@ -66,26 +64,25 @@
     padding: 3px 8px;
     border-radius: var(--radius-sm);
     font-size: 0.78em;
-    background: var(--bg-tertiary);
+    background: var(--bg-base);
+    border: 1px solid var(--border-subtle);
     color: var(--text-secondary);
     max-width: 100%;
 }
 
-.group-device-tag.success { color: var(--success); }
-.group-device-tag.danger { color: var(--danger); }
-.group-device-tag.warning { color: var(--warning); }
+.group-device-tag.success { color: var(--text-primary); }
+.group-device-tag.danger { color: var(--text-muted); }
+.group-device-tag.warning { color: var(--text-secondary); font-weight: 600; }
 
 @media (max-width: 720px) {
     .group-header {
         align-items: flex-start;
         flex-wrap: wrap;
     }
-
     .group-actions-list {
         width: 100%;
         justify-content: flex-start;
     }
-
     .group-actions-list .btn {
         flex: 1 1 92px;
     }

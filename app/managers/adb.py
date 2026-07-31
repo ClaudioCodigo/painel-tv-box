@@ -14,22 +14,18 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 class ADBManager:
     """Gerencia conexões ADB com TV Boxes via TCP."""
 
-    COOLDOWN_SECS = 7200  # 2h entre shell calls por device
-
-    def __init__(self, binary: str = "adb", connect_timeout: int = 7200):
+    def __init__(self, binary: str = "adb", connect_timeout: int = 10):
         self.binary = binary
         self.connect_timeout = connect_timeout
         self._connected: set[str] = set()
         self._locks: dict[str, asyncio.Lock] = {}
         self._last_connect_attempt: dict[str, float] = {}
-        self._last_shell: dict[str, float] = {}  # cooldown tracking
         self.metrics = {
             "connect_attempts": 0,
             "connect_success": 0,
             "connect_failures": 0,
             "connect_skipped_cached": 0,
             "shell_calls": 0,
-            "shell_skipped_cooldown": 0,
             "timeouts": 0,
             "last_error": "",
         }
@@ -104,17 +100,12 @@ class ADBManager:
         self._connected.discard(target)
 
     async def shell(self, ip: str, command: str, port: int = 5555, timeout: int = 15, force: bool = False) -> tuple[str, int]:
+        # Nota: `force` é mantido por compatibilidade de assinatura. O antigo
+        # cooldown de 2h que retornava ("ok (cooldown)", 0) sem executar nada
+        # foi removido — ele fazia health checks declararem device online mesmo
+        # offline e streams reportarem sucesso fictício.
         target = f"{ip}:{port}"
         self.metrics["shell_calls"] += 1
-
-        # Cooldown: se chamou shell nesse device há menos de 2h, retorna cache
-        last = self._last_shell.get(target, 0)
-        if not force and last > 0:
-            elapsed = time.monotonic() - last
-            if elapsed < self.COOLDOWN_SECS:
-                self.metrics["shell_skipped_cooldown"] += 1
-                logger.debug("ADB cooldown %s: %.0fs restantes — retornando sucesso fictício", target, self.COOLDOWN_SECS - elapsed)
-                return ("ok (cooldown)", 0)
 
         await self.connect(ip, port)
         output, code = await self._run("-s", target, "shell", command, timeout=timeout)
@@ -123,8 +114,6 @@ class ADBManager:
             await self.connect(ip, port, force=True)
             output, code = await self._run("-s", target, "shell", command, timeout=timeout)
 
-        # Atualiza timestamp do cooldown
-        self._last_shell[target] = time.monotonic()
         return output, code
 
     async def push(self, ip: str, local: str, remote: str, port: int = 5555, timeout: int = 30) -> bool:

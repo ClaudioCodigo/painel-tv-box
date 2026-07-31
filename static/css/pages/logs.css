@@ -1,20 +1,19 @@
-/* Logs Page */
-
+/* Logs — filtros, tabela, paginação */
 .logs-page {
     max-width: 1200px;
 }
 
 .logs-filters {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
     border-radius: var(--radius);
-    padding: 16px;
-    margin-bottom: 16px;
+    padding: var(--space-4);
+    margin-bottom: var(--space-4);
 }
 
 .logs-filter-row {
     display: flex;
-    gap: 12px;
+    gap: var(--space-3);
     flex-wrap: wrap;
     align-items: flex-end;
 }
@@ -36,8 +35,8 @@
 .logs-filter-row .form-group select {
     font-size: 0.8em;
     padding: 6px 10px;
-    background: var(--bg-primary);
-    border: 1px solid var(--border);
+    background: var(--bg-base);
+    border: 1px solid var(--border-strong);
     border-radius: var(--radius-sm);
     color: var(--text-primary);
     width: 100%;
@@ -46,13 +45,12 @@
 .logs-info {
     font-size: 0.75em;
     color: var(--text-muted);
-    margin-top: 8px;
+    margin-top: var(--space-2);
 }
 
-/* Table */
 .logs-table-wrapper {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
     border-radius: var(--radius);
     overflow-x: auto;
 }
@@ -71,20 +69,20 @@
     text-transform: uppercase;
     letter-spacing: 0.05em;
     font-size: 0.75em;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--border-strong);
     position: sticky;
     top: 0;
-    background: var(--bg-secondary);
+    background: var(--bg-surface);
 }
 
 .log-table td {
     padding: 6px 12px;
-    border-bottom: 1px solid var(--border-muted);
+    border-bottom: 1px solid var(--border-subtle);
     vertical-align: top;
 }
 
 .log-table tr:hover td {
-    background: var(--bg-tertiary);
+    background: var(--control-hover);
 }
 
 .log-ts {
@@ -112,26 +110,26 @@
     border-radius: 3px;
     font-size: 0.75em;
     font-weight: 700;
+    border: 1px solid var(--border-strong);
 }
 
-.log-error { color: var(--danger); }
-.log-warning { color: var(--warning); }
-.log-info { color: var(--text-secondary); }
+.log-error { color: var(--text-primary); font-weight: 600; }
+.log-warning { color: var(--text-secondary); }
+.log-info { color: var(--text-muted); }
 
-.log-badge.log-error { background: var(--danger-subtle); color: var(--danger); }
-.log-badge.log-warning { background: var(--warning-subtle); color: var(--warning); }
-.log-badge.log-info { background: var(--bg-tertiary); color: var(--text-secondary); }
+.log-badge.log-error { color: var(--text-primary); font-weight: 700; }
+.log-badge.log-warning { color: var(--text-secondary); }
+.log-badge.log-info { color: var(--text-muted); }
 
-/* Pagination */
 .logs-pagination {
-    margin-top: 12px;
+    margin-top: var(--space-3);
 }
 
 .pagination {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 12px;
+    gap: var(--space-3);
 }
 
 .pagination-info {

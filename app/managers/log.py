@@ -66,8 +66,10 @@ class LogManager:
         root.addHandler(ch)
         root.setLevel(logging.INFO)
 
-        # Root também escreve no system.log
-        root.addHandler(logging.FileHandler(self.log_dir / "system.log", encoding="utf-8"))
+        # Obs: system.log é escrito apenas pelo RotatingFileHandler da fonte
+        # "system" acima. Um FileHandler extra no root causava dois handles
+        # abertos no mesmo arquivo, quebrando a rotação no Windows
+        # (PermissionError ao renomear arquivo em uso) e duplicando linhas.
 
         self.info("system", "LogManager inicializado")
 
@@ -128,10 +130,10 @@ class LogManager:
             filtered = [l for l in filtered if device_id.lower() in l.get("device", "").lower()]
         if q:
             filtered = [l for l in filtered if q.lower() in l.get("message", "").lower()]
-        if from_date:
-            filtered = [l for l in filtered if l.get("timestamp", "") >= from_date]
-        if to_date:
-            filtered = [l for l in filtered if l.get("timestamp", "") <= to_date]
+        if from_date or to_date:
+            from_dt = self._parse_ts(from_date) if from_date else None
+            to_dt = self._parse_ts(to_date) if to_date else None
+            filtered = [l for l in filtered if self._date_in_range(l.get("timestamp", ""), from_dt, to_dt)]
 
         total = len(filtered)
         start = (page - 1) * per_page
@@ -193,6 +195,39 @@ class LogManager:
     _LOG_PATTERN = re.compile(
         r"\[(?P<timestamp>[^\]]+)\] \[(?P<level>[^\]]+)\] \[(?P<source>[^\]]+)\] \[(?P<device>[^\]]+)\] (?P<message>.+)"
     )
+
+    @staticmethod
+    def _parse_ts(value: str) -> Optional[datetime]:
+        """Converte timestamp de log (ou data 'YYYY-MM-DD') em datetime."""
+        value = (value or "").strip()
+        if not value:
+            return None
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+            try:
+                return datetime.strptime(value, fmt)
+            except ValueError:
+                continue
+        return None
+
+    @classmethod
+    def _date_in_range(cls, ts_str: str, from_dt: Optional[datetime], to_dt: Optional[datetime]) -> bool:
+        """Verifica se um timestamp de log está no intervalo [from, to].
+        Datas sem hora ('YYYY-MM-DD') valem o dia inteiro.
+        """
+        if not from_dt and not to_dt:
+            return True
+        ts = cls._parse_ts(ts_str)
+        if ts is None:
+            return False
+        if from_dt and ts < from_dt:
+            return False
+        if to_dt:
+            end = to_dt
+            if to_dt.hour == 0 and to_dt.minute == 0 and to_dt.second == 0:
+                end = to_dt.replace(hour=23, minute=59, second=59)
+            if ts > end:
+                return False
+        return True
 
     def _parse_file(self, path: Path, source: str) -> list[dict]:
         """Parse arquivo de log usando regex."""

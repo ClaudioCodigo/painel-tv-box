@@ -1,0 +1,198 @@
+/* Dashboard — cards V2 (status bar + freshness + watchdog) */
+.section-title {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: 0.82em;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: var(--space-3);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.section-subtitle {
+    color: var(--text-muted);
+    font-size: 0.9em;
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+.dashboard-summary {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    color: var(--text-muted);
+    font-size: 0.9em;
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+.stat-card {
+    min-height: 84px;
+}
+
+/* ── Card V2 ─────────────────────────────── */
+
+.dcard-header {
+    padding: var(--space-3) var(--space-4);
+}
+
+.dcard-header-right {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-shrink: 0;
+}
+
+.dcard-group-chip {
+    font-size: 0.66em;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    border: 1px solid var(--border-strong);
+    border-radius: 999px;
+    padding: 2px 8px;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+/* Status bar — dado nº 1 do card (forma + rótulo + reason) */
+.dcard-status {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 9px var(--space-4);
+    min-height: 38px;
+    font-size: 0.78em;
+    font-weight: 700;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    border-top: 1px solid var(--border-subtle);
+    border-bottom: 1px solid var(--border-subtle);
+    background: var(--bg-base);
+}
+
+.dcard-status.success { color: var(--text-primary); }
+.dcard-status.warning { color: var(--text-secondary); }
+.dcard-status.danger { color: var(--text-muted); }
+.dcard-status.muted { color: var(--text-muted); }
+
+/* Forma comunica estado (§3.2): preenchido | tracejado | com linha | vazio+X | cinza */
+.dcard-status-shape {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+}
+.dcard-status-shape.online { background: var(--status-online); }
+.dcard-status-shape.degraded { border: 2px dashed var(--status-degraded); background: transparent; }
+.dcard-status-shape.warning { background: var(--status-warning); box-shadow: inset 0 0 0 2px var(--bg-base); }
+.dcard-status-shape.offline {
+    position: relative;
+    border: 2px solid var(--status-offline);
+    background: transparent;
+}
+.dcard-status-shape.offline::after {
+    content: '✕';
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 7px;
+    line-height: 1;
+    color: var(--status-offline);
+}
+.dcard-status-shape.unknown { background: var(--status-unknown); }
+
+.dcard-status-label { white-space: nowrap; }
+
+.dcard-status-reason {
+    margin-left: auto;
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 0.76em;
+    color: var(--text-secondary);
+    max-width: 58%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Meta + linha de vida */
+.dcard-meta {
+    padding: var(--space-2) var(--space-4);
+}
+.dcard-meta .card-info-item {
+    padding: 3px 0;
+    font-size: 0.8em;
+}
+
+.dcard-life {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 0 var(--space-4) var(--space-2);
+    font-size: 0.7em;
+    color: var(--text-muted);
+    min-height: 18px;
+}
+
+.dcard-watchdog {
+    color: var(--text-secondary);
+    text-align: right;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dcard-actions {
+    padding: var(--space-2) var(--space-4);
+}
+.dcard-actions .btn {
+    flex: 1;
+    font-size: 0.8em;
+}
+
+/* ── Feed de eventos ───────────────────────── */
+.dcard-events {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 260px;
+    overflow-y: auto;
+}
+.dcard-event {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    font-size: 0.8em;
+    color: var(--text-secondary);
+}
+.dcard-event:hover { background: var(--control-hover); }
+.dcard-event .dcard-status-shape { width: 9px; height: 9px; }
+.dcard-event .icon { color: var(--text-muted); }
+.dcard-event-time {
+    margin-left: auto;
+    color: var(--text-muted);
+    font-size: 0.75em;
+    white-space: nowrap;
+}
+.dcard-event.alert { color: var(--text-primary); font-weight: 600; }
+
+/* Título do card → link para a página do device */
+.dcard-title-link {
+    color: var(--text-primary);
+    text-decoration: none;
+}
+.dcard-title-link:hover {
+    color: var(--text-secondary);
+    text-decoration: underline;
+}

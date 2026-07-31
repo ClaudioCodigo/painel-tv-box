@@ -8,22 +8,22 @@ const BACKUP = (() => {
 
         el.innerHTML = `
             <div class="backup-page">
-                <div class="section-title">💾 Exportar</div>
+                <div class="section-title">${UI.icon('download')} Exportar</div>
                 <div class="backup-card">
                     <p class="text-muted text-sm">Baixa toda a configuração (config/, devices/, groups/) como ZIP.</p>
-                    <button class="btn btn-primary" onclick="BACKUP.doExport()">⬇ Exportar Backup</button>
+                    <button class="btn btn-primary" onclick="BACKUP.doExport()">${UI.icon('download')} Exportar Backup</button>
                 </div>
 
-                <div class="section-title mt-md">📤 Importar</div>
+                <div class="section-title mt-md">${UI.icon('upload')} Importar</div>
                 <div class="backup-card">
                     <p class="text-muted text-sm">Restaura configuração a partir de um arquivo ZIP.</p>
-                    <p class="text-muted text-sm" style="color:var(--warning)">⚠️ Um backup automático será criado antes da importação.</p>
+                    <p class="text-muted text-sm" style="color:var(--text-secondary)">⚠️ Um backup automático será criado antes da importação.</p>
                     <input type="file" id="backup-import-file" accept=".zip" style="display:none" onchange="BACKUP.doImport(this.files[0])">
-                    <button class="btn btn-warning" onclick="document.getElementById('backup-import-file').click()">📤 Importar ZIP</button>
+                    <button class="btn btn-warning" onclick="document.getElementById('backup-import-file').click()">${UI.icon('upload')} Importar ZIP</button>
                     <span class="text-muted text-sm" id="backup-import-status" style="margin-left:8px"></span>
                 </div>
 
-                <div class="section-title mt-md">📂 Backups Anteriores</div>
+                <div class="section-title mt-md">${UI.icon('archive')} Backups Anteriores</div>
                 <div id="backup-list">
                     <div class="loading">Carregando...</div>
                 </div>
@@ -52,12 +52,12 @@ const BACKUP = (() => {
                 html += `
                     <div class="backup-item">
                         <div class="backup-info">
-                            <div class="backup-name">${b.name}</div>
+                            <div class="backup-name">${UI.escapeHtml(b.name)}</div>
                             <div class="backup-meta">${size} KB — ${b.created || '--'}</div>
                         </div>
                         <div class="backup-actions">
-                            <button class="btn btn-sm btn-secondary" onclick="BACKUP.doDownload('${b.name}')">⬇</button>
-                            <button class="btn btn-sm btn-danger" onclick="BACKUP.doRestore('${b.name}')">🔄 Restaurar</button>
+                            <button class="btn btn-sm btn-secondary" onclick="BACKUP.doDownload('${UI.escAttr(b.name)}')">${UI.icon('download')}</button>
+                            <button class="btn btn-sm btn-danger" onclick="BACKUP.doRestore('${UI.escAttr(b.name)}')">${UI.icon('refresh')} Restaurar</button>
                         </div>
                     </div>
                 `;
@@ -70,8 +70,29 @@ const BACKUP = (() => {
     }
 
     async function doExport() {
-        window.open('/api/backup/export', '_blank');
-        UI.createToast('Download iniciado...', 'info');
+        try {
+            // Endpoint é POST — precisa de fetch, não window.open
+            const res = await fetch('/api/backup/export', { method: 'POST' });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+            const cd = res.headers.get('Content-Disposition') || '';
+            const m = cd.match(/filename="?([^";]+)"?/);
+            const filename = m ? m[1] : `backup-${Date.now()}.zip`;
+
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+            UI.createToast('✅ Backup exportado', 'success');
+            await loadList();
+        } catch (e) {
+            UI.createToast(`❌ ${e.message}`, 'error');
+        }
     }
 
     async function doImport(file) {
@@ -116,7 +137,10 @@ const BACKUP = (() => {
     }
 
     function doDownload(name) {
-        window.open(`/api/backup/restore/${encodeURIComponent(name)}`, '_blank');
+        // GET no endpoint dedicado de download (o antigo apontava para o
+        // restore, que é POST e destrutivo). Token via query (window.open
+        // não envia headers).
+        window.open(API.authUrl(`/api/backup/download/${encodeURIComponent(name)}`), '_blank');
     }
 
     return { render, doExport, doImport, doRestore, doDownload };

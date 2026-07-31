@@ -8,14 +8,14 @@ const MEDIAMTX = (() => {
         UI.setPageTitle('MediaMTX');
 
         el.innerHTML = `
-            <div class="section-title">🔗 Status do MediaMTX</div>
+            <div class="section-title">${UI.icon('server')} Status do MediaMTX</div>
             <div class="mediamtx-health" id="mtx-health">
                 <div class="loading">Verificando...</div>
             </div>
 
-            <div class="section-title mt-md">📂 Paths</div>
+            <div class="section-title mt-md">${UI.icon('layers')} Paths</div>
             <div class="mediamtx-paths" id="mtx-paths">
-                <div class="loading">Carregando...</div>
+                ${UI.skeletons('row', 4)}
             </div>
         `;
 
@@ -31,13 +31,13 @@ const MEDIAMTX = (() => {
             if (!el) return;
 
             if (h.alive) {
-                el.innerHTML = `<span class="badge badge-success">✅ Online</span>`;
+                el.innerHTML = `<span class="dcard-status-shape online" aria-hidden="true"></span><span class="text-sm">Online</span><span class="text-muted text-sm" style="margin-left:8px">api 9997 · rtsp 8554</span>`;
             } else {
-                el.innerHTML = `<span class="badge badge-danger">❌ Offline</span><span class="text-muted text-sm" style="margin-left:8px">${h.error || ''}</span>`;
+                el.innerHTML = `<span class="dcard-status-shape offline" aria-hidden="true"></span><span class="text-sm">Offline</span><span class="text-muted text-sm" style="margin-left:8px">${UI.escapeHtml(h.error || '')}</span>`;
             }
         } catch (e) {
             const el = document.getElementById('mtx-health');
-            if (el) el.innerHTML = `<span class="badge badge-danger">❌ Erro</span><span class="text-muted text-sm" style="margin-left:8px">${e.message}</span>`;
+            if (el) el.innerHTML = `<span class="dcard-status-shape offline" aria-hidden="true"></span><span class="text-sm">Erro</span><span class="text-muted text-sm" style="margin-left:8px">${UI.escapeHtml(e.message)}</span>`;
         }
     }
 
@@ -48,13 +48,14 @@ const MEDIAMTX = (() => {
             if (!el) return;
 
             if (!res.success) {
-                el.innerHTML = `<div class="empty-state">Erro: ${res.error}</div>`;
+                el.innerHTML = UI.stateView('error', res.error, { retry: true });
+                UI.bindStateRetry(el, loadPaths);
                 return;
             }
 
             const items = res.data?.items || [];
             if (items.length === 0) {
-                el.innerHTML = '<div class="empty-state">Nenhuma path configurada no MediaMTX.</div>';
+                el.innerHTML = UI.stateView('empty', 'Nenhuma path configurada no MediaMTX.', { icon: 'layers', title: 'Sem paths' });
                 return;
             }
 
@@ -72,7 +73,8 @@ const MEDIAMTX = (() => {
 
             for (const path of items) {
                 const name = path.name || '--';
-                const online = path.ready ? '🟢 Online' : '🔴 Offline';
+                const ready = !!path.ready;
+                const statusHtml = `<span class="dcard-status-shape ${ready ? 'online' : 'offline'}" aria-hidden="true"></span>${ready ? ' Online' : ' Offline'}`;
                 const publisher = path.sourceType || path.source || 'Nenhum';
                 const readers = path.readers?.length || 0;
                 const tracks = path.tracks?.length || 0;
@@ -81,12 +83,12 @@ const MEDIAMTX = (() => {
 
                 html += `
                     <div class="mediamtx-row">
-                        <span class="path-name">${name}</span>
-                        <span class="${path.ready ? 'text-success' : 'text-danger'}">${online}</span>
-                        <span>${publisher}</span>
+                        <span class="path-name">${UI.escapeHtml(name)}</span>
+                        <span class="${ready ? 'text-success' : 'text-danger'}">${statusHtml}</span>
+                        <span>${UI.escapeHtml(publisher)}</span>
                         <span>${readers}</span>
                         <span>${tracks}</span>
-                        <span class="text-muted text-sm">⬇ ${bytesRecv} / ⬆ ${bytesSent}</span>
+                        <span class="text-muted text-sm">${bytesRecv} / ${bytesSent}</span>
                     </div>
                 `;
             }
@@ -95,7 +97,8 @@ const MEDIAMTX = (() => {
             el.innerHTML = html;
         } catch (e) {
             const el = document.getElementById('mtx-paths');
-            if (el) el.innerHTML = `<div class="empty-state">Erro: ${e.message}</div>`;
+            if (el) el.innerHTML = UI.stateView('error', e.message, { retry: true });
+            UI.bindStateRetry(el, loadPaths);
         }
     }
 
@@ -105,6 +108,13 @@ const MEDIAMTX = (() => {
             loadHealth();
             loadPaths();
         }, 10000);
+    }
+
+    function destroy() {
+        if (refreshTimer) {
+            clearInterval(refreshTimer);
+            refreshTimer = null;
+        }
     }
 
     function formatBytes(num) {
@@ -118,5 +128,5 @@ const MEDIAMTX = (() => {
         return num.toFixed(1) + ' ' + units[i];
     }
 
-    return { render };
+    return { render, destroy };
 })();

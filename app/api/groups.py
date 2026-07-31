@@ -54,7 +54,10 @@ async def create_group(data: dict):
         group = GroupConfig(**data)
     except Exception as e:
         raise HTTPException(422, f"Erro de validação: {e}")
-    config.add_group(group)
+    try:
+        config.add_group(group)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     return group.model_dump_safe()
 
 
@@ -77,7 +80,10 @@ async def delete_group(group_id: str):
     config = _get_config()
     if not config.get_group(group_id):
         raise HTTPException(404, "Grupo não encontrado")
-    config.delete_group(group_id)
+    try:
+        config.delete_group(group_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     return {"deleted": group_id}
 
 

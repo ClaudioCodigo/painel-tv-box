@@ -1,21 +1,39 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-BR" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Painel TV Box</title>
-    <link rel="stylesheet" href="/static/css/main.css?v=16">
-    <link rel="stylesheet" href="/static/css/dashboard.css?v=16">
-    <link rel="stylesheet" href="/static/css/wizard.css?v=16">
-    <link rel="stylesheet" href="/static/css/device.css?v=16">
-    <link rel="stylesheet" href="/static/css/logs.css?v=16">
-    <link rel="stylesheet" href="/static/css/backup.css?v=16">
-    <link rel="stylesheet" href="/static/css/groups.css?v=16">
-    <link rel="stylesheet" href="/static/css/scrcpy.css?v=16">
-    <link rel="stylesheet" href="/static/css/devices.css?v=16">
-    <link rel="stylesheet" href="/static/css/forms.css?v=16">
-    <link rel="stylesheet" href="/static/css/apps.css?v=16">
-    <link rel="stylesheet" href="/static/css/dropdown.css?v=16">
+    <script>
+        // Anti-flash de tema (§3.4): aplica data-theme antes do primeiro paint
+        (function () {
+            try {
+                var c = localStorage.getItem('panel_theme') || 'system';
+                var t = (c === 'dark' || c === 'light') ? c
+                    : (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+                document.documentElement.setAttribute('data-theme', t);
+            } catch (e) {
+                document.documentElement.setAttribute('data-theme', 'dark');
+            }
+        })();
+    </script>
+    <link rel="stylesheet" href="/static/css/tokens.css?v=20">
+    <link rel="stylesheet" href="/static/css/base.css?v=20">
+    <link rel="stylesheet" href="/static/css/layout.css?v=20">
+    <link rel="stylesheet" href="/static/css/components.css?v=20">
+    <link rel="stylesheet" href="/static/css/motion.css?v=20">
+    <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=20">
+    <link rel="stylesheet" href="/static/css/pages/devices.css?v=20">
+    <link rel="stylesheet" href="/static/css/pages/device.css?v=20">
+    <link rel="stylesheet" href="/static/css/pages/groups.css?v=20">
+    <link rel="stylesheet" href="/static/css/pages/mediamtx.css?v=20">
+    <link rel="stylesheet" href="/static/css/pages/logs.css?v=20">
+    <link rel="stylesheet" href="/static/css/pages/shell.css?v=20">
+    <link rel="stylesheet" href="/static/css/pages/scrcpy.css?v=20">
+    <link rel="stylesheet" href="/static/css/pages/backup.css?v=20">
+    <link rel="stylesheet" href="/static/css/pages/settings.css?v=20">
+    <link rel="stylesheet" href="/static/css/pages/wizard.css?v=20">
+    <link rel="stylesheet" href="/static/css/pages/auth.css?v=20">
 </head>
 <body>
 
@@ -26,54 +44,58 @@
             <span class="brand-text">Painel TV Box</span>
         </div>
 
-        <nav class="sidebar-nav">
+        <nav class="sidebar-nav" aria-label="Navegação principal">
             <a href="#/" class="nav-item active" data-route="/">
-                <span class="nav-icon">DB</span>
+                <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span>
                 <span class="nav-label">Dashboard</span>
             </a>
             <a href="#/devices" class="nav-item" data-route="/devices">
-                <span class="nav-icon">TV</span>
+                <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="13" rx="2"/><polyline points="17 2 12 7 7 2"/></svg></span>
                 <span class="nav-label">Dispositivos</span>
             </a>
             <a href="#/groups" class="nav-item" data-route="/groups">
-                <span class="nav-icon">GR</span>
+                <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
                 <span class="nav-label">Grupos</span>
             </a>
             <a href="#/mediamtx" class="nav-item" data-route="/mediamtx">
-                <span class="nav-icon">MX</span>
+                <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg></span>
                 <span class="nav-label">MediaMTX</span>
             </a>
             <a href="#/logs" class="nav-item" data-route="/logs">
-                <span class="nav-icon">LG</span>
+                <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></span>
                 <span class="nav-label">Logs</span>
             </a>
             <a href="#/shell" class="nav-item" data-route="/shell">
-                <span class="nav-icon">SH</span>
+                <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"/><polyline points="6 9 10 12 6 15"/><line x1="13" y1="15" x2="18" y2="15"/></svg></span>
                 <span class="nav-label">Shell</span>
             </a>
             <a href="#/scrcpy" class="nav-item" data-route="/scrcpy">
-                <span class="nav-icon">SC</span>
+                <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></span>
                 <span class="nav-label">scrcpy</span>
             </a>
             <a href="#/backup" class="nav-item" data-route="/backup">
-                <span class="nav-icon">BK</span>
+                <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5" rx="1"/><line x1="10" y1="12" x2="14" y2="12"/></svg></span>
                 <span class="nav-label">Backup</span>
             </a>
             <a href="#/settings" class="nav-item" data-route="/settings">
-                <span class="nav-icon">CF</span>
+                <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
                 <span class="nav-label">Configurações</span>
             </a>
         </nav>
 
         <div class="sidebar-footer">
-            <a href="#/wizard" class="btn btn-sm btn-secondary" style="width:100%;margin-bottom:6px">Wizard</a>
+            <a href="#/wizard" class="btn btn-primary btn-sm" style="width:100%">Wizard</a>
+            <div style="display:flex;gap:6px">
+                <button id="theme-toggle" class="btn btn-primary btn-sm" style="flex:1" title="Alternar tema"></button>
+                <button id="auth-logout" class="btn btn-primary btn-sm" style="flex:1" title="Sair do painel">Sair</button>
+            </div>
             <span class="version">v0.1.0</span>
         </div>
     </aside>
 
     <!-- HEADER -->
     <header id="header" class="header">
-        <button id="sidebar-toggle" class="sidebar-toggle" title="Menu">
+        <button id="sidebar-toggle" class="sidebar-toggle" title="Menu" aria-label="Alternar menu">
             <span class="toggle-icon">Menu</span>
         </button>
 
@@ -89,36 +111,53 @@
 
     <!-- MAIN CONTENT -->
     <main id="main-content" class="main-content">
-        <!-- Renderizado dinamicamente pelo app.js -->
         <div id="view-container" class="view-container">
             <div class="loading">Carregando...</div>
         </div>
     </main>
 
     <!-- TOAST CONTAINER -->
-    <div id="toast-container" class="toast-container"></div>
+    <div id="toast-container" class="toast-container" aria-live="polite" role="status"></div>
 
     <!-- MODAL CONTAINER -->
     <div id="modal-container" class="modal-container hidden">
         <div class="modal-overlay"></div>
-        <div class="modal-content" id="modal-content"></div>
+        <div class="modal-content" id="modal-content" role="dialog" aria-modal="true"></div>
+    </div>
+
+    <!-- LOGIN OVERLAY -->
+    <div id="auth-overlay" class="auth-overlay hidden">
+        <div class="auth-card">
+            <div class="auth-brand">TV</div>
+            <h2>Painel TV Box</h2>
+            <p class="text-muted text-sm">Digite o token de acesso configurado no servidor<br>(arquivo <code>config/.panel_token</code>).</p>
+            <form id="auth-form">
+                <input type="password" id="auth-token-input" class="form-input" placeholder="Token de acesso" autocomplete="current-password" required>
+                <button type="submit" class="btn btn-primary" style="width:100%">Entrar</button>
+                <div id="auth-status" class="text-danger text-sm" style="margin-top:8px"></div>
+            </form>
+        </div>
     </div>
 
     <!-- Scripts -->
-    <script src="/static/js/ws.js?v=16"></script>
-    <script src="/static/js/api.js?v=16"></script>
-    <script src="/static/js/components.js?v=16"></script>
-    <script src="/static/js/dashboard.js?v=16"></script>
-    <script src="/static/js/wizard.js?v=16"></script>
-    <script src="/static/js/device.js?v=16"></script>
-    <script src="/static/js/mediamtx.js?v=16"></script>
-    <script src="/static/js/logs.js?v=16"></script>
-    <script src="/static/js/backup.js?v=16"></script>
-    <script src="/static/js/settings.js?v=16"></script>
-    <script src="/static/js/groups.js?v=16"></script>
-    <script src="/static/js/scrcpy.js?v=16"></script>
-    <script src="/static/js/devices.js?v=16"></script>
-    <script src="/static/js/shell.js?v=16"></script>
-    <script src="/static/js/app.js?v=16"></script>
+    <script src="/static/js/icons.js?v=20"></script>
+    <script src="/static/js/theme.js?v=20"></script>
+    <script src="/static/js/motion.js?v=20"></script>
+    <script src="/static/js/auth.js?v=20"></script>
+    <script src="/static/js/ws.js?v=20"></script>
+    <script src="/static/js/api.js?v=20"></script>
+    <script src="/static/js/components.js?v=20"></script>
+    <script src="/static/js/dashboard.js?v=20"></script>
+    <script src="/static/js/wizard.js?v=20"></script>
+    <script src="/static/js/device.js?v=20"></script>
+    <script src="/static/js/mediamtx.js?v=20"></script>
+    <script src="/static/js/logs.js?v=20"></script>
+    <script src="/static/js/backup.js?v=20"></script>
+    <script src="/static/js/settings.js?v=20"></script>
+    <script src="/static/js/groups.js?v=20"></script>
+    <script src="/static/js/scrcpy.js?v=20"></script>
+    <script src="/static/js/devices.js?v=20"></script>
+    <script src="/static/js/shell.js?v=20"></script>
+    <script src="/static/js/app.js?v=20"></script>
 </body>
 </html>

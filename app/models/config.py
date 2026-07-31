@@ -39,12 +39,19 @@ class MediaMTXGlobalConfig(BaseModel):
     timeout: int = 5
 
 
+class SecurityConfig(BaseModel):
+    """Configuração de acesso ao painel."""
+    enabled: bool = True
+    heartbeat_key: str = ""  # chave dedicada do heartbeat device→servidor
+
+
 class SystemConfig(BaseModel):
     server: ServerConfig = Field(default_factory=ServerConfig)
     host: HostConfig = Field(default_factory=HostConfig)
     adb: ADBConfig = Field(default_factory=ADBConfig)
     paths: PathsConfig = Field(default_factory=PathsConfig)
     mediamtx: MediaMTXGlobalConfig = Field(default_factory=MediaMTXGlobalConfig)
+    security: SecurityConfig = Field(default_factory=SecurityConfig)
     wizard_completed: bool = False
 
 
@@ -75,6 +82,7 @@ class WatchdogRecoveryConfig(BaseModel):
 
 class WatchdogConfig(BaseModel):
     check_interval: int = 10
+    heartbeat_timeout: int = 60  # heartbeat fresco = device na rede (sem ADB)
     ping: WatchdogPingConfig = Field(default_factory=WatchdogPingConfig)
     adb: WatchdogADBConfig = Field(default_factory=WatchdogADBConfig)
     activity_check: bool = True

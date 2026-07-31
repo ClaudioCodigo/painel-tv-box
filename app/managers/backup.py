@@ -96,13 +96,25 @@ class BackupManager:
             for name in names:
                 if name == "backup_manifest.json":
                     continue
+                # Normaliza separadores (zips podem usar \ em vez de /)
+                name = name.replace("\\", "/")
                 if not (name.startswith("config/") or name.startswith("devices/") or name.startswith("groups/")):
                     continue
                 if not name.endswith(".yml"):
                     continue
 
+                # Anti zip-slip: rejeita .. e resolve fora do project_root
+                dest = self.project_root / name
                 try:
-                    dest = self.project_root / name
+                    dest_resolved = dest.resolve()
+                except Exception:
+                    errors.append(f"{name}: caminho inválido")
+                    continue
+                if not dest_resolved.is_relative_to(self.project_root.resolve()):
+                    errors.append(f"{name}: caminho fora do diretório permitido")
+                    continue
+
+                try:
                     dest.parent.mkdir(parents=True, exist_ok=True)
                     with zf.open(name) as src, open(dest, "wb") as dst:
                         shutil.copyfileobj(src, dst)
@@ -119,9 +131,26 @@ class BackupManager:
             "pre_backup": pre_backup.name,
         }
 
+    def get_backup_path(self, backup_name: str) -> Optional[Path]:
+        """Valida o nome do backup e retorna o path dentro de backups_dir.
+        Retorna None se o nome contiver separadores/traversal ou não existir.
+        """
+        if not backup_name or backup_name != Path(backup_name).name:
+            return None
+        path = self.backups_dir / backup_name
+        try:
+            resolved = path.resolve()
+        except Exception:
+            return None
+        if not resolved.is_relative_to(self.backups_dir.resolve()):
+            return None
+        return path if path.is_file() else None
+
     async def restore(self, backup_name: str) -> dict:
         """Restaura de um backup específico."""
-        zip_path = self.backups_dir / backup_name
+        zip_path = self.get_backup_path(backup_name)
+        if not zip_path:
+            return {"success": False, "error": "Backup não encontrado"}
         return await self.import_backup(zip_path)
 
     async def cleanup(self, keep_last: int = 10):

@@ -2,6 +2,7 @@
 
 import logging
 import re
+import time
 import unicodedata
 
 logger = logging.getLogger("system")
@@ -12,6 +13,14 @@ def slugify(text: str) -> str:
     text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
     text = re.sub(r"[^\w\s-]", "", text.lower())
     return re.sub(r"[-\s]+", "-", text).strip("-")
+
+
+SAFE_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
+
+
+def is_safe_id(value: str) -> bool:
+    """Valida id de device/grupo: só minúsculas, dígitos, . _ - (sem / ou ..)."""
+    return bool(SAFE_ID_RE.match(value or ""))
 
 
 def get_metrics() -> dict:
@@ -43,5 +52,5 @@ def get_metrics() -> dict:
         "disk_percent": disk.percent,
         "disk_used_gb": round(disk.used / (1024**3), 1),
         "disk_total_gb": round(disk.total / (1024**3), 1),
-        "uptime_seconds": int(psutil.boot_time()),
+        "uptime_seconds": int(time.time() - psutil.boot_time()),
     }

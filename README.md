@@ -50,6 +50,9 @@ Ver [docs/INSTALL.md](docs/INSTALL.md)
 
 ## Documentação
 
+- [Guia técnico completo (contexto para LLM/agentes)](docs/LLM.md) — referência atual do projeto
+- [Registro de implementação (redesign + Fases A/B)](docs/10-IMPLEMENTACAO.md) — o que foi feito e o que falta
+- [Auditoria 2026-07-31](docs/AUDITORIA.md) — achados e correções aplicadas
 - [Instalação](docs/INSTALL.md)
 - [Como adicionar TV Box](docs/ADDING_DEVICE.md)
 - [Como configurar grupos](docs/GROUPS.md)

@@ -18,16 +18,16 @@ const SETTINGS = (() => {
                     <div id="update-status" class="settings-status"></div>
                 </div>
 
-                <div class="section-title mt-md">🗑️ Cache</div>
+                <div class="section-title mt-md">${UI.icon('trash')} Cache</div>
                 <div class="settings-card">
                     <p class="text-muted text-sm">Se a interface não atualizar após mudanças, limpe o cache.</p>
-                    <button class="btn btn-secondary btn-sm" onclick="SETTINGS.clearCache()">🗑️ Limpar Cache e Recarregar</button>
+                    <button class="btn btn-secondary btn-sm" onclick="SETTINGS.clearCache()">${UI.icon('trash')} Limpar Cache e Recarregar</button>
                 </div>
 
-                <div class="section-title mt-md">🌗 Tema</div>
+                <div class="section-title mt-md">${UI.icon('sun')} Tema</div>
                 <div class="settings-card">
-                    <p class="text-muted text-sm">Alterna entre tema escuro e claro.</p>
-                    <button class="btn btn-secondary btn-sm" onclick="SETTINGS.toggleTheme()">🌗 Alternar Tema</button>
+                    <p class="text-muted text-sm">Alterna entre escuro, claro e sistema.</p>
+                    <button class="btn btn-secondary btn-sm" onclick="SETTINGS.toggleTheme()">${UI.icon('sun')} Alternar Tema</button>
                 </div>
 
                 <div class="section-title mt-md">🖥️ Servidor</div>
@@ -59,7 +59,7 @@ const SETTINGS = (() => {
                 <div class="info-row"><span class="info-key">Disco</span><span class="info-val">${metrics.disk_used_gb}/${metrics.disk_total_gb} GB (${metrics.disk_percent}%)</span></div>
             `;
         } catch (e) {
-            el.innerHTML = `<span class="text-danger">Erro: ${e.message}</span>`;
+            el.innerHTML = `<span class="text-danger">Erro: ${UI.escapeHtml(e.message)}</span>`;
         }
     }
 
@@ -71,16 +71,16 @@ const SETTINGS = (() => {
         try {
             const res = await API.post('/update/check');
             if (res.has_update) {
-                if (status) status.innerHTML = `<span class="text-warning">📦 Atualização disponível: ${res.current} → ${res.remote}</span>`;
+                if (status) status.innerHTML = `<span class="text-warning">📦 Atualização disponível: ${UI.escapeHtml(res.current)} → ${UI.escapeHtml(res.remote)}</span>`;
                 if (btn) btn.disabled = false;
             } else if (res.error) {
-                if (status) status.innerHTML = `<span class="text-muted">${res.error}</span>`;
+                if (status) status.innerHTML = `<span class="text-muted">${UI.escapeHtml(res.error)}</span>`;
             } else {
-                if (status) status.innerHTML = `<span class="text-success">✅ Versão atual: ${res.current}</span>`;
+                if (status) status.innerHTML = `<span class="text-success">✅ Versão atual: ${UI.escapeHtml(res.current)}</span>`;
                 if (btn) btn.disabled = true;
             }
         } catch (e) {
-            if (status) status.innerHTML = `<span class="text-danger">❌ ${e.message}</span>`;
+            if (status) status.innerHTML = `<span class="text-danger">❌ ${UI.escapeHtml(e.message)}</span>`;
         }
     }
 
@@ -98,7 +98,7 @@ const SETTINGS = (() => {
                 try {
                     const res = await API.post('/update/apply');
                     if (res.success) {
-                        if (status) status.innerHTML = `<span class="text-success">✅ Atualização aplicada! ${res.migration || ''}</span>`;
+                        if (status) status.innerHTML = `<span class="text-success">✅ Atualização aplicada! ${UI.escapeHtml(res.migration || '')}</span>`;
                         UI.createToast('🔄 Reiniciando painel...', 'info', 5000);
                         setTimeout(() => location.reload(), 2000);
                     } else {
@@ -106,7 +106,7 @@ const SETTINGS = (() => {
                         if (btn) btn.disabled = false;
                     }
                 } catch (e) {
-                    if (status) status.innerHTML = `<span class="text-danger">❌ ${e.message}</span>`;
+                    if (status) status.innerHTML = `<span class="text-danger">❌ ${UI.escapeHtml(e.message)}</span>`;
                     if (btn) btn.disabled = false;
                 }
             }
@@ -121,24 +121,18 @@ const SETTINGS = (() => {
     }
 
     function toggleTheme() {
-        const body = document.body;
-        const isDark = body.classList.contains('theme-dark') || (!body.classList.contains('theme-light') && window.matchMedia('(prefers-color-scheme: dark)').matches);
-        if (isDark) {
-            body.classList.remove('theme-dark');
-            body.classList.add('theme-light');
-            localStorage.setItem('theme', 'light');
-        } else {
-            body.classList.remove('theme-light');
-            body.classList.add('theme-dark');
-            localStorage.setItem('theme', 'dark');
+        if (typeof THEME !== 'undefined') {
+            const choice = THEME.cycle();
+            UI.createToast(`Tema: ${choice}`, 'success');
+            return;
         }
-        UI.createToast(`🌗 Tema ${localStorage.getItem('theme') === 'dark' ? 'escuro' : 'claro'} ativado`, 'success');
+        // Fallback legado
+        const isDark = !document.body.classList.contains('theme-light');
+        document.body.classList.toggle('theme-light', isDark);
+        document.body.classList.toggle('theme-dark', !isDark);
+        localStorage.setItem('theme', isDark ? 'light' : 'dark');
+        UI.createToast(`Tema ${isDark ? 'claro' : 'escuro'} ativado`, 'success');
     }
-
-    // Aplica tema salvo ao carregar
-    const saved = localStorage.getItem('theme');
-    if (saved === 'light') document.body.classList.add('theme-light');
-    else if (saved === 'dark') document.body.classList.add('theme-dark');
 
     return { render, checkUpdate, applyUpdate, clearCache, toggleTheme };
 })();

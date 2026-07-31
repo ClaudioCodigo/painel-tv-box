@@ -8,6 +8,7 @@ from app.models.config import SystemConfig, WatchdogConfig, PlayersConfig, Media
 from app.models.device import DeviceConfig
 from app.models.group import GroupConfig
 from app.utils.yaml import load_yaml, dump_yaml, dump_yaml_simple
+from app.utils.system import is_safe_id
 
 logger = logging.getLogger("config")
 
@@ -62,6 +63,14 @@ class ConfigurationManager:
         path = self.config_dir / "system.yml"
         data = load_yaml(path)
         self.system = SystemConfig(**data) if data else SystemConfig()
+
+        # Gera heartbeat_key se ainda não existir (usada pelo heartbeat device→servidor)
+        if self.system and self.system.security and not self.system.security.heartbeat_key:
+            import secrets
+
+            self.system.security.heartbeat_key = secrets.token_urlsafe(32)
+            self.save_system()
+            logger.info("Heartbeat key gerada (config/system.yml → security.heartbeat_key)")
 
     def _load_watchdog(self):
         path = self.config_dir / "watchdog.yml"
@@ -132,6 +141,8 @@ class ConfigurationManager:
         return None
 
     def add_device(self, device: DeviceConfig):
+        if not is_safe_id(device.id):
+            raise ValueError(f"ID de dispositivo inválido: {device.id!r}")
         existing = self.get_device(device.id)
         if existing:
             self.devices = [d for d in self.devices if d.id != device.id]
@@ -146,6 +157,9 @@ class ConfigurationManager:
         # merge: ignora state se vier no payload
         data.pop("state", None)
         updated_data.update(data)
+        # id não pode ser alterado para um valor inseguro
+        if "id" in updated_data and not is_safe_id(updated_data["id"]):
+            raise ValueError(f"ID de dispositivo inválido: {updated_data['id']!r}")
         new_device = DeviceConfig(**updated_data)
         self.devices = [d for d in self.devices if d.id != device_id]
         self.devices.append(new_device)
@@ -153,6 +167,8 @@ class ConfigurationManager:
         return new_device
 
     def delete_device(self, device_id: str) -> bool:
+        if not is_safe_id(device_id):
+            raise ValueError(f"ID de dispositivo inválido: {device_id!r}")
         device = self.get_device(device_id)
         if not device:
             return False
@@ -163,6 +179,8 @@ class ConfigurationManager:
         return True
 
     def _save_device(self, device: DeviceConfig):
+        if not is_safe_id(device.id):
+            raise ValueError(f"ID de dispositivo inválido: {device.id!r}")
         dump_yaml(self.devices_dir / f"{device.id}.yml", device.model_dump_safe())
 
     # ── Groups CRUD ───────────────────────────────────────
@@ -174,6 +192,8 @@ class ConfigurationManager:
         return None
 
     def add_group(self, group: GroupConfig):
+        if not is_safe_id(group.id):
+            raise ValueError(f"ID de grupo inválido: {group.id!r}")
         existing = self.get_group(group.id)
         if existing:
             self.groups = [g for g in self.groups if g.id != group.id]
@@ -186,6 +206,8 @@ class ConfigurationManager:
             return None
         updated_data = group.model_dump()
         updated_data.update(data)
+        if "id" in updated_data and not is_safe_id(updated_data["id"]):
+            raise ValueError(f"ID de grupo inválido: {updated_data['id']!r}")
         new_group = GroupConfig(**updated_data)
         self.groups = [g for g in self.groups if g.id != group_id]
         self.groups.append(new_group)
@@ -193,6 +215,8 @@ class ConfigurationManager:
         return new_group
 
     def delete_group(self, group_id: str) -> bool:
+        if not is_safe_id(group_id):
+            raise ValueError(f"ID de grupo inválido: {group_id!r}")
         group = self.get_group(group_id)
         if not group:
             return False

@@ -1,0 +1,87 @@
+/* Shell — terminal remoto */
+.shell-page {
+    max-width: 1000px;
+}
+
+.shell-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    margin-bottom: var(--space-3);
+    align-items: flex-end;
+}
+
+.shell-controls .form-group {
+    flex: 1 1 220px;
+}
+
+.shell-controls .btn {
+    flex: 0 0 auto;
+}
+
+.shell-quick-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: var(--space-3);
+}
+
+.shell-terminal {
+    background: var(--bg-inset);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    padding: var(--space-4);
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+    line-height: 1.5;
+    min-height: 350px;
+    max-height: 600px;
+    overflow-y: auto;
+    color: var(--text-primary);
+}
+
+.shell-welcome {
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+.shell-prompt {
+    color: var(--text-secondary);
+    font-weight: 700;
+    margin: 4px 0;
+}
+
+.shell-user {
+    color: var(--text-primary);
+    font-weight: 700;
+    margin-right: 6px;
+}
+
+.shell-line {
+    color: var(--text-primary);
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.shell-result {
+    margin: 4px 0 8px 0;
+    padding-left: var(--space-3);
+    border-left: 2px solid var(--border-strong);
+}
+
+.shell-error {
+    color: var(--text-primary);
+    font-weight: 700;
+    margin: 4px 0 8px 0;
+}
+
+.shell-loading {
+    color: var(--text-muted);
+    font-style: italic;
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}

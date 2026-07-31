@@ -3,6 +3,7 @@
  */
 const APP = (() => {
     let activeView = null;
+    let initialized = false;
 
     const routes = {
         '/': DASHBOARD,
@@ -49,6 +50,9 @@ const APP = (() => {
             return completed;
         } catch (e) {
             console.error('Wizard check failed:', e);
+            if (e.status === 401 && typeof AUTH !== 'undefined') {
+                AUTH.requireLogin();
+            }
             return true;
         }
     }
@@ -74,9 +78,10 @@ const APP = (() => {
                     if (DEVICE_PAGE && DEVICE_PAGE.render) {
                         DEVICE_PAGE.render(el, deviceId);
                     } else {
-                        el.innerHTML = `<div class="loading">Carregando device ${deviceId}...</div>`;
+                        el.innerHTML = `<div class="loading">Carregando device ${escapeHtml(deviceId)}...</div>`;
                     }
-                }
+                },
+                destroy: () => { if (DEVICE_PAGE && DEVICE_PAGE.destroy) DEVICE_PAGE.destroy(); }
             };
         }
 
@@ -85,14 +90,20 @@ const APP = (() => {
             const groupId = hash.replace('/group/', '');
             handler = {
                 render: (el) => {
-                    el.innerHTML = `<div class="loading">Grupo ${groupId} (em breve)</div>`;
+                    el.innerHTML = `<div class="loading">Grupo ${escapeHtml(groupId)} (em breve)</div>`;
                     UI.setPageTitle('Grupo');
                 }
             };
         }
 
         if (handler && handler.render) {
-            handler.render(container);
+            // View transition apenas em trocas de rota (não no mount inicial)
+            if (initialized) {
+                MOTION.withTransition(() => handler.render(container));
+            } else {
+                handler.render(container);
+                initialized = true;
+            }
             activeView = handler;
         } else {
             container.innerHTML = `
@@ -111,9 +122,12 @@ const APP = (() => {
         const hash = window.location.hash.replace('#', '') || '/';
         document.querySelectorAll('.nav-item').forEach(item => {
             const route = item.getAttribute('data-route') || '';
-            item.classList.remove('active');
-            if (hash === route || (route !== '/' && route !== '/wizard' && hash.startsWith(route))) {
-                item.classList.add('active');
+            const active = hash === route || (route !== '/' && route !== '/wizard' && hash.startsWith(route));
+            item.classList.toggle('active', active);
+            if (active) {
+                item.setAttribute('aria-current', 'page');
+            } else {
+                item.removeAttribute('aria-current');
             }
         });
     }
@@ -124,10 +138,45 @@ const APP = (() => {
         return div.innerHTML;
     }
 
-    return { init, navigate, checkWizard };
+    // ── Header status vivo (A2) ──────────────────
+
+    function initHeaderStatus() {
+        const el = document.getElementById('header-status');
+        const text = document.getElementById('header-status-text');
+        const dot = el ? el.querySelector('.dot') : null;
+        let wsOk = false;
+        let serverOk = false;
+
+        function render() {
+            if (!el) return;
+            const cls = (wsOk && serverOk) ? 'online' : (serverOk ? 'degraded' : 'offline');
+            if (dot) dot.className = `dot ${cls}`;
+            if (text) text.textContent = `${serverOk ? 'Servidor OK' : 'Servidor offline'} · WS ${wsOk ? 'conectado' : 'offline'}`;
+        }
+
+        WS.on('connected', () => { wsOk = true; render(); });
+        WS.on('disconnected', () => { wsOk = false; render(); });
+
+        async function check() {
+            try {
+                const h = await API.get('/system/health');
+                serverOk = !!(h && h.status === 'ok');
+            } catch (e) {
+                serverOk = false;
+            }
+            render();
+        }
+        check();
+        setInterval(check, 30000);
+    }
+
+    return { init, navigate, checkWizard, initHeaderStatus };
 })();
 
 // Boot
 document.addEventListener('DOMContentLoaded', () => {
+    if (typeof THEME !== 'undefined') THEME.init();
+    if (typeof AUTH !== 'undefined') AUTH.init();
     APP.init();
+    APP.initHeaderStatus();
 });

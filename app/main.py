@@ -3,11 +3,12 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 from app.core.config import ConfigurationManager
+from app.core.auth import require_auth, require_auth_ws
 
 from app.api.devices import router as devices_router
 from app.api.system import router as system_router
@@ -18,6 +19,8 @@ from app.api.backup import router as backup_router
 from app.api.update import router as update_router
 from app.api.groups import router as groups_router
 from app.api.scrcpy import router as scrcpy_router
+from app.api.auth import router as auth_router
+from app.api.heartbeat import router as heartbeat_router
 
 
 @asynccontextmanager
@@ -45,16 +48,19 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 STATIC_DIR = PROJECT_ROOT / "static"
 TEMPLATES_DIR = PROJECT_ROOT / "templates"
 
-# Registra routers
-app.include_router(devices_router)
-app.include_router(system_router)
-app.include_router(wizard_router)
-app.include_router(mediamtx_router)
-app.include_router(logs_router)
-app.include_router(backup_router)
-app.include_router(update_router)
-app.include_router(groups_router)
-app.include_router(scrcpy_router)
+# Registra routers (todos exigem autenticação, exceto /api/auth, /api/heartbeat
+# e os caminhos públicos tratados dentro de require_auth)
+app.include_router(auth_router)
+app.include_router(heartbeat_router)  # chave dedicada própria — NÃO usa o token do painel
+app.include_router(devices_router, dependencies=[Depends(require_auth)])
+app.include_router(system_router, dependencies=[Depends(require_auth)])
+app.include_router(wizard_router, dependencies=[Depends(require_auth)])
+app.include_router(mediamtx_router, dependencies=[Depends(require_auth)])
+app.include_router(logs_router, dependencies=[Depends(require_auth)])
+app.include_router(backup_router, dependencies=[Depends(require_auth)])
+app.include_router(update_router, dependencies=[Depends(require_auth)])
+app.include_router(groups_router, dependencies=[Depends(require_auth)])
+app.include_router(scrcpy_router, dependencies=[Depends(require_auth)])
 
 
 # --- API health check ---
@@ -99,6 +105,10 @@ async def system_metrics_history(last_n: int = 30):
 
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
+    if not await require_auth_ws(ws):
+        await ws.close(code=4401, reason="Não autenticado")
+        return
+
     from app.main import app as current_app
 
     hub = current_app.state.ws_hub
@@ -119,6 +129,10 @@ async def websocket_shell(ws: WebSocket, device_id: str):
     """Shell remoto via WebSocket — output em tempo real."""
     from app.managers.adb import ADBManager
     import asyncio
+
+    if not await require_auth_ws(ws):
+        await ws.close(code=4401, reason="Não autenticado")
+        return
 
     await ws.accept()
     device = config.get_device(device_id) if config else None
@@ -195,12 +209,53 @@ async def static_cache_middleware(request, call_next):
     return response
 
 
+SECURITY_HEADERS = {
+    # 'unsafe-inline' em script/style é necessário pelos handlers onclick
+    # inline existentes; a proteção real contra XSS vem do escape de dados.
+    "Content-Security-Policy": (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:; "
+        "connect-src 'self' ws: wss:; "
+        "font-src 'self'; "
+        "object-src 'none'; "
+        "base-uri 'self'; "
+        "frame-ancestors 'none'"
+    ),
+    "X-Frame-Options": "DENY",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+}
+
+
+@app.middleware("http")
+async def security_headers_middleware(request, call_next):
+    response = await call_next(request)
+    for header, value in SECURITY_HEADERS.items():
+        response.headers.setdefault(header, value)
+    return response
+
+
 # --- Catch-all: serve o SPA (todas as rotas caem no base.html) ---
 
 
 @app.get("/{full_path:path}")
 async def serve_spa(full_path: str):
-    path = TEMPLATES_DIR / full_path
+    # Rotas /api/* inexistentes retornam 404 (não o HTML da SPA)
+    if full_path.startswith("api/"):
+        raise HTTPException(status_code=404, detail="Not found")
+
+    # Anti path traversal: só serve arquivos que resolvem dentro de templates/
+    try:
+        path = (TEMPLATES_DIR / full_path).resolve()
+        if not path.is_relative_to(TEMPLATES_DIR.resolve()):
+            raise HTTPException(status_code=404, detail="Not found")
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=404, detail="Not found")
+
     if path.is_file():
         return FileResponse(path)
     return FileResponse(TEMPLATES_DIR / "base.html")
