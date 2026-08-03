@@ -8,6 +8,7 @@ group: administracao
 rtsp_path: TV_BOX_1
 player: vlc
 root: false
+recovery_enabled: false
 capabilities:
   wifi_restart: true
   ethernet_restart: true

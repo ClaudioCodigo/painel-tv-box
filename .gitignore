@@ -37,3 +37,7 @@ config/.panel_token
 # OS
 .DS_Store
 Thumbs.db
+
+docs/nobreak.md
+
+docs/Sem t*.md

@@ -54,6 +54,11 @@ class WatchdogManager:
             task.cancel()
             logger.debug("Watchdog removido: %s", device_id)
 
+    @staticmethod
+    def _is_stream_issue(reason: str) -> bool:
+        r = reason.lower()
+        return "stream" in r or "player" in r
+
     async def _watch_loop(self, device: DeviceConfig):
         """Loop principal de health check + recovery."""
         interval = self.cfg.check_interval if self.cfg else 10
@@ -91,7 +96,14 @@ class WatchdogManager:
                     logger.info("Health %s: %s -> %s", device.id, health_cache, status)
                     health_cache = status
 
-                if status == "offline" and self.recovery:
+                # Recuperação:
+                #  - offline  → cascata completa (rede caiu)
+                #  - degraded com motivo stream/player E recovery_enabled → só reabrir player
+                stream_issue = status == "degraded" and self._is_stream_issue(device.state.reason or "")
+                if self.recovery and (
+                    status == "offline"
+                    or (stream_issue and getattr(device, "recovery_enabled", True))
+                ):
                     # Cooldown entre recoveries
                     last_recovery = getattr(device.state, "last_recovery_time", None)
                     if last_recovery:
@@ -101,7 +113,8 @@ class WatchdogManager:
                             await asyncio.sleep(interval)
                             continue
 
-                    rec_result = await self.recovery.recover(device, send_event=self._send_event)
+                    stream_only = stream_issue  # degraded → só player_retry
+                    rec_result = await self.recovery.recover(device, send_event=self._send_event, stream_only=stream_only)
                     device.state.last_recovery_time = datetime.now()
 
                     if rec_result.get("success"):
@@ -116,8 +129,8 @@ class WatchdogManager:
                                 "timestamp": datetime.now().isoformat(),
                             })
                     else:
-                        # Alerta crítico
-                        if self._send_event:
+                        # Alerta crítico (apenas na cascata completa — degraded é informativo)
+                        if not stream_only and self._send_event:
                             await self._send_event({
                                 "type": "alert",
                                 "device_id": device.id,

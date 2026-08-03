@@ -17,10 +17,12 @@ class RecoveryService:
         self.player = player_manager
         self.cfg = watchdog_config
 
-    async def recover(self, device: DeviceConfig, send_event=None) -> dict:
+    async def recover(self, device: DeviceConfig, send_event=None, stream_only: bool = False) -> dict:
         """Tenta recuperar o dispositivo seguindo cascata.
-        
+
         send_event: callback async para publicar no WebSocket.
+        stream_only: True = apenas reabrir o player (degraded, device online);
+                     False = cascata completa (offline).
         Retorna dict com resultado.
         """
         if not self.cfg:
@@ -36,19 +38,25 @@ class RecoveryService:
             await self._event(send_event, device.id, "cooldown", f"Aguardando {cooldown}s")
             await asyncio.sleep(cooldown)
 
-        # 1. Reabrir Player
+        # 1. Reabrir Player (ADB-safe: via heartbeat se scrcpy ativo/heartbeat fresco)
         for attempt in range(1, recovery_cfg.player_retry_max + 1):
             await self._event(send_event, device.id, "player_retry", f"Tentativa {attempt}/{recovery_cfg.player_retry_max}")
             steps_taken.append(f"player_retry_{attempt}")
 
-            if self.player:
-                result = await self.player.start_stream(device)
-                if result.get("success"):
-                    final_status = "recovered"
-                    await self._event(send_event, device.id, "recovered", f"Player reaberto (tentativa {attempt})")
-                    return {"success": True, "method": "player_retry", "attempt": attempt, "steps_taken": steps_taken}
+            result = await self._reopen_stream(device)
+            if result.get("success"):
+                final_status = "recovered"
+                method = result.get("method", "player_retry")
+                await self._event(send_event, device.id, "recovered", f"Player reaberto (tentativa {attempt}, via {method})")
+                return {"success": True, "method": method, "attempt": attempt, "steps_taken": steps_taken}
 
             await asyncio.sleep(recovery_cfg.player_retry_delay)
+
+        # Se for só reabrir a stream (degraded), para por aqui — sem wifi/reboot
+        if stream_only:
+            final_status = "critical"
+            await self._event(send_event, device.id, "critical", "Não foi possível reabrir o player (degraded)")
+            return {"success": False, "method": "exhausted", "steps_taken": steps_taken, "status": final_status}
 
         # 2. Reiniciar Wi-Fi
         if recovery_cfg.wifi_restart:
@@ -60,7 +68,7 @@ class RecoveryService:
 
             # Verifica se recuperou
             if self.player:
-                result = await self.player.start_stream(device)
+                result = await self._reopen_stream(device)
                 if result.get("success"):
                     final_status = "recovered"
                     await self._event(send_event, device.id, "recovered", "Wi-Fi reiniciado, player reaberto")
@@ -75,7 +83,7 @@ class RecoveryService:
             await asyncio.sleep(recovery_cfg.eth_reconnect_timeout)
 
             if self.player:
-                result = await self.player.start_stream(device)
+                result = await self._reopen_stream(device)
                 if result.get("success"):
                     final_status = "recovered"
                     await self._event(send_event, device.id, "recovered", "Ethernet reiniciado, player reaberto")
@@ -93,7 +101,7 @@ class RecoveryService:
             # Tenta reconectar ADB e abrir stream
             connected = await self.adb.connect(device.ip, device.adb_port)
             if connected and self.player:
-                result = await self.player.start_stream(device)
+                result = await self._reopen_stream(device)
                 if result.get("success"):
                     device.state.reboot_count = reboot_count + 1
                     final_status = "recovered"
@@ -106,6 +114,39 @@ class RecoveryService:
         logger.error("Recovery crítico para %s: %d steps", device.id, len(steps_taken))
 
         return {"success": False, "method": "exhausted", "steps_taken": steps_taken, "status": final_status}
+
+    async def _reopen_stream(self, device: DeviceConfig) -> dict:
+        """Reabre a stream SEM derrubar o scrcpy (regra ADB×scrcpy):
+
+        - scrcpy ativo OU heartbeat fresco → enfileira via canal de comandos
+          (o device executa localmente; zero ADB painel→device);
+        - senão → ADB direto (fallback).
+        """
+        from datetime import datetime
+
+        from app.managers.scrcpy import ScrcpyManager
+
+        hb_timeout = (self.cfg.heartbeat_timeout if self.cfg else 60) or 60
+        heartbeat_fresh = bool(
+            device.state.last_heartbeat
+            and (datetime.now() - device.state.last_heartbeat).total_seconds() < hb_timeout
+        )
+        target = f"{device.ip}:{device.adb_port}"
+
+        if ScrcpyManager.is_device_active(target) or heartbeat_fresh:
+            if not self.player:
+                return {"success": False, "error": "player config ausente"}
+            cmd = self.player.build_start_cmd(device)
+            if not cmd:
+                return {"success": False, "error": "player não encontrado em players.yml"}
+            from app.services import command_queue as cq
+
+            item = await cq.enqueue(device.id, "start_stream", cmd)
+            return {"success": True, "method": "heartbeat_queue", "queued": item["id"]}
+
+        if self.player:
+            return await self.player.start_stream(device)
+        return {"success": False, "error": "player config ausente"}
 
     async def _event(self, send_event, device_id: str, event_type: str, message: str):
         """Publica evento se callback existir."""

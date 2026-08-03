@@ -117,3 +117,15 @@ Problema do usuário: scrcpy caía ~30s após iniciar; o painel continuava dispa
 | Servidor ADB isolado (Ideia 4) | `adb.server_port: 5038` propagado do config para a env (`PANEL_ADB_SERVER_PORT`) |
 
 **Verificação ao vivo:** após re-provision, `last_heartbeat` atualizando a cada ~20s nos 2 devices; **nenhum novo `ADB connected`** no log (watchdog pulando); `pytest` 104 ✅.
+
+## 11. Recuperação de stream em degraded + toggle (2026-08-03)
+
+**Problema:** player crashava mas o device ficava online → status `degraded` ("Sem stream ativa"/"Player offline") → o watchdog só agia em `offline`, então a stream nunca voltava.
+
+**Solução implementada:**
+- **Recuperação em degraded** (`watchdog.py` + `recovery.py`): se o motivo é stream/player E `device.recovery_enabled` → roda **só `player_retry`** (reabrir player, com cooldown 2min), sem wifi/reboot (device está online).
+- **ADB-safe** (`RecoveryService._reopen_stream`): scrcpy ativo **ou** heartbeat fresco → enfileira via **canal de comandos** (device executa localmente, zero ADB → não derruba o scrcpy); senão → ADB direto (fallback).
+- **Toggle por device** `recovery_enabled` (persistido no YAML, default true): UI na aba Stream da página do device — desativa a recuperação automática da stream (para streams fechadas de propósito, sem spam).
+- `offline` → cascata completa continua como antes (wifi → eth → reboot).
+
+**Testes:** +5 (stream_only não escala p/ wifi/reboot; heartbeat fresco → enfileira sem ADB; fallback ADB; `_is_stream_issue`) → **109 passed**.

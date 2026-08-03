@@ -176,6 +176,16 @@ const DEVICE_PAGE = (() => {
                         <button class="btn btn-primary btn-sm" onclick="DEVICE_PAGE.action('start-stream')">${UI.icon('play')} Iniciar</button>
                         <button class="btn btn-secondary btn-sm" onclick="DEVICE_PAGE.action('stop-stream')">${UI.icon('stop')} Parar</button>
                     </div>
+                    <div class="info-row" style="margin-top:var(--space-4);border-top:1px solid var(--border-subtle);padding-top:var(--space-3)">
+                        <span class="info-key">Recuperação automática da stream</span>
+                        <span class="info-val">
+                            <label class="switch" title="Watchdog reabre o player se a stream cair">
+                                <input type="checkbox" id="d-recovery-toggle" ${device.recovery_enabled === false ? '' : 'checked'} onchange="DEVICE_PAGE.toggleRecovery(this.checked)">
+                                <span class="switch-slider" aria-hidden="true"></span>
+                            </label>
+                        </span>
+                    </div>
+                    <p class="text-muted text-sm" style="margin-top:6px">Desative se a stream foi fechada de propósito — evita que o watchdog fique tentando reabrir.</p>
                 </div>
             </div>
         `;
@@ -374,6 +384,15 @@ const DEVICE_PAGE = (() => {
         }
     }
 
+    async function toggleRecovery(enabled) {
+        try {
+            await API.put(`/devices/${deviceId}`, { recovery_enabled: enabled });
+            UI.createToast(enabled ? 'Recuperação automática ativada' : 'Recuperação automática desativada', 'success');
+        } catch (e) {
+            UI.createToast(`Erro: ${e.message}`, 'error');
+        }
+    }
+
     // ── Screenshot ──────────────────────────────
 
     async function captureScreenshot() {
@@ -461,5 +480,5 @@ const DEVICE_PAGE = (() => {
         if (output) output.textContent = 'Shell limpo.';
     }
 
-    return { render, destroy, switchTab, refreshStatus, action, captureScreenshot, installApp, loadApps, uninstallApp, provisionScripts, deleteDevice, runShell, clearShell };
+    return { render, destroy, switchTab, refreshStatus, action, captureScreenshot, installApp, loadApps, uninstallApp, provisionScripts, deleteDevice, runShell, clearShell, toggleRecovery };
 })();

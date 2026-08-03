@@ -46,6 +46,7 @@ class DeviceConfig(BaseModel):
     rtsp_path: str = ""
     player: str = "vlc"
     root: bool = False
+    recovery_enabled: bool = True  # watchdog reabre stream em degraded/offline
     capabilities: DeviceCapabilities = Field(default_factory=DeviceCapabilities)
     player_extra_args: str = ""
     notes: str = ""
