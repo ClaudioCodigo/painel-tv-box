@@ -254,6 +254,8 @@ if [ "$INSTALL_MEDIAMTX" = true ]; then
             if curl -fsSL -o "$TMP_DIR/mediamtx.tar.gz" "$ASSET_URL"; then
                 mkdir -p "$MEDIAMTX_DATA"
                 tar -xzf "$TMP_DIR/mediamtx.tar.gz" -C "$TMP_DIR"
+                # Garante o diretório do binário (alguns Debian não têm /usr/local/bin)
+                mkdir -p "$(dirname "$MEDIAMTX_BIN")"
                 install -m 0755 "$TMP_DIR/mediamtx" "$MEDIAMTX_BIN"
                 log "MediaMTX ${LATEST} instalado em $MEDIAMTX_BIN"
             else
