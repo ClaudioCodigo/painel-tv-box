@@ -11,10 +11,12 @@ venv/
 logs/
 *.log
 backups/
+
+# scrcpy é runtime local (versões baixadas por máquina/SO — não versionar)
+scrcpy/
 scrcpy/versions/
 scrcpy/downloads/
 scrcpy/scrcpy*
-# Binários grandes que não pertencem ao git (são baixados pelo painel)
 scrcpy/*.apk
 scrcpy/mpv_splits/
 

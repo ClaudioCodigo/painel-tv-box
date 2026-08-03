@@ -74,19 +74,29 @@ class ScrcpyManager:
         META_FILE.write_text(json.dumps(self._meta, indent=2, ensure_ascii=False))
 
     def get_current_version(self) -> Optional[str]:
-        return self._meta.get("current")
+        """Versão ativa — só conta se o binário EXISTIR nesta plataforma.
+        O meta pode vir de outra máquina/SO (ex.: Windows) via git/backup;
+        nesse caso trata como não-instalado (None)."""
+        current = self._meta.get("current")
+        if not current:
+            return None
+        bin_path = VERSIONS_DIR / current / self._platform_binary_name()
+        if not bin_path.is_file():
+            return None
+        return current
 
     def get_installed_versions(self) -> list[dict]:
         result = []
+        current = self.get_current_version()  # só conta se binário existe
         for ver, info in self._meta.get("versions", {}).items():
             path = VERSIONS_DIR / ver
             binary_name = self._platform_binary_name()
-            current = self._meta.get("current") == ver
+            exists = path.is_dir() and (path / binary_name).is_file()
             result.append({
-                "version": ver, "current": current,
+                "version": ver, "current": current == ver,
                 "installed_at": info.get("installed_at", ""),
                 "size_bytes": info.get("size_bytes", 0),
-                "exists": path.is_dir() and (path / binary_name).is_file(),
+                "exists": exists,
             })
         return sorted(result, key=lambda x: x["version"], reverse=True)
 
@@ -173,8 +183,9 @@ class ScrcpyManager:
                 latest_tag = rel["tag_name"].lstrip("v")
                 break
 
-            current = self._meta.get("current")
-            has_update = bool(current and latest_tag and latest_tag != current)
+            current = self.get_current_version()  # None se binário não existe nesta plataforma
+            # Sem instalação válida nesta plataforma → sempre oferece download
+            has_update = bool(latest_tag and latest_tag != current)
             platform_info = self._platform_info(latest_tag or "0")
             assets = []
             if latest:
