@@ -112,6 +112,8 @@ node --check static/js/*.js              # sintaxe de todo o JS
 
 ## 5. Configuração (YAML)
 
+> ⚠️ **Config, devices e groups são LOCAIS** (gitignored — `config/*.yml`, `devices/*.yml`, `groups/*.yml`): contêm IPs e a `heartbeat_key` de cada máquina e **não vão no git push** (outra máquina sem esses arquivos usaria os defaults/templates). O repositório mantém **templates `.example`** (`config/*.yml.example`) e o painel **cria os arquivos reais no 1º boot** a partir deles. Configs antigos que já estiveram no git **permanecem no histórico** — para purgar, use `git filter-repo`.
+
 ### `config/system.yml` — carregado em `SystemConfig` (`app/models/config.py`)
 
 ```yaml

@@ -31,6 +31,11 @@ scripts/gerar_relatorio_nobreaks.py
 # Config (keep template, ignore generated)
 config/mediamtx.generated.yml
 
+# Configuração e estado LOCAL — não versionar (cada máquina tem a sua)
+config/*.yml
+devices/*.yml
+groups/*.yml
+
 # Segredos
 config/.panel_token
 

@@ -60,7 +60,20 @@ class ConfigurationManager:
         for d in [self.config_dir, self.devices_dir, self.groups_dir]:
             d.mkdir(exist_ok=True)
 
+    def _ensure_default_config(self, name: str):
+        """Cria o config real a partir do template .example se ainda não existir."""
+        path = self.config_dir / name
+        if path.exists():
+            return
+        example = self.config_dir / f"{name}.example"
+        if example.exists():
+            import shutil
+
+            shutil.copy(example, path)
+            logger.info("Config criada a partir do template: %s", path)
+
     def _load_system(self):
+        self._ensure_default_config("system.yml")
         path = self.config_dir / "system.yml"
         data = load_yaml(path)
         self.system = SystemConfig(**data) if data else SystemConfig()
@@ -79,16 +92,19 @@ class ConfigurationManager:
                 os.environ["PANEL_ADB_SERVER_PORT"] = str(self.system.adb.server_port)
 
     def _load_watchdog(self):
+        self._ensure_default_config("watchdog.yml")
         path = self.config_dir / "watchdog.yml"
         data = load_yaml(path)
         self.watchdog = WatchdogConfig(**data) if data else WatchdogConfig()
 
     def _load_players(self):
+        self._ensure_default_config("players.yml")
         path = self.config_dir / "players.yml"
         data = load_yaml(path)
         self.players = PlayersConfig(**data) if data else PlayersConfig()
 
     def _load_mediamtx(self):
+        self._ensure_default_config("mediamtx.yml")
         path = self.config_dir / "mediamtx.yml"
         data = load_yaml(path)
         self.mediamtx = MediaMTXConfig(**data) if data else MediaMTXConfig()

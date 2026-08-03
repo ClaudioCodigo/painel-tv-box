@@ -1,0 +1,31 @@
+# ============================================================
+# Template de config — COPIE/EDITE localmente (não versionado)
+# O painel cria `system.yml` a partir deste template no 1º boot,
+# e a heartbeat_key é gerada automaticamente (não coloque aqui).
+# ============================================================
+server:
+  host: 0.0.0.0
+  port: 8080
+  workers: 1
+host:
+  ip: 192.168.254.102          # IP desta máquina (usado na URL RTSP dos devices)
+adb:
+  binary: adb
+  default_port: 5555
+  connect_timeout: 10
+  command_delay: 0.5
+  server_port: 5038            # servidor ADB isolado do scrcpy (Ideia 4)
+paths:
+  devices_dir: devices
+  groups_dir: groups
+  config_dir: config
+  logs_dir: logs
+  backups_dir: backups
+  scripts_dir: scripts/android
+  remote_scripts_dir: /data/local/tmp/panel
+mediamtx:
+  api_url: http://localhost:9997
+  timeout: 5
+security:
+  enabled: true
+wizard_completed: false
