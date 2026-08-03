@@ -39,6 +39,7 @@ LAN_NET="192.168.254.0/24"
 ALLOW_ADB=false
 INSTALL_MEDIAMTX=true
 SKIP_VENV=false
+ENABLE_UFW=false
 
 # ── Detecta flags ──────────────────────────────────────────────────────────
 for arg in "$@"; do
@@ -49,11 +50,13 @@ for arg in "$@"; do
             echo "  --no-mediamtx   Não instala o MediaMTX"
             echo "  --lan CIDR      Sub-rede liberada no firewall (default: $LAN_NET)"
             echo "  --allow-adb     Abre 5555/tcp (ADB) para a LAN"
+            echo "  --enable-ufw    Habilita o UFW (libera SSH 22 antes — sem trancar o acesso)"
             exit 0
             ;;
         --no-venv) SKIP_VENV=true ;;
         --no-mediamtx) INSTALL_MEDIAMTX=false ;;
         --allow-adb) ALLOW_ADB=true ;;
+        --enable-ufw) ENABLE_UFW=true ;;
         --lan) shift; LAN_NET="${1:-$LAN_NET}" ;;
     esac
 done
@@ -234,12 +237,21 @@ if [ "$INSTALL_MEDIAMTX" = true ]; then
         if [ -n "$MTX_ARCH" ]; then
             info "Baixando MediaMTX ($MTX_ARCH) do GitHub..."
             TMP_DIR=$(mktemp -d)
-            # Resolve a última release via API
+            # Resolve a última release via API e descobre o asset REAL do linux
+            # (não assume o formato do nome — o MediaMTX publica com "v" no nome,
+            # ex: mediamtx_v1.19.3_linux_amd64.tar.gz)
+            ASSET_URL=""
             LATEST=$(curl -fsSL https://api.github.com/repos/bluenviron/mediamtx/releases/latest \
                         | grep -oP '"tag_name":\s*"\K[^"]+' || echo "v1.9.2")
-            ASSET="mediamtx_${LATEST#v}_linux_${MTX_ARCH}.tar.gz"
-            if curl -fsSL -o "$TMP_DIR/mediamtx.tar.gz" \
-                    "https://github.com/bluenviron/mediamtx/releases/download/${LATEST}/${ASSET}"; then
+            ASSET_URL=$(curl -fsSL https://api.github.com/repos/bluenviron/mediamtx/releases/latest \
+                        | grep -oP '"browser_download_url":\s*"\K[^"]+' \
+                        | grep "linux_${MTX_ARCH}" | grep '\.tar\.gz$' | head -1 || true)
+            if [ -z "$ASSET_URL" ]; then
+                # Fallback: assume o padrão atual (com "v" no nome do asset)
+                ASSET="mediamtx_${LATEST}_linux_${MTX_ARCH}.tar.gz"
+                ASSET_URL="https://github.com/bluenviron/mediamtx/releases/download/${LATEST}/${ASSET}"
+            fi
+            if curl -fsSL -o "$TMP_DIR/mediamtx.tar.gz" "$ASSET_URL"; then
                 mkdir -p "$MEDIAMTX_DATA"
                 tar -xzf "$TMP_DIR/mediamtx.tar.gz" -C "$TMP_DIR"
                 install -m 0755 "$TMP_DIR/mediamtx" "$MEDIAMTX_BIN"
@@ -288,8 +300,13 @@ EOF
         install -o "$MEDIAMTX_USER" -g "$MEDIAMTX_USER" -m 0644 \
             "$INSTALL_DIR/config/mediamtx.generated.yml" "$MEDIAMTX_DATA/mediamtx.yml"
         log "Config do MediaMTX copiada para $MEDIAMTX_DATA/mediamtx.yml"
+    elif [ -f "$INSTALL_DIR/config/mediamtx.yml" ]; then
+        # Fallback: config padrão funcional — o wizard do painel sobrescreve depois
+        install -o "$MEDIAMTX_USER" -g "$MEDIAMTX_USER" -m 0644 \
+            "$INSTALL_DIR/config/mediamtx.yml" "$MEDIAMTX_DATA/mediamtx.yml"
+        warn "Usando config padrão (config/mediamtx.yml) — gere o wizard para paths dos devices"
     else
-        warn "mediamtx.generated.yml não encontrado — gere pelo wizard do painel e re-execute este passo"
+        warn "Nenhuma config do MediaMTX encontrada — o serviço pode falhar até gerar pelo wizard"
     fi
 
     systemctl daemon-reload
@@ -344,14 +361,23 @@ log "Serviço panel.service configurado"
 # Firewall — libera apenas para a LAN, NUNCA 5555 para o mundo
 if command -v ufw &>/dev/null; then
     info "Configurando firewall (liberando para $LAN_NET)..."
-    ufw allow from "$LAN_NET" to any port "$PANEL_PORT/tcp" comment "Painel TV Box"
+    if [ "$ENABLE_UFW" = true ]; then
+        # Sempre libera SSH antes de habilitar — evita se trancar para fora
+        ufw allow 22/tcp comment "SSH"
+        ufw --force enable
+        log "UFW habilitado (--enable-ufw), SSH 22 liberado"
+    else
+        info "UFW NÃO habilitado (regras prontas; use --enable-ufw para ativar)"
+    fi
+    # Sintaxe correta do ufw: porta e protocolo separados (proto tcp)
+    ufw allow from "$LAN_NET" to any port "$PANEL_PORT" proto tcp comment "Painel TV Box"
     if [ "$INSTALL_MEDIAMTX" = true ]; then
-        ufw allow from "$LAN_NET" to any port "$MEDIAMTX_RTSP_PORT/tcp" comment "MediaMTX RTSP"
-        ufw allow from "$LAN_NET" to any port "$MEDIAMTX_RTMP_PORT/tcp" comment "MediaMTX RTMP"
-        ufw allow from "$LAN_NET" to any port "$MEDIAMTX_API_PORT/tcp" comment "MediaMTX API"
+        ufw allow from "$LAN_NET" to any port "$MEDIAMTX_RTSP_PORT" proto tcp comment "MediaMTX RTSP"
+        ufw allow from "$LAN_NET" to any port "$MEDIAMTX_RTMP_PORT" proto tcp comment "MediaMTX RTMP"
+        ufw allow from "$LAN_NET" to any port "$MEDIAMTX_API_PORT" proto tcp comment "MediaMTX API"
     fi
     if [ "$ALLOW_ADB" = true ]; then
-        ufw allow from "$LAN_NET" to any port "$ADB_PORT/tcp" comment "ADB (LAN)"
+        ufw allow from "$LAN_NET" to any port "$ADB_PORT" proto tcp comment "ADB (LAN)"
         warn "ADB 5555 liberado para $LAN_NET (--allow-adb)"
     else
         info "ADB 5555 NÃO foi aberto (use --allow-adb se precisar de adb connect externo)"
