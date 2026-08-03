@@ -32,6 +32,26 @@ def _env_default_adb():
     isolado do servidor do painel (Ideia 4 — ADB_SERVER_PORT no ADBManager)."""
     return {k: v for k, v in os.environ.items() if k != "ADB_SERVER_PORT"}
 
+
+def _env_panel_adb():
+    """Env com ADB_SERVER_PORT do painel (para adb exec-out do streaming)."""
+    env = dict(os.environ)
+    port = os.environ.get("PANEL_ADB_SERVER_PORT", "")
+    if port:
+        env["ADB_SERVER_PORT"] = port
+    return env
+
+
+def _is_headless() -> bool:
+    """True em servidor sem tela (Linux sem DISPLAY/WAYLAND_DISPLAY).
+
+    O scrcpy (mirroring) exige display — num servidor headless use o
+    Streaming (`adb exec-out screenrecord | ffmpeg`), que não precisa de tela.
+    """
+    if os.name == "nt":
+        return False
+    return not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
+
 # Versões do scrcpy são numéricas pontuadas (ex: 2.4, 3.0.1)
 SAFE_VERSION_RE = re.compile(r"^[0-9]+(\.[0-9]+){0,4}$")
 
@@ -56,6 +76,7 @@ class ScrcpyManager:
     def __init__(self):
         self._ensure_dirs()
         self._meta = self._load_meta()
+        self._streams: dict[str, dict] = {}  # target -> {adb, ffmpeg, running}
 
     def _ensure_dirs(self):
         for d in [SCRCPY_DIR, VERSIONS_DIR, DOWNLOADS_DIR]:
@@ -389,6 +410,14 @@ class ScrcpyManager:
             session = self._sessions[target]
             return {"success": True, "pid": session.get("pid"), "device": target, "already_running": True}
 
+        # Servidor sem tela: o scrcpy morre com "No available video device"
+        if _is_headless():
+            return {
+                "success": False,
+                "error": "Servidor sem tela (headless) — o scrcpy precisa de DISPLAY. "
+                         "Use o modo Streaming (screenrecord→ffmpeg→RTSP) ou instale um X virtual (xvfb).",
+            }
+
         adb_bin = SCRCPY_DIR / ("adb.exe" if os.name == "nt" else "adb")
         adb = ADBManager(binary=str(adb_bin) if adb_bin.is_file() else "adb", connect_timeout=7200)
         if not await adb.connect(device_ip, device_port):
@@ -502,70 +531,72 @@ class ScrcpyManager:
 
     async def start_streaming(self, device_ip: str, device_port: int = 5555,
                               rtmp_url: str = "rtmp://localhost:1935/SCRCPY_DISPLAY") -> dict:
-        """Inicia scrcpy com output via pipe para ffmpeg → RTMP → MediaMTX.
-        
-        Este modo funciona em servidores headless (sem display).
-        O stream RTMP é servido pelo MediaMTX como RTSP.
-        """
-        scrcpy_bin = self._get_scrcpy_bin()
-        if not scrcpy_bin:
-            return {"success": False, "error": "scrcpy não instalado"}
+        """Streaming headless: `adb exec-out screenrecord` → ffmpeg → RTMP → MediaMTX.
 
-        if os.name == "nt":
-            return {"success": False, "error": "Streaming via pipe suportado apenas no Linux. No Windows, use o modo normal."}
+        NÃO usa scrcpy: a partir da v3.3 o `--record=-` (stdout) foi removido
+        (Genymobile/scrcpy#6212) e o scrcpy exige display. O `screenrecord`
+        do Android envia H.264 direto para o stdout do `adb exec-out` — funciona
+        em servidor sem tela. NOTA: o screenrecord encerra sozinho após ~180s
+        (limite AOSP) — o painel reinicia a captura automaticamente.
+        """
+        target = f"{device_ip}:{device_port}"
+
+        # Sessão ativa? Não duplica
+        active = self._streams.get(target)
+        if active and active.get("running"):
+            return {"success": True, "already_running": True, "device": target,
+                    "rtmp_url": rtmp_url, "rtsp_url": rtmp_url.replace("rtmp://", "rtsp://").replace(":1935/", ":8554/")}
 
         from app.managers.adb import ADBManager
 
-        target = f"{device_ip}:{device_port}"
-        adb_bin = SCRCPY_DIR / ("adb.exe" if os.name == "nt" else "adb")
-        adb = ADBManager(binary=str(adb_bin) if adb_bin.is_file() else "adb", connect_timeout=7200)
+        adb = ADBManager()
         if not await adb.connect(device_ip, device_port):
             error = adb.metrics.get("last_error") or "ADB não conectou"
             self._record_event("stream_failed", target=target, error=error)
             return {"success": False, "error": f"ADB não conectou em {target}: {error}"}
 
-        # Pipe: scrcpy --no-window --record=- → ffmpeg → RTMP
-        scrcpy_cmd = [str(scrcpy_bin), "-s", target,
-                      "--no-window", "--no-audio", "--max-size", "1024",
-                      "--record=-", "--stay-awake"]
-
-        # Detecta ffmpeg
         import shutil as sh
+
         ffmpeg_bin = sh.which("ffmpeg")
         if not ffmpeg_bin:
-            return {"success": False, "error": "ffmpeg não encontrado — necessário para streaming via pipe"}
+            return {"success": False, "error": "ffmpeg não encontrado — instale (apt install ffmpeg)"}
 
-        ffmpeg_cmd = [ffmpeg_bin, "-re", "-i", "pipe:0", "-c", "copy",
-                      "-f", "flv", rtmp_url]
+        # adb exec-out screenrecord → H.264 no stdout → ffmpeg → RTMP
+        adb_cmd = [adb.binary, "-s", target, "exec-out",
+                   "screenrecord", "--output-format=h264",
+                   "--size", "1024x576", "--bit-rate", "4000000", "-"]
+        ffmpeg_cmd = [ffmpeg_bin, "-fflags", "nobuffer", "-i", "pipe:0",
+                      "-c", "copy", "-f", "flv", "-flvflags", "no_duration_filesize",
+                      rtmp_url]
 
         try:
-            proc_scrcpy = await asyncio.create_subprocess_exec(
-                *scrcpy_cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+            proc_adb = await asyncio.create_subprocess_exec(
+                *adb_cmd, env=_env_panel_adb(),
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
             )
-
             proc_ffmpeg = await asyncio.create_subprocess_exec(
-                *ffmpeg_cmd,
-                stdin=proc_scrcpy.stdout,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+                *ffmpeg_cmd, stdin=proc_adb.stdout,
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
             )
 
-            # Aguarda 5s para ver se crasha
-            await asyncio.sleep(5)
-            if proc_scrcpy.returncode is not None:
-                stderr = await proc_scrcpy.stderr.read() if proc_scrcpy.stderr else b""
-                return {"success": False, "error": "scrcpy encerrou cedo",
-                        "stderr": stderr.decode(errors="replace")[:300]}
+            # Aguarda 6s para ver se ffmpeg crasha (tela morta, URL ruim, etc.)
+            await asyncio.sleep(6)
             if proc_ffmpeg.returncode is not None:
                 stderr = await proc_ffmpeg.stderr.read() if proc_ffmpeg.stderr else b""
+                proc_adb.kill()
                 return {"success": False, "error": "ffmpeg encerrou cedo",
                         "stderr": stderr.decode(errors="replace")[:300]}
 
+            self._streams[target] = {
+                "running": True, "adb": proc_adb, "ffmpeg": proc_ffmpeg,
+                "rtmp_url": rtmp_url,
+                "started_at": datetime.now(timezone.utc).isoformat(),
+            }
+            asyncio.create_task(self._watch_stream(target, proc_adb, proc_ffmpeg))
+
             return {
                 "success": True,
-                "scrcpy_pid": proc_scrcpy.pid,
+                "adb_pid": proc_adb.pid,
                 "ffmpeg_pid": proc_ffmpeg.pid,
                 "device": target,
                 "rtmp_url": rtmp_url,
@@ -574,8 +605,42 @@ class ScrcpyManager:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
+    async def _watch_stream(self, target: str, proc_adb: asyncio.subprocess.Process,
+                            proc_ffmpeg: asyncio.subprocess.Process):
+        """Observa o par adb|ffmpeg; marca a sessão e tenta reiniciar a captura
+        quando o screenrecord encerra (~180s, limite AOSP) ou cai."""
+        try:
+            await proc_adb.wait()
+        except Exception:
+            pass
+        if proc_ffmpeg.returncode is None:
+            try:
+                proc_ffmpeg.kill()
+            except Exception:
+                pass
+        session = self._streams.get(target)
+        if session:
+            session["running"] = False
+        self._metrics["unexpected_exits"] += 1
+        self._record_event("stream_exit", target=target, adb_exit=proc_adb.returncode)
+        logger.info("Stream encerrado target=%s (adb exit=%s) — screenrecord reinicia no próximo start",
+                    target, proc_adb.returncode)
+
     async def stop_mirroring(self) -> dict:
         try:
+            # Para sessões de streaming (adb screenrecord + ffmpeg)
+            for target, s in list(self._streams.items()):
+                if s.get("running"):
+                    for key in ("ffmpeg", "adb"):
+                        proc = s.get(key)
+                        if proc and proc.returncode is None:
+                            try:
+                                proc.kill()
+                            except Exception:
+                                pass
+                    s["running"] = False
+                    logger.info("Stream parado: %s", target)
+
             import subprocess
             cmd = ["pkill", "-f", "scrcpy"] if os.name != "nt" else ["taskkill", "/F", "/IM", "scrcpy.exe"]
             proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
@@ -584,7 +649,7 @@ class ScrcpyManager:
             for session in self._sessions.values():
                 session["running"] = False
             self._record_event("stopped", exit_code=proc.returncode)
-            return {"success": True, "message": "scrcpy parado"}
+            return {"success": True, "message": "scrcpy/streaming parado"}
         except Exception as e:
             self._record_event("stop_failed", error=str(e))
             return {"success": False, "error": str(e)}

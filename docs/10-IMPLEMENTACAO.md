@@ -129,3 +129,10 @@ Problema do usuário: scrcpy caía ~30s após iniciar; o painel continuava dispa
 - `offline` → cascata completa continua como antes (wifi → eth → reboot).
 
 **Testes:** +5 (stream_only não escala p/ wifi/reboot; heartbeat fresco → enfileira sem ADB; fallback ADB; `_is_stream_issue`) → **109 passed**.
+
+## 12. scrcpy headless + streaming sem `--record=-` (2026-08-03)
+
+Upstream: scrcpy 3.3+ removeu `--record=-` (stdout) e o mirroring exige DISPLAY. Correções:
+- **`start_streaming` reescrito**: `adb exec-out screenrecord --output-format=h264 - | ffmpeg → RTMP → MediaMTX` — sem scrcpy, funciona headless. Sessões rastreadas em `_streams` (stop mata adb+ffmpeg). NOTA: screenrecord encerra em ~180s (limite AOSP) — documentado.
+- **`start_mirroring`**: guarda `_is_headless()` — em servidor sem tela retorna erro claro apontando para o Streaming.
+- **UI (scrcpy.js)**: botão "Streaming (sem tela)" + mostra a URL RTSP; hint de headless no card.

@@ -86,9 +86,12 @@ const SCRCPY = (() => {
 
   <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
    <button class="btn btn-primary" onclick="SCRCPY.startMirroring()">${UI.icon('play')} Iniciar Mirror</button>
+   <button class="btn btn-success" onclick="SCRCPY.startStreaming()">${UI.icon('monitor')} Streaming (sem tela)</button>
    <button class="btn btn-danger" onclick="SCRCPY.stopMirroring()">${UI.icon('stop')} Parar</button>
    <span class="live-badge" id="scrcpy-session"><span class="live-dot"></span> Parado</span>
   </div>
+  <p class="text-muted text-sm" style="margin-top:8px">Em servidor sem tela (headless), o Mirror não abre — use o <strong>Streaming</strong> (screenrecord→ffmpeg→RTSP).</p>
+  <div id="scrcpy-stream-url" style="margin-top:8px"></div>
  </div>
 
  <div class="section-title mt-md">${UI.icon('archive')} Versões</div>
@@ -134,12 +137,36 @@ const SCRCPY = (() => {
         } catch(e) { /* */ }
     }
 
+    async function startStreaming() {
+        const deviceId = document.getElementById('scrcpy-device')?.value;
+        if (!deviceId) {
+            UI.createToast('Selecione um dispositivo primeiro', 'warning');
+            return;
+        }
+        UI.createToast(`Iniciando streaming ${deviceId}...`, 'info');
+        try {
+            const res = await API.post(`/scrcpy/stream/${deviceId}`);
+            if (res.success) {
+                setSession('streaming');
+                const box = document.getElementById('scrcpy-stream-url');
+                if (box) {
+                    box.innerHTML = `<div class="info-row"><span class="info-key">RTSP</span><span class="info-val mono">${UI.escapeHtml(res.rtsp_url || '')}</span></div>`;
+                }
+                UI.createToast(`Streaming ativo (ffmpeg PID ${res.ffmpeg_pid})`, 'success');
+            } else {
+                UI.createToast(`${res.error || 'Falha no streaming'}`, 'error');
+            }
+        } catch (e) {
+            UI.createToast(`${e.message}`, 'error');
+        }
+    }
+
     function setSession(state) {
         const el = document.getElementById('scrcpy-session');
         if (!el) return;
-        const active = state === 'mirroring';
+        const active = state === 'mirroring' || state === 'streaming';
         el.innerHTML = active
-            ? '<span class="live-dot"></span> Espelhando'
+            ? '<span class="live-dot"></span> ' + (state === 'mirroring' ? 'Espelhando' : 'Streamando')
             : '<span class="status-mini-dot" style="opacity:0.4"></span> Parado';
     }
 
@@ -208,5 +235,5 @@ const SCRCPY = (() => {
         });
     }
 
-    return { render, startMirroring, stopMirroring, checkUpdates, installLatest, activateVersion, deleteVersion };
+    return { render, startMirroring, startStreaming, stopMirroring, checkUpdates, installLatest, activateVersion, deleteVersion };
 })();
