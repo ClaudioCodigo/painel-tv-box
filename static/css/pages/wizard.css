@@ -150,3 +150,34 @@
 .test-result.success { color: var(--text-primary); font-weight: 600; }
 .test-result.error { color: var(--text-primary); font-weight: 700; }
 .test-result.loading { background: var(--bg-surface); color: var(--text-muted); }
+
+/* Steps numerados (D6) */
+.wizard-steps {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+.wizard-step-dot {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.78em;
+    font-weight: 700;
+    border: 1px solid var(--border-strong);
+    color: var(--text-muted);
+    background: var(--bg-base);
+    transition: background var(--dur-fast) ease, color var(--dur-fast) ease, border-color var(--dur-fast) ease;
+}
+.wizard-step-dot.active {
+    background: var(--text-primary);
+    color: var(--text-inverse);
+    border-color: var(--text-primary);
+}
+.wizard-step-dot.done {
+    border-color: var(--text-primary);
+    color: var(--text-primary);
+}

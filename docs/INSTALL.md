@@ -1,5 +1,7 @@
 # Guia de Instalação — Debian 13 (Trixie)
 
+> **Atualizado (Rodada 2):** o script foi reescrito — usuários não-root, data dir `/var/lib/panel-tvbox` (backups fora do git), firewall restrito à LAN, MediaMTX baixado automaticamente, hardening systemd. Detalhes no topo do `deploy/install.sh`.
+
 ## Pré-requisitos
 
 - Debian 13 instalado

@@ -244,7 +244,9 @@ const DASHBOARD = (() => {
             const res = await API.post(`/devices/${deviceId}/${action}`);
             UI.createToast(`${res.success ? '✅' : '❌'} ${deviceId}: ${res.output || res.error || action}`, res.success ? 'success' : 'error');
         } catch (e) {
-            UI.createToast(`❌ ${e.message}`, 'error');
+            if (!UI.confirmStopScrcpy(e, () => runCommand(deviceId, action, btn))) {
+                UI.createToast(`Erro em ${action}: ${e.message}`, 'error');
+            }
         }
         if (btn) btn.disabled = false;
         // Recarrega status após breve delay

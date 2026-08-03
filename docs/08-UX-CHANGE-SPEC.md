@@ -1,7 +1,7 @@
 # Spec de Alterações UX/UI — Painel TV Box
 ## Esboço detalhado para revisão (Fases A–D do `docs/07-UX-REMODEL-PLAN.md`)
 
-> **Status:** ✅ Fases A e B **implementadas** (ver `docs/10-IMPLEMENTACAO.md`) · Fases C e D pendentes. **Data:** 2026-07-31 · **Base:** `06-UI-REDESIGN-SPEC.md` (design system) + plano `07-UX-REMODEL-PLAN.md` + pesquisa de cards. Cada seção define: estrutura (wireframe), comportamento, estados (loading/vazio/erro/dado), dados e backend.
+> **Status:** ✅ Fases A, B, C e D **implementadas** (ver `docs/10-IMPLEMENTACAO.md`). Ressalva: o item D3 "bloqueio 409 + Parar scrcpy" (§3.3/§4.4b) está documentado e aguarda a decisão de arquitetura ADB×scrcpy (Ideias 1–4 apresentadas). **Data:** 2026-08-03 · **Base:** `06-UI-REDESIGN-SPEC.md` (design system) + plano `07-UX-REMODEL-PLAN.md` + pesquisa de cards.
 >
 > **Como revisar:** leia e aponte ajustes — vou atualizar este doc e só então implementamos em sequência (A→B→C→D). Decisões abertas estão marcadas com **[AJUSTE]**.
 

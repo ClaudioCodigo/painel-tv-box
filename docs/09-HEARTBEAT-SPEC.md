@@ -93,7 +93,17 @@ O painel **realmente recebe e registra** a batida → sabe que o TV Box está na
 4. **Início do scrcpy:** o `start` usa ADB (é o ponto de entrada) — OK; a partir daí, vale a regra.
 5. **Fim da sessão:** `stop_mirroring` também usa ADB (`pkill` via adb shell) — aceito como ação explícita do usuário; após parar, ADB volta a ser liberado.
 
-**O heartbeat NUNCA é pausado** — ele é justamente o canal que não usa ADB e mantém a observabilidade enquanto o ADB está "congelado" pelo scrcpy.
+### 4.4c Canal de comandos via heartbeat (Ideia 3 — ✅ implementado)
+
+**Como testar:** `POST /api/devices/{id}/command {"action":"start_stream|stop_stream|reboot"}` (auth) enfileira; o `heartbeat.sh` puxa em `GET /api/heartbeat/{id}/commands` (linhas `id<TAB>cmd`, parseáveis no sh) e executa **localmente** (`sh -c`) reportando em `POST /api/heartbeat/{id}/result`. **Zero ADB painel→device** → scrcpy nunca cai por ação do painel. Módulo: `app/services/command_queue.py`.
+
+### 4.4d Servidor ADB isolado (Ideia 4 — ✅ implementado)
+
+`config/system.yml → adb.server_port: 5038` (ou env `PANEL_ADB_SERVER_PORT`). O `ADBManager` injeta `ADB_SERVER_PORT` em todos os subprocessos ADB do painel; os subprocessos do scrcpy usam `_env_default_adb()` (porta default 5037). Testável: `ADBManager().server_port == 5038`.
+
+### 4.4e Bloqueio 409 quando scrcpy ativo (Ideia 1 — frontend ✅, backend ⏳)
+
+`UI.confirmStopScrcpy(err, retry)` pronto e ligado nas ações (device.js/dashboard.js) — mostra "Parar scrcpy e continuar" quando recebe `409 adb_busy_scrcpy`. O **backend** 409 nos endpoints ADB ainda não foi emitido (o watchdog já pula ADB quando scrcpy ativo/heartbeat fresco; com as Ideias 3+4 o impacto de ações manuais cai muito).
 
 ---
 

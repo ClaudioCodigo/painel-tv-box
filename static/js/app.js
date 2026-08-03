@@ -90,9 +90,13 @@ const APP = (() => {
             const groupId = hash.replace('/group/', '');
             handler = {
                 render: (el) => {
-                    el.innerHTML = `<div class="loading">Grupo ${escapeHtml(groupId)} (em breve)</div>`;
-                    UI.setPageTitle('Grupo');
-                }
+                    if (GROUP_PAGE && GROUP_PAGE.render) {
+                        GROUP_PAGE.render(el, groupId);
+                    } else {
+                        el.innerHTML = `<div class="loading">Grupo ${escapeHtml(groupId)}...</div>`;
+                    }
+                },
+                destroy: () => { if (GROUP_PAGE && GROUP_PAGE.destroy) GROUP_PAGE.destroy(); }
             };
         }
 

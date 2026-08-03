@@ -1,9 +1,11 @@
 """API routes para dispositivos (TV Boxes)."""
 
+import asyncio
+
 from fastapi import APIRouter, HTTPException
 
 from app.models.device import DeviceConfig
-from app.utils.system import slugify
+from app.utils.system import slugify, is_safe_package
 
 router = APIRouter(prefix="/api/devices", tags=["devices"])
 
@@ -207,6 +209,30 @@ async def device_status(device_id: str):
         connect_timeout=config.system.adb.connect_timeout if config.system else 10,
     )
 
+    # ── Regra ADB×scrcpy (§3.3): scrcpy ativo OU heartbeat fresco → ZERO ADB ──
+    from datetime import datetime, timedelta
+    from app.managers.scrcpy import ScrcpyManager
+
+    target = f"{device.ip}:{device.adb_port}"
+    hb_timeout = (config.watchdog.heartbeat_timeout if config.watchdog else 60) or 60
+    heartbeat_fresh = bool(
+        device.state.last_heartbeat
+        and (datetime.now() - device.state.last_heartbeat).total_seconds() < hb_timeout
+    )
+    if ScrcpyManager.is_device_active(target) or heartbeat_fresh:
+        # Resposta construída SEM ADB (o status em foco vem do heartbeat/estado)
+        device.state.status = "online"
+        device.state.last_seen = datetime.now()
+        return {
+            "ping": True,
+            "adb_connected": True,
+            "root": None,
+            "model": "",
+            "android": "",
+            "device_ip": device.ip,
+            "source": "heartbeat" if heartbeat_fresh else "scrcpy",
+        }
+
     status = await adb.is_reachable(device.ip, device.adb_port)
 
     # Atualiza state em memória
@@ -309,7 +335,8 @@ async def device_uninstall_app(device_id: str, data: dict):
     package = (data.get("package") or "").strip()
     if not package:
         raise HTTPException(400, "Package name é obrigatório")
-
+    if not is_safe_package(package):
+        raise HTTPException(400, "Package name inválido")
     from app.managers.adb import ADBManager
     adb = ADBManager()
     output, code = await adb.shell(device.ip, f"pm uninstall {package}", port=device.adb_port, timeout=15)
@@ -324,7 +351,9 @@ from pathlib import Path
 from fastapi.responses import FileResponse
 from fastapi import UploadFile, File as FastAPIFile
 
-SCREENSHOTS_DIR = Path(__file__).resolve().parent.parent.parent / "backups" / "screenshots"
+from app.utils.system import get_data_dir
+
+SCREENSHOTS_DIR = get_data_dir() / "screenshots"
 
 
 @router.post("/{device_id}/screenshot")
@@ -400,6 +429,52 @@ async def device_screenshot_get(device_id: str):
 # ── APK Install ─────────────────────────────────
 
 
+@router.post("/{device_id}/command")
+async def device_command(device_id: str, data: dict):
+    """Enfileira comando para execução LOCAL no TV Box via heartbeat (Ideia 3).
+
+    O device puxa o comando no próximo POST /heartbeat e executa no próprio shell
+    (sh -c) — zero ADB painel→device, então o scrcpy nunca cai por ação do painel.
+    """
+    import shlex
+
+    from app.services import command_queue as cq
+    from app.managers.player import PlayerManager
+
+    config = _get_config()
+    device = config.get_device(device_id)
+    if not device:
+        raise HTTPException(404, "Dispositivo não encontrado")
+
+    action = (data.get("action") or "").strip()
+    if action == "reboot":
+        cmd = "reboot"
+    elif action == "stop_stream":
+        pm = PlayerManager(
+            adb_manager=None,
+            players_config=config.players,
+            host_ip=config.system.host.ip if config.system else "192.168.254.102",
+        )
+        player_def = pm._get_player_def(device.player or "vlc")
+        pkg = player_def.force_stop if player_def else (device.player or "org.videolan.vlc")
+        cmd = f"am force-stop {shlex.quote(pkg)}"
+    elif action == "start_stream":
+        pm = PlayerManager(
+            adb_manager=None,
+            players_config=config.players,
+            host_ip=config.system.host.ip if config.system else "192.168.254.102",
+            rtsp_port=config.mediamtx.server.rtsp_port if config.mediamtx and hasattr(config.mediamtx, "server") else 8554,
+        )
+        cmd = pm.build_start_cmd(device)
+        if not cmd:
+            raise HTTPException(400, f"Player '{device.player or 'vlc'}' não encontrado em players.yml")
+    else:
+        raise HTTPException(400, "Ação não suportada. Use: start_stream | stop_stream | reboot")
+
+    item = await cq.enqueue(device_id, action, cmd)
+    return {"queued": True, "id": item["id"], "action": action, "eta": "~20s (próximo heartbeat)"}
+
+
 @router.post("/{device_id}/install-apk")
 async def device_install_apk(device_id: str, file: UploadFile = FastAPIFile(...)):
     """Faz upload e instala um APK no dispositivo."""
@@ -411,17 +486,23 @@ async def device_install_apk(device_id: str, file: UploadFile = FastAPIFile(...)
     if not file.filename or not file.filename.endswith(".apk"):
         raise HTTPException(400, "Arquivo precisa ser .apk")
 
+    # Limite de upload (200 MB) — evita exaustão de memória
+    MAX_APK_BYTES = 200 * 1024 * 1024
+    content = await file.read(MAX_APK_BYTES + 1)
+    if len(content) > MAX_APK_BYTES:
+        raise HTTPException(413, "APK muito grande (máx 200 MB)")
+
     from app.managers.adb import ADBManager
 
     adb = ADBManager()
 
-    # Salva APK temporariamente
-    apk_dir = Path(__file__).resolve().parent.parent.parent / "backups" / "apks"
+    # Salva APK temporariamente no data dir (fora do repo)
+    apk_dir = get_data_dir() / "apks"
     apk_dir.mkdir(parents=True, exist_ok=True)
     apk_path = apk_dir / f"{device_id}_{uuid.uuid4().hex[:8]}.apk"
 
-    content = await file.read()
-    apk_path.write_bytes(content)
+    # Escrita síncrona de dezenas de MB fora do event loop
+    await asyncio.to_thread(apk_path.write_bytes, content)
 
     # Push para o TV Box
     remote_apk = f"/data/local/tmp/panel/{apk_path.name}"

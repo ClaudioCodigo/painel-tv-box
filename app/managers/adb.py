@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import os
 import time
 from pathlib import Path
 from typing import Optional
@@ -14,9 +15,15 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 class ADBManager:
     """Gerencia conexões ADB com TV Boxes via TCP."""
 
-    def __init__(self, binary: str = "adb", connect_timeout: int = 10):
+    def __init__(self, binary: str = "adb", connect_timeout: int = 10, server_port: int | None = None):
         self.binary = binary
         self.connect_timeout = connect_timeout
+        # Servidor ADB isolado (Ideia 4): painel usa porta própria para não
+        # interferir no transporte do scrcpy (default 5037).
+        if server_port is None:
+            env_port = os.environ.get("PANEL_ADB_SERVER_PORT", "")
+            server_port = int(env_port) if env_port.isdigit() else None
+        self.server_port = server_port
         self._connected: set[str] = set()
         self._locks: dict[str, asyncio.Lock] = {}
         self._last_connect_attempt: dict[str, float] = {}
@@ -39,9 +46,14 @@ class ADBManager:
 
     async def _run(self, *args, timeout: int = 15) -> tuple[str, int]:
         cmd = [self.binary, *args]
+        # Se a porta isolada estiver configurada, injeta ADB_SERVER_PORT
+        env = None
+        if self.server_port:
+            env = {**os.environ, "ADB_SERVER_PORT": str(self.server_port)}
         try:
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
+                env=env,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )

@@ -82,16 +82,26 @@ class ProvisionService:
         try:
             hb = self._heartbeat_conf(device)
             if hb:
+                import tempfile
+
                 conf_remote = f"{REMOTE_DIR}/heartbeat.conf"
-                pushed = await self.adb.push(ip, hb, conf_remote, port=port)
-                if pushed:
-                    # conf já está no device — basta iniciar (start lê o heartbeat.conf)
-                    await self.adb.shell(
-                        ip, f"sh {REMOTE_DIR}/heartbeat.sh start", port=port, timeout=15
-                    )
-                    results.append("heartbeat.conf")
-                else:
-                    errors.append("push heartbeat.conf falhou")
+                # adb push espera um CAMINHO local; modo binário p/ não traduzir
+                # \n → \r\n (Windows), o que quebraria o sleep/URL no device.
+                with tempfile.NamedTemporaryFile(suffix=".conf", delete=False) as tmp:
+                    tmp.write(hb.encode("utf-8"))
+                    tmp_path = tmp.name
+                try:
+                    pushed = await self.adb.push(ip, tmp_path, conf_remote, port=port)
+                    if pushed:
+                        # conf já está no device — basta iniciar (start lê o heartbeat.conf)
+                        await self.adb.shell(
+                            ip, f"sh {REMOTE_DIR}/heartbeat.sh start", port=port, timeout=15
+                        )
+                        results.append("heartbeat.conf")
+                    else:
+                        errors.append("push heartbeat.conf falhou")
+                finally:
+                    os.unlink(tmp_path)
         except Exception as e:
             errors.append(f"heartbeat: {e}")
 

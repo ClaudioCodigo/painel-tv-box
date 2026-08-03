@@ -36,14 +36,21 @@ const GROUPS = (() => {
                 const devices = g.devices || [];
                 const hasDevices = devices.length > 0;
                 const onlineCount = devices.filter(d => d.status === 'online').length;
+                const degradedCount = devices.filter(d => d.status === 'degraded' || d.status === 'warning').length;
+                const offlineCount = devices.filter(d => d.status === 'offline').length;
 
                 html += `
                     <div class="group-card">
                         <div class="group-header">
                             <span class="group-icon">${UI.icon('users')}</span>
                             <div class="group-info">
-                                <div class="group-name">${UI.escapeHtml(g.name || g.id)}</div>
-                                <div class="group-meta">${UI.escapeHtml(g.description || '')} — ${g.device_count} dispositivos (${onlineCount} online)</div>
+                                <div class="group-name"><a href="#/group/${encodeURIComponent(g.id)}">${UI.escapeHtml(g.name || g.id)}</a></div>
+                                <div class="group-meta">${UI.escapeHtml(g.description || '')} — ${g.device_count} dispositivos</div>
+                                <div class="group-counters">
+                                    <span class="dcard-counter"><span class="dcard-status-shape online"></span>${onlineCount}</span>
+                                    <span class="dcard-counter"><span class="dcard-status-shape degraded"></span>${degradedCount}</span>
+                                    <span class="dcard-counter"><span class="dcard-status-shape offline"></span>${offlineCount}</span>
+                                </div>
                             </div>
                             <div class="group-actions-list">
                                 <button class="btn btn-sm btn-primary" onclick="GROUPS.action('${g.id}', 'start-stream')" ${!hasDevices ? 'disabled' : ''}>${UI.icon('play')} Start</button>

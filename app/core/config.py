@@ -1,6 +1,7 @@
 """ConfigurationManager — carrega, valida e salva toda configuração em YAML."""
 
 import logging
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -71,6 +72,11 @@ class ConfigurationManager:
             self.system.security.heartbeat_key = secrets.token_urlsafe(32)
             self.save_system()
             logger.info("Heartbeat key gerada (config/system.yml → security.heartbeat_key)")
+
+        # Propaga server_port do ADB para a env (Ideia 4 — ADBManager lê a env)
+        if self.system and self.system.adb and self.system.adb.server_port:
+            if not os.environ.get("PANEL_ADB_SERVER_PORT"):
+                os.environ["PANEL_ADB_SERVER_PORT"] = str(self.system.adb.server_port)
 
     def _load_watchdog(self):
         path = self.config_dir / "watchdog.yml"

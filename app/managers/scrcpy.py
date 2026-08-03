@@ -26,6 +26,12 @@ META_FILE = SCRCPY_DIR / "version.json"
 MAX_KEEP_VERSIONS = 3
 GITHUB_API = "https://api.github.com/repos/genymobile/scrcpy/releases"
 
+
+def _env_default_adb():
+    """Env sem ADB_SERVER_PORT: o scrcpy usa o servidor ADB default (5037),
+    isolado do servidor do painel (Ideia 4 — ADB_SERVER_PORT no ADBManager)."""
+    return {k: v for k, v in os.environ.items() if k != "ADB_SERVER_PORT"}
+
 # Versões do scrcpy são numéricas pontuadas (ex: 2.4, 3.0.1)
 SAFE_VERSION_RE = re.compile(r"^[0-9]+(\.[0-9]+){0,4}$")
 
@@ -222,41 +228,16 @@ class ScrcpyManager:
 
             logger.info("Download: %s (%.1f MB)", dl_path.name, dl_path.stat().st_size / (1024 * 1024))
 
-            # Extrai
-            ver_dir.mkdir(parents=True, exist_ok=True)
-            if archive_type == "zip":
-                with zipfile.ZipFile(dl_path, "r") as zf:
-                    zf.extractall(ver_dir)
-            else:
-                with tarfile.open(dl_path, "r:gz") as tf:
-                    tf.extractall(ver_dir)
-
+            # Extração + flatten + checksum de tamanho: pesado — roda fora do event loop
+            extract = await asyncio.to_thread(
+                self._extract_archive, ver_dir, dl_path, archive_type, binary_name
+            )
             dl_path.unlink(missing_ok=True)
+            if not extract.get("ok"):
+                shutil.rmtree(ver_dir, ignore_errors=True)
+                return {"success": False, "error": extract.get("error", "Falha na extração")}
 
-            # Flatten: move tudo da subpasta extraída pra raiz
-            # O zip/tar.gz do scrcpy extrai como: versions/4.1/scrcpy-{platform}-v{version}/*
-            for subdir in [d for d in ver_dir.iterdir() if d.is_dir()]:
-                for item in subdir.iterdir():
-                    dest = ver_dir / item.name
-                    if not dest.exists():
-                        shutil.move(str(item), str(dest))
-                try:
-                    subdir.rmdir()
-                except OSError:
-                    pass  # não vazio, ok
-
-            # Verifica binário
-            bin_path = ver_dir / binary_name
-            if not bin_path.is_file():
-                content = [str(p.relative_to(ver_dir)) for p in sorted(ver_dir.rglob("*")) if p.is_file()]
-                return {"success": False, "error": f"Binário '{binary_name}' não encontrado. Conteúdo: {content[:15]}"}
-
-            try:
-                bin_path.chmod(0o755)
-            except Exception:
-                pass
-
-            size = sum(f.stat().st_size for f in ver_dir.rglob("*") if f.is_file())
+            size = extract["size"]
             self._meta.setdefault("versions", {})[version] = {
                 "installed_at": datetime.now(timezone.utc).isoformat(),
                 "size_bytes": size, "asset": asset_name,
@@ -269,6 +250,40 @@ class ScrcpyManager:
             logger.error("Download scrcpy v%s falhou: %s", version, e)
             shutil.rmtree(ver_dir, ignore_errors=True)
             return {"success": False, "error": str(e)}
+
+    def _extract_archive(self, ver_dir: Path, dl_path: Path, archive_type: str, binary_name: str) -> dict:
+        """Extrai o arquivo baixado, achata a estrutura e valida o binário (síncrono, roda em thread)."""
+        ver_dir.mkdir(parents=True, exist_ok=True)
+        if archive_type == "zip":
+            with zipfile.ZipFile(dl_path, "r") as zf:
+                zf.extractall(ver_dir)
+        else:
+            with tarfile.open(dl_path, "r:gz") as tf:
+                tf.extractall(ver_dir)
+
+        # Flatten: move tudo da subpasta extraída pra raiz
+        for subdir in [d for d in ver_dir.iterdir() if d.is_dir()]:
+            for item in subdir.iterdir():
+                dest = ver_dir / item.name
+                if not dest.exists():
+                    shutil.move(str(item), str(dest))
+            try:
+                subdir.rmdir()
+            except OSError:
+                pass  # não vazio, ok
+
+        bin_path = ver_dir / binary_name
+        if not bin_path.is_file():
+            content = [str(p.relative_to(ver_dir)) for p in sorted(ver_dir.rglob("*")) if p.is_file()]
+            return {"ok": False, "error": f"Binário '{binary_name}' não encontrado. Conteúdo: {content[:15]}"}
+
+        try:
+            bin_path.chmod(0o755)
+        except Exception:
+            pass
+
+        size = sum(f.stat().st_size for f in ver_dir.rglob("*") if f.is_file())
+        return {"ok": True, "size": size}
 
     # ── Activate / Rollback ───────────────────────────
 
@@ -393,7 +408,9 @@ class ScrcpyManager:
                 self._metrics["starts"] += 1
                 logger.info("scrcpy tentativa %d/%d target=%s cmd=%s", attempt, max_attempts, target, " ".join(cmd))
                 proc = await asyncio.create_subprocess_exec(
-                    *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+                    *cmd,
+                    env=_env_default_adb(),
+                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
                 )
                 try:
                     await asyncio.wait_for(proc.wait(), timeout=5)

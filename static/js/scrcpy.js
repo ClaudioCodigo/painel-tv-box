@@ -84,9 +84,10 @@ const SCRCPY = (() => {
    </div>
   </details>
 
-  <div style="display:flex;gap:8px;margin-top:12px">
+  <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
    <button class="btn btn-primary" onclick="SCRCPY.startMirroring()">${UI.icon('play')} Iniciar Mirror</button>
    <button class="btn btn-danger" onclick="SCRCPY.stopMirroring()">${UI.icon('stop')} Parar</button>
+   <span class="live-badge" id="scrcpy-session"><span class="live-dot"></span> Parado</span>
   </div>
  </div>
 
@@ -120,9 +121,9 @@ const SCRCPY = (() => {
             const vv = vr.versions || [];
             if (!vv.length) { el.innerHTML = '<div class="empty-state">Nenhuma versão instalada</div>'; return; }
             el.innerHTML = vv.map(v => `
-                <div class="scrcpy-version-item">
+                <div class="scrcpy-version-item ${v.current ? 'active' : ''}">
                     <div>
-                        <div class="scrcpy-version-name">v${v.version} ${v.current?'<span class="badge badge-primary">ativo</span>':''}</div>
+                        <div class="scrcpy-version-name">v${v.version} ${v.current ? '<span class="badge">ativo</span>' : ''}</div>
                         <div class="scrcpy-version-meta">${(v.size_bytes/1048576).toFixed(1)} MB</div>
                     </div>
                     <div class="scrcpy-version-actions">
@@ -131,6 +132,15 @@ const SCRCPY = (() => {
                     </div>
                 </div>`).join('');
         } catch(e) { /* */ }
+    }
+
+    function setSession(state) {
+        const el = document.getElementById('scrcpy-session');
+        if (!el) return;
+        const active = state === 'mirroring';
+        el.innerHTML = active
+            ? '<span class="live-dot"></span> Espelhando'
+            : '<span class="status-mini-dot" style="opacity:0.4"></span> Parado';
     }
 
     async function startMirroring() {
@@ -143,7 +153,7 @@ const SCRCPY = (() => {
         UI.createToast(`Iniciando mirror ${deviceId}...`,'info');
         try {
             const res = await API.post(`/scrcpy/start/${deviceId}`, { extra_args: allArgs });
-            if (res.success) UI.createToast(`✅ scrcpy rodando (PID ${res.pid})`,'success');
+            if (res.success) { UI.createToast(`scrcpy rodando (PID ${res.pid})`,'success'); setSession('mirroring'); }
             else UI.createToast(`❌ ${res.error}`,'error');
         } catch(e) { UI.createToast(`❌ ${e.message}`,'error'); }
     }
@@ -151,7 +161,8 @@ const SCRCPY = (() => {
     async function stopMirroring() {
         try {
             await API.post('/scrcpy/stop');
-            UI.createToast('⏹ scrcpy parado','success');
+            UI.createToast('scrcpy parado','success');
+            setSession('stopped');
         } catch(e) { UI.createToast(`❌ ${e.message}`,'error'); }
     }
 
@@ -174,11 +185,17 @@ const SCRCPY = (() => {
     }
 
     async function activateVersion(version) {
-        try {
-            const res = await API.post(`/scrcpy/activate/${version}`);
-            UI.createToast(res.success ? `✅ v${version} ativada` : `❌ ${res.error}`,'success');
-            await loadStatus();
-        } catch(e) { UI.createToast(`❌ ${e.message}`,'error'); }
+        UI.showModal(
+            `Ativar scrcpy v${version}`,
+            `<p>Trocar a versão ativa do scrcpy para <strong>v${version}</strong>?</p>`,
+            async () => {
+                try {
+                    const res = await API.post(`/scrcpy/activate/${version}`);
+                    UI.createToast(res.success ? `v${version} ativada` : `❌ ${res.error}`, res.success ? 'success' : 'error');
+                    await loadStatus();
+                } catch(e) { UI.createToast(`❌ ${e.message}`,'error'); }
+            }
+        );
     }
 
     async function deleteVersion(version) {

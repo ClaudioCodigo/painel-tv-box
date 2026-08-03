@@ -105,4 +105,27 @@ Prioridade:
 
 ---
 
+## Rodada 2 (2026-08-03) — deploy, threads, backup e segurança restante
+
+Auditoria complementar + correções, cobrindo os módulos ainda pendentes da Rodada 1.
+
+### Correções aplicadas na Rodada 2
+
+| # | Severidade | Item | Status |
+|---|---|---|---|
+| R1 | ALTA | **`deploy/install.sh` reescrito p/ Debian 13 Trixie**: usuários não-root (`panel`, `mediamtx`), `PANEL_DATA_DIR=/var/lib/panel-tvbox`, firewall **restrito à LAN** (8080/8554/1935/9997; ADB 5555 só com `--allow-adb`), MediaMTX baixado automaticamente (GitHub), hardening systemd (`NoNewPrivileges`, `ProtectSystem`, `PrivateTmp`), rsync **sem `--delete`** | ✅ |
+| R2 | ALTA | **Backup movido para pasta de dados (appdata)**: `PANEL_DATA_DIR` (env) → Windows `%LOCALAPPDATA%\PanelTVBox`, Linux `/var/lib/panel-tvbox`, macOS `~/Library/Application Support/PanelTVBox`. Backups/screenshots/apks **fora do repositório** — git push/pull não mistura dados de máquinas | ✅ |
+| R3 | ALTA | **Stutter/travamento do event loop**: I/O síncrono pesado movido para `asyncio.to_thread` — logs (search/tail/sources/download), backup (export/import ZIP), scrcpy (extração/flatten), APK (escrita); `psutil.cpu_percent(interval=None)` (não bloqueia 100 ms) | ✅ |
+| R4 | ALTA | **Injeção de comando no shell do device**: `shlex.quote` em `player.py` (rtsp_url, package, activity, title, extra) e `start_stream.sh` (`"$EXTRA"`); `uninstall-app` valida package (regex) | ✅ |
+| R5 | MÉDIA | **SSRF**: wizard `validate-device` valida IP (bloqueia loopback/link-local/multicast); `mediamtx.api_url` exige localhost/rede privada (wizard + router `_get_mgr`); `scrcpy rtmp_url` exige rtmp/rtmps p/ localhost/rede privada | ✅ |
+| R6 | MÉDIA | **Uploads sem limite**: APK ≤ 200 MB (413), backup ZIP ≤ 50 MB (413) | ✅ |
+| R7 | BAIXA | **`pyproject.toml` sem `[build-system]`** (impede `pip install .`): adicionado + `py-modules = []` — `pip install .` valida (exit 0) | ✅ |
+| R8 | — | **MediaMTX gerado sem auth** (`pass: ''`) — **não alterado** (mudar quebraria os streams VLC/MPV atuais; documentado como pendente p/ decisão) | ⏸️ |
+
+### Verificação Rodada 2
+- ✅ `pytest` — **70 passed**
+- ✅ Backup exportado para `%LOCALAPPDATA%\PanelTVBox\backups` (fora do repo)
+- ✅ `pip install .` com exit 0
+- ✅ `node --check` inalterado (sem mudanças de JS nesta rodada)
+
 *Relatório gerado após a sessão de auditoria + correções. O estado atual do código é o que está documentado em `docs/LLM.md`.*

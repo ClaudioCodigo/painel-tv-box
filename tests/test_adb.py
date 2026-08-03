@@ -77,3 +77,54 @@ class TestADBManager:
 
             result = await adb.push("192.168.1.1", "/local/file", "/remote/file")
             assert result is True
+
+
+class TestADBServerIsolation:
+    """Ideia 4: servidor ADB isolado do scrcpy via ADB_SERVER_PORT."""
+
+    @pytest.mark.asyncio
+    async def test_run_injects_adb_server_port(self, monkeypatch):
+        from app.managers.adb import ADBManager
+
+        captured = {}
+
+        async def fake_exec(*args, **kwargs):
+            captured["env"] = kwargs.get("env")
+            class FakeProc:
+                returncode = 0
+                async def communicate(self):
+                    return (b"ok", b"")
+            return FakeProc()
+
+        monkeypatch.setattr("asyncio.create_subprocess_exec", fake_exec)
+        m = ADBManager(binary="adb", server_port=5038)
+        await m._run("connect", "10.0.0.5:5555")
+        assert captured["env"] is not None
+        assert captured["env"]["ADB_SERVER_PORT"] == "5038"
+
+    @pytest.mark.asyncio
+    async def test_run_no_env_when_unset(self, monkeypatch):
+        from app.managers.adb import ADBManager
+
+        captured = {}
+
+        async def fake_exec(*args, **kwargs):
+            captured["env"] = kwargs.get("env")
+            class FakeProc:
+                returncode = 0
+                async def communicate(self):
+                    return (b"", b"")
+            return FakeProc()
+
+        monkeypatch.setattr("asyncio.create_subprocess_exec", fake_exec)
+        m = ADBManager(binary="adb", server_port=None)
+        await m._run("devices")
+        assert captured["env"] is None
+
+    @pytest.mark.asyncio
+    async def test_server_port_from_env(self, monkeypatch):
+        from app.managers.adb import ADBManager
+
+        monkeypatch.setenv("PANEL_ADB_SERVER_PORT", "5042")
+        m = ADBManager(binary="adb")
+        assert m.server_port == 5042

@@ -27,6 +27,12 @@ class HeartbeatBody(BaseModel):
     activity: Optional[str] = None
 
 
+class HeartbeatResultBody(BaseModel):
+    id: str
+    success: bool = False
+    output: Optional[str] = None
+
+
 def _get_config():
     import app.main
 
@@ -67,4 +73,43 @@ async def device_heartbeat(
         device.state.current_activity = body.activity.strip()
 
     logger.debug("[heartbeat] %s ok", device_id)
+    return None
+
+
+@router.get("/{device_id}/commands")
+async def heartbeat_commands(device_id: str, x_heartbeat_key: str = Header("", alias="X-Heartbeat-Key")):
+    """Device puxa comandos pendentes (Ideia 3).
+
+    Resposta text/plain: uma linha por comando, `id<TAB>cmd` — parseável no
+    shell do Android sem JSON. Linhas vazias = sem comandos.
+    """
+    config = _get_config()
+    expected = ""
+    if config and config.system and config.system.security:
+        expected = config.system.security.heartbeat_key
+    if not expected or not hmac.compare_digest(x_heartbeat_key, expected):
+        raise HTTPException(401, "Chave de heartbeat inválida")
+
+    from app.services import command_queue as cq
+
+    pending = await cq.pop_pending(device_id)
+    lines = [f"{c['id']}\t{c['cmd']}" for c in pending]
+    from fastapi.responses import PlainTextResponse
+
+    return PlainTextResponse("\n".join(lines), media_type="text/plain; charset=utf-8")
+
+
+@router.post("/{device_id}/result")
+async def heartbeat_result(device_id: str, body: HeartbeatResultBody, x_heartbeat_key: str = Header("", alias="X-Heartbeat-Key")):
+    """Device reporta o resultado de um comando executado localmente."""
+    config = _get_config()
+    expected = ""
+    if config and config.system and config.system.security:
+        expected = config.system.security.heartbeat_key
+    if not expected or not hmac.compare_digest(x_heartbeat_key, expected):
+        raise HTTPException(401, "Chave de heartbeat inválida")
+
+    from app.services import command_queue as cq
+
+    await cq.ack(device_id, body.id, body.success, body.output or "")
     return None

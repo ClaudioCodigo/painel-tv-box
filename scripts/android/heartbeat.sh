@@ -1,8 +1,6 @@
 #!/system/bin/sh
-# heartbeat.sh — envia batida HTTP ao painel (substitui reverse_ping.sh)
-# O TV Box posta /api/heartbeat/<device_id> em loop com cooldown.
-# SEM ADB no servidor: o painel registra last_heartbeat e sabe que o box
-# está na rede sem spammar o ADB (que derrubaria o scrcpy).
+# heartbeat.sh — batida HTTP + execução de comandos via heartbeat (Ideia 3).
+# Transporte: nc/toybox (Android sem curl/wget). Zero ADB painel→device.
 #
 # Config: /data/local/tmp/panel/heartbeat.conf
 #   PANEL_URL=http://IP:8080
@@ -11,6 +9,32 @@
 #   INTERVAL=20
 CONFIG="/data/local/tmp/panel/heartbeat.conf"
 PID_FILE="/data/local/tmp/panel/heartbeat.pid"
+LOG="/data/local/tmp/panel/heartbeat.log"
+
+# ── HTTP via nc (sem curl/wget) ───────────────────────────────
+# http_req METHOD URL [BODY] → imprime a resposta (headers + corpo)
+http_req() {
+    local method="$1" url="$2" body="${3:-}"
+    local rest hostport host port path len
+    rest="${url#http://}"
+    hostport="${rest%%/*}"
+    path="/${rest#*/}"
+    [ "$path" = "/" ] && path="/"
+    host="${hostport%:*}"
+    port="${hostport##*:}"
+    [ "$port" = "$host" ] && port=80
+    len=0
+    [ -n "$body" ] && len=$(printf '%s' "$body" | wc -c)
+    {
+        printf '%s %s HTTP/1.1\r\nHost: %s\r\nX-Heartbeat-Key: %s\r\nConnection: close\r\n' \
+            "$method" "$path" "$hostport" "$KEY"
+        if [ -n "$body" ]; then
+            printf 'Content-Type: application/json\r\nContent-Length: %s\r\n' "$len"
+        fi
+        printf '\r\n'
+        [ -n "$body" ] && printf '%s' "$body"
+    } | nc -w 5 "$host" "$port" 2>/dev/null
+}
 
 install() {
     local url="$1" id="$2" key="$3" interval="${4:-20}"
@@ -26,6 +50,28 @@ install() {
     start
 }
 
+_loop() {
+    . "$CONFIG"
+    while true; do
+        ACTIVITY=$(dumpsys activity 2>/dev/null | grep -E 'mCurrentFocus|mFocusedApp' | head -1 | sed 's/.*\/\([^}]*\)}/\1/' | awk '{print $1}')
+        BODY="{\"activity\":\"$ACTIVITY\"}"
+        HB_URL="$PANEL_URL/api/heartbeat/$DEVICE_ID"
+        # 1. Heartbeat POST
+        http_req POST "$HB_URL" "$BODY" >/dev/null 2>&1
+        # 2. Puxa comandos (linhas: id<TAB>cmd) — remove headers HTTP
+        CMDS=$(http_req GET "$HB_URL/commands" "" | sed '1,/^[[:space:]]*$/d')
+        # 3. Executa LOCALMENTE e reporta
+        echo "$CMDS" | while IFS="$(printf '\t')" read -r CID CMD; do
+            [ -z "$CID" ] && continue
+            OUT=$(sh -c "$CMD" 2>&1)
+            RC=$?
+            RES="{\"id\":\"$CID\",\"success\":$([ $RC -eq 0 ] && echo true || echo false),\"output\":\"$OUT\"}"
+            http_req POST "$HB_URL/result" "$RES" >/dev/null 2>&1
+        done
+        sleep "$INTERVAL"
+    done
+}
+
 start() {
     if [ -f "$CONFIG" ]; then
         . "$CONFIG"
@@ -35,20 +81,15 @@ start() {
         exit 1
     fi
     stop
-    (
-        while true; do
-            ACTIVITY=$(dumpsys activity 2>/dev/null | grep -E 'mCurrentFocus|mFocusedApp' | head -1 | sed 's/.*\/\([^}]*\)}/\1/' | awk '{print $1}')
-            BODY="{\"activity\":\"$ACTIVITY\"}"
-            if command -v curl >/dev/null 2>&1; then
-                curl -s -o /dev/null -X POST "$PANEL_URL/api/heartbeat/$DEVICE_ID" \
-                     -H "X-Heartbeat-Key: $KEY" -H "Content-Type: application/json" -d "$BODY"
-            elif command -v wget >/dev/null 2>&1; then
-                wget -q -O /dev/null --post-data "$BODY" --header="X-Heartbeat-Key: $KEY" \
-                     --header="Content-Type: application/json" "$PANEL_URL/api/heartbeat/$DEVICE_ID"
-            fi
-            sleep "$INTERVAL"
-        done
-    ) &
+    # Dispara em nova sessão (setsid) para sobreviver ao fechamento do adb shell.
+    # Re-invoca o próprio script com `_loop` (a função vive dentro do script).
+    if command -v setsid >/dev/null 2>&1; then
+        setsid sh "$0" _loop >> "$LOG" 2>&1 &
+    elif command -v nohup >/dev/null 2>&1; then
+        nohup sh "$0" _loop >> "$LOG" 2>&1 &
+    else
+        sh "$0" _loop >> "$LOG" 2>&1 &
+    fi
     echo $! > "$PID_FILE"
     echo "heartbeat: iniciado (PID $(cat "$PID_FILE")) para $DEVICE_ID"
 }
@@ -77,6 +118,7 @@ case "${1:-}" in
     stop) stop ;;
     status) status ;;
     restart) stop; start ;;
+    _loop) _loop ;;
     *)
         echo "Uso: $0 {install URL DEVICE_ID KEY [INTERVAL]|start|stop|status|restart}"
         exit 1

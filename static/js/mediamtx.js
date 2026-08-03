@@ -13,7 +13,7 @@ const MEDIAMTX = (() => {
                 <div class="loading">Verificando...</div>
             </div>
 
-            <div class="section-title mt-md">${UI.icon('layers')} Paths</div>
+            <div class="section-title mt-md">${UI.icon('layers')} Paths <span class="section-subtitle" id="mtx-count"></span></div>
             <div class="mediamtx-paths" id="mtx-paths">
                 ${UI.skeletons('row', 4)}
             </div>
@@ -56,8 +56,13 @@ const MEDIAMTX = (() => {
             const items = res.data?.items || [];
             if (items.length === 0) {
                 el.innerHTML = UI.stateView('empty', 'Nenhuma path configurada no MediaMTX.', { icon: 'layers', title: 'Sem paths' });
+                const count = document.getElementById('mtx-count');
+                if (count) count.textContent = '0 paths';
                 return;
             }
+
+            const count = document.getElementById('mtx-count');
+            if (count) count.textContent = `${items.length} paths · ${items.filter(p => p.ready).length} ativas`;
 
             let html = '<div class="mediamtx-table">';
             html += `

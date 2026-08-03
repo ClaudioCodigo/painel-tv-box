@@ -8,7 +8,7 @@ const SETTINGS = (() => {
 
         el.innerHTML = `
             <div class="settings-page">
-                <div class="section-title">⚙️ Atualização</div>
+                <div class="section-title">${UI.icon('refresh')} Atualização</div>
                 <div class="settings-card" id="update-section">
                     <p class="text-muted text-sm">Verifica e aplica atualizações via git pull.</p>
                     <div class="settings-actions">
@@ -26,11 +26,15 @@ const SETTINGS = (() => {
 
                 <div class="section-title mt-md">${UI.icon('sun')} Tema</div>
                 <div class="settings-card">
-                    <p class="text-muted text-sm">Alterna entre escuro, claro e sistema.</p>
-                    <button class="btn btn-secondary btn-sm" onclick="SETTINGS.toggleTheme()">${UI.icon('sun')} Alternar Tema</button>
+                    <p class="text-muted text-sm">Escolha o tema do painel.</p>
+                    <div class="theme-options">
+                        <label class="theme-option"><input type="radio" name="theme" value="dark" onchange="SETTINGS.setTheme('dark')"> <span>${UI.icon('moon')} Escuro</span></label>
+                        <label class="theme-option"><input type="radio" name="theme" value="light" onchange="SETTINGS.setTheme('light')"> <span>${UI.icon('sun')} Claro</span></label>
+                        <label class="theme-option"><input type="radio" name="theme" value="system" onchange="SETTINGS.setTheme('system')"> <span>${UI.icon('monitor')} Sistema</span></label>
+                    </div>
                 </div>
 
-                <div class="section-title mt-md">🖥️ Servidor</div>
+                <div class="section-title mt-md">${UI.icon('server')} Servidor</div>
                 <div class="settings-card">
                     <div id="server-info" class="loading">Carregando...</div>
                 </div>
@@ -38,6 +42,7 @@ const SETTINGS = (() => {
         `;
 
         await loadServerInfo();
+        syncThemeRadios();
     }
 
     async function loadServerInfo() {
@@ -45,15 +50,20 @@ const SETTINGS = (() => {
         if (!el) return;
 
         try {
-            const [health, metrics] = await Promise.all([
+            const [health, metrics, devices] = await Promise.all([
                 API.get('/system/health'),
-                API.get('/system/metrics')
+                API.get('/system/metrics'),
+                API.get('/devices').catch(() => []),
             ]);
+            const uptime = fmtUptime(metrics.uptime_seconds || 0);
+            const devCount = Array.isArray(devices) ? devices.length : 0;
 
             el.innerHTML = `
-                <div class="info-row"><span class="info-key">Versão</span><span class="info-val">${health.version}</span></div>
-                <div class="info-row"><span class="info-key">Status</span><span class="info-val">${health.status}</span></div>
-                <div class="info-row"><span class="info-key">Wizard</span><span class="info-val">${health.wizard_completed ? '✅ Completo' : '⏳ Pendente'}</span></div>
+                <div class="info-row"><span class="info-key">Versão</span><span class="info-val">${UI.escapeHtml(health.version)}</span></div>
+                <div class="info-row"><span class="info-key">Status</span><span class="info-val">${UI.escapeHtml(health.status)}</span></div>
+                <div class="info-row"><span class="info-key">Wizard</span><span class="info-val">${health.wizard_completed ? 'Completo' : 'Pendente'}</span></div>
+                <div class="info-row"><span class="info-key">Dispositivos</span><span class="info-val">${devCount}</span></div>
+                <div class="info-row"><span class="info-key">Uptime</span><span class="info-val">${uptime}</span></div>
                 <div class="info-row"><span class="info-key">CPU</span><span class="info-val">${metrics.cpu_percent}%</span></div>
                 <div class="info-row"><span class="info-key">RAM</span><span class="info-val">${metrics.ram_used_gb}/${metrics.ram_total_gb} GB (${metrics.ram_percent}%)</span></div>
                 <div class="info-row"><span class="info-key">Disco</span><span class="info-val">${metrics.disk_used_gb}/${metrics.disk_total_gb} GB (${metrics.disk_percent}%)</span></div>
@@ -61,6 +71,29 @@ const SETTINGS = (() => {
         } catch (e) {
             el.innerHTML = `<span class="text-danger">Erro: ${UI.escapeHtml(e.message)}</span>`;
         }
+    }
+
+    function fmtUptime(sec) {
+        if (!sec || sec <= 0) return '—';
+        const d = Math.floor(sec / 86400);
+        const h = Math.floor((sec % 86400) / 3600);
+        const m = Math.floor((sec % 3600) / 60);
+        if (d > 0) return `${d}d ${h}h`;
+        if (h > 0) return `${h}h ${m}m`;
+        return `${m}min`;
+    }
+
+    function syncThemeRadios() {
+        if (typeof THEME === 'undefined') return;
+        const choice = THEME.getStored();
+        document.querySelectorAll('input[name="theme"]').forEach(r => {
+            r.checked = r.value === choice;
+        });
+    }
+
+    function setTheme(choice) {
+        if (typeof THEME !== 'undefined') THEME.apply(choice);
+        UI.createToast(`Tema: ${choice}`, 'success');
     }
 
     async function checkUpdate() {
@@ -123,6 +156,7 @@ const SETTINGS = (() => {
     function toggleTheme() {
         if (typeof THEME !== 'undefined') {
             const choice = THEME.cycle();
+            syncThemeRadios();
             UI.createToast(`Tema: ${choice}`, 'success');
             return;
         }
@@ -134,5 +168,5 @@ const SETTINGS = (() => {
         UI.createToast(`Tema ${isDark ? 'claro' : 'escuro'} ativado`, 'success');
     }
 
-    return { render, checkUpdate, applyUpdate, clearCache, toggleTheme };
+    return { render, checkUpdate, applyUpdate, clearCache, toggleTheme, setTheme, syncThemeRadios };
 })();

@@ -37,11 +37,16 @@ async def backup_import(file: UploadFile = File(...)):
     if not file.filename or not file.filename.endswith(".zip"):
         raise HTTPException(400, "Arquivo precisa ser .zip")
 
+    # Limite de upload (50 MB) — evita zip-bomb/exaustão
+    MAX_ZIP_BYTES = 50 * 1024 * 1024
+    content = await file.read(MAX_ZIP_BYTES + 1)
+    if len(content) > MAX_ZIP_BYTES:
+        raise HTTPException(413, "Arquivo muito grande (máx 50 MB)")
+
     import tempfile
 
     mgr = BackupManager()
     with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
-        content = await file.read()
         tmp.write(content)
         tmp_path = tmp.name
 

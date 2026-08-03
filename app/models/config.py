@@ -22,6 +22,7 @@ class ADBConfig(BaseModel):
     default_port: int = 5555
     connect_timeout: int = 10
     command_delay: float = 0.5
+    server_port: Optional[int] = None  # Ideia 4: servidor ADB isolado do scrcpy
 
 
 class PathsConfig(BaseModel):

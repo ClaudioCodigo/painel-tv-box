@@ -59,20 +59,27 @@ class HealthManager:
         except Exception:
             results["ping"] = False
 
-        # 2. ADB — tenta 2 vezes (scrcpy pode estar usando a conexão)
+        # 2. ADB — pulado quando o device está claramente na rede (regra ADB×scrcpy):
+        #    scrcpy ativo, heartbeat fresco OU ping OK. ICMP não usa ADB → não derruba o scrcpy.
         adb_ok = False
         if scrcpy_active:
-            # scrcpy já confirmou ADB OK — pula shell check pra não causar ConnectionReset
             adb_ok = True
             results["adb"] = True
-            results["adb_skipped_for_scrcpy"] = True
+            results["adb_checked"] = False
+            results["adb_skipped"] = "scrcpy"
             logger.debug("Health check pulou ADB shell para %s — scrcpy ativo", device.id)
         elif heartbeat_fresh:
-            # Heartbeat recente prova que o device está na rede — zero ADB (regra §3.3)
             adb_ok = True
             results["adb"] = True
-            results["adb_skipped_for_heartbeat"] = True
+            results["adb_checked"] = False
+            results["adb_skipped"] = "heartbeat"
             logger.debug("Health check pulou ADB shell para %s — heartbeat fresco", device.id)
+        elif results["ping"]:
+            adb_ok = True
+            results["adb"] = True
+            results["adb_checked"] = False
+            results["adb_skipped"] = "ping"
+            logger.debug("Health check pulou ADB shell para %s — ping OK (sem ADB spam)", device.id)
         else:
             for attempt in range(2):
                 if self.adb:
@@ -86,6 +93,7 @@ class HealthManager:
                 if not adb_ok and attempt == 0:
                     await asyncio.sleep(2)  # espera 2s antes de retry
             results["adb"] = adb_ok
+            results["adb_checked"] = True
 
         # 3. Determina status
         if not adb_ok:
@@ -107,13 +115,14 @@ class HealthManager:
         # ADB OK — marca como último bom
         self._last_good[device.id] = datetime.now()
 
-        # 4. Activity check. Evita um segundo adb shell enquanto scrcpy está ativo
-        #    ou quando a activity já chegou via heartbeat (sem ADB).
-        if scrcpy_active:
+        # 4. Activity check. Zero ADB enquanto scrcpy ativo ou heartbeat fresco
+        #    (a activity chega via heartbeat; dumpsys só no fallback ADB).
+        if scrcpy_active or heartbeat_fresh:
             results["activity"] = device.state.current_activity or ""
-            logger.debug("Activity check pulado para %s: scrcpy ativo em %s", device.id, target)
-        elif heartbeat_fresh and device.state.current_activity:
-            results["activity"] = device.state.current_activity
+            if scrcpy_active:
+                logger.debug("Activity check pulado para %s: scrcpy ativo em %s", device.id, target)
+            else:
+                logger.debug("Activity check pulado para %s: heartbeat fresco", device.id)
         else:
             try:
                 output, _ = await self.adb.shell(

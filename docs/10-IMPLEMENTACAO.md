@@ -1,6 +1,6 @@
 # Registro de Implementação — UI Redesign + Fases A e B
 
-> **Atualizado em:** 2026-07-31 · **Escopo:** redesign monocromático (spec `06`) + remodelagem UX (spec `08`, fases A e B) + heartbeat (spec `09`). Estado real do código; docs `07` (plano) e `08` (spec) são os contratos.
+> **Atualizado em:** 2026-08-03 · **Escopo:** redesign monocromático (spec `06`) + remodelagem UX (spec `08`, fases A e B) + heartbeat (spec `09`) + **Rodada 2** (deploy Debian 13, backup em data dir, threads, segurança restante). Estado real do código; docs `07` (plano) e `08` (spec) são os contratos.
 
 ---
 
@@ -59,3 +59,61 @@
 ## 6. Como o heartbeat resolve o conflito ADB × scrcpy (resumo)
 
 O healthcheck **não sonda mais ADB** enquanto o device está "vivo" (heartbeat fresco ou scrcpy ativo). O scrcpy fica com o ADB livre; a observabilidade vem de 3 fontes sem ADB: **heartbeat HTTP** (rede) + **MediaMTX API** (stream) + **estado do scrcpy** (sessão). Detalhes e a regra de bloqueio de ações ADB durante espelhamento: `docs/09-HEARTBEAT-SPEC.md` §3.3.
+
+---
+
+## 7. Rodada 2 (2026-08-03) — deploy, threads, backup, segurança
+
+Detalhe completo (com severidades e verificação): `docs/AUDITORIA.md` → "Rodada 2".
+
+| Área | O que foi feito |
+|---|---|
+| **Deploy Debian 13** | `deploy/install.sh` reescrito: usuários não-root (`panel`, `mediamtx`), `PANEL_DATA_DIR=/var/lib/panel-tvbox`, firewall restrito à LAN (`--lan`, `--allow-adb`), MediaMTX baixado do GitHub, hardening systemd, rsync sem `--delete`; `pyproject` com `[build-system]` (pip install . funciona) |
+| **Backup em data dir** | `app/utils/system.py → get_data_dir()`: Windows `%LOCALAPPDATA%\PanelTVBox`, Linux `/var/lib/panel-tvbox` (env `PANEL_DATA_DIR`), macOS app support. Backups/screenshots/apks **fora do repo** — git não mistura dados de máquinas |
+| **Threads/stutter** | `asyncio.to_thread` no I/O pesado (logs search/tail/sources/download, backup export/import, scrcpy extração, APK escrita); `psutil.cpu_percent(interval=None)` não bloqueia |
+| **Segurança** | `shlex.quote` no player + `"$EXTRA"` no script (injeção de comando); package validado no uninstall; SSRF bloqueado (wizard IP, mediamtx api_url, scrcpy rtmp_url — incluindo link-local 169.254); uploads limitados (APK 200MB, ZIP 50MB) |
+| **Verificação** | `pytest` 70 ✅ · `bash -n install.sh` ✅ · backup em `%LOCALAPPDATA%` ✅ · SSRF 400 ✅ · uninstall 400/200 ✅ · `pip install .` exit 0 ✅ |
+
+## 8. Fases C e D (2026-08-03) — Grupos/MediaMTX + polimento (com testes)
+
+Detalhe por seção: `docs/08-UX-CHANGE-SPEC.md` (marcado implementado). Estado: **Fases A–D completas**.
+
+| Área | O que foi feito |
+|---|---|
+| **C1 Página de grupo** | `static/js/group.js` (novo): rota `#/group/{id}` real — contadores, ações coletivas (start/stop/reboot), cards V2 por device, refresh 15s, destroy; substitui o placeholder "em breve" |
+| **C2 Cards de grupo** | Contadores de status (online/degradado/offline) por grupo; nome clicável → página do grupo |
+| **C3 MediaMTX** | Contador "N paths · M ativas"; status do serviço e paths com forma (Fase A) |
+| **D1 Logs** | Chips de nível (INFO/WARNING/ERROR); timestamps relativos (`UI.timeAgo`) com absoluto no title; toggle auto-refresh + destroy (Fase A) |
+| **D2 Shell** | Prompt `device@painel$`; Reverse Ping substituído por "Heartbeat status"; histórico ↑/↓ já existia |
+| **D3 scrcpy** | Badge de sessão (Parado/Espelhando); versão ativa destacada; confirmações em ativar/remover |
+| **D4 Backup** | Datas relativas + tamanhos formatados; restore com resumo (pre-backup/escopo); empty state com ícone |
+| **D5 Settings** | Seletor de tema explícito (Escuro/Claro/Sistema); server info com uptime + nº devices |
+| **D6 Wizard** | Progresso com steps numerados (círculos 1..10 + nome do passo) |
+| **Testes** | **+24 testes** (94 total): heartbeat endpoint, validadores de segurança (incl. link-local), injeção no player, backup (data dir/zip-slip), health ADB-light, API de grupos |
+
+**Nota ADB×scrcpy:** regra §3.3 aplicada — heartbeat fresco ou scrcpy ativo → zero ADB automático. As **ações ADB manuais durante espelhamento** (start/stop, reboot, shell, APK) ainda NÃO têm o bloqueio 409 + "Parar scrcpy" da §4.4b — pendente de decisão (ver próxima sessão).
+
+## 9. ADB × scrcpy — Ideias 3 e 4 implementadas (2026-08-03)
+
+Solução para o problema "qualquer comando ADB derruba o scrcpy" (o gatilho era o healthcheck disparando ADB sozinho — já corrigido: watchdog pula ADB quando scrcpy ativo ou heartbeat fresco). Detalhes: `docs/09-HEARTBEAT-SPEC.md` §4.4c–4.4e.
+
+| Ideia | Status | Entrega |
+|---|---|---|
+| **3 — Comandos via heartbeat** | ✅ | `POST /api/devices/{id}/command` (fila) → `GET /api/heartbeat/{id}/commands` (linhas `id<TAB>cmd`) → device executa localmente (`sh -c`, atualizado no `heartbeat.sh`) → `POST /result`. Módulo `app/services/command_queue.py`. Zero ADB painel→device |
+| **4 — Servidor ADB isolado** | ✅ | `adb.server_port` (5038) no config → propagado para env → `ADBManager` injeta `ADB_SERVER_PORT`; scrcpy spawnado com env sem a porta (5037). Testado: `ADBManager().server_port == 5038` |
+| **1 — Bloqueio 409** | 🟡 | Frontend `UI.confirmStopScrcpy` pronto e ligado; backend 409 pendente (menos crítico com 3+4) |
+
+**Verificação:** fluxo validado ao vivo (enqueue → pull `am force-stop org.videolan.vlc` → result 200); `pytest` **100 passed** (+6 testes: fila de comandos, heartbeat commands/result, isolamento ADB).
+
+## 10. Diagnóstico real ADB×scrcpy + correções (2026-08-03, com os TV boxes no ar)
+
+Problema do usuário: scrcpy caía ~30s após iniciar; o painel continuava disparando ADB a cada ~15s. Diagnóstico e correções aplicadas:
+
+| Achado | Correção |
+|---|---|
+| **`last_heartbeat=None`** — o `heartbeat.sh` não rodava: (a) o device **não tem curl/wget** (só `nc`/`toybox`, SDK 29); (b) o processo em background **morria ao fechar o `adb shell`**; (c) o `heartbeat.conf` tinha **CRLF** (temp file em modo texto no Windows → `INTERVAL=20\r` → `sleep: Unknown suffix`) | `heartbeat.sh` reescrito: HTTP via **`nc`** (parse de URL + headers), **`setsid sh "$0" _loop`** (sobrevive ao shell), conf escrito em **modo binário** (sem CRLF) |
+| **Painel continuava com ADB mesmo sem scrcpy** — watchdog + página do device (`/status` a cada 15s) sondavam ADB | **Liveness por ICMP ping** no `health.check`: ping OK (ou heartbeat fresco, ou scrcpy ativo) → **zero ADB**. ICMP não é ADB → não derruba o scrcpy, mesmo com scrcpy externo |
+| **`/api/devices/{id}/status` sempre via ADB** | Short-circuit ADB-light: scrcpy ativo OU heartbeat fresco → status derivado do estado (`source: heartbeat\|scrcpy`), sem ADB; refresh da página do device 15s→30s |
+| Servidor ADB isolado (Ideia 4) | `adb.server_port: 5038` propagado do config para a env (`PANEL_ADB_SERVER_PORT`) |
+
+**Verificação ao vivo:** após re-provision, `last_heartbeat` atualizando a cada ~20s nos 2 devices; **nenhum novo `ADB connected`** no log (watchdog pulando); `pytest` 104 ✅.

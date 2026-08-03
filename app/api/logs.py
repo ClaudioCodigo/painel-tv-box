@@ -1,5 +1,7 @@
 """API routes para Logs — busca, filtros, download, fontes."""
 
+import asyncio
+
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse
 
@@ -39,15 +41,9 @@ async def list_logs(
     """Busca logs com filtros."""
     _validate_source(source)
     mgr = _get_log_manager()
-    result = mgr.search(
-        source=source,
-        level=level,
-        device_id=device_id,
-        q=q,
-        from_date=from_date,
-        to_date=to_date,
-        page=page,
-        per_page=per_page,
+    # I/O síncrono de arquivos (MBs) fora do event loop — evita stutter
+    result = await asyncio.to_thread(
+        mgr.search, source, level, device_id, q, from_date, to_date, page, per_page
     )
     return result
 
@@ -60,7 +56,7 @@ async def tail_logs(
     """Retorna as últimas N linhas de log."""
     _validate_source(source)
     mgr = _get_log_manager()
-    items = mgr.tail(source=source, n=n)
+    items = await asyncio.to_thread(mgr.tail, source, n)
     return {"items": items, "count": len(items)}
 
 
@@ -68,7 +64,8 @@ async def tail_logs(
 async def log_sources():
     """Retorna fontes de log disponíveis com metadados."""
     mgr = _get_log_manager()
-    return {"sources": mgr.get_sources()}
+    sources = await asyncio.to_thread(mgr.get_sources)
+    return {"sources": sources}
 
 
 @router.get("/download")
@@ -78,7 +75,7 @@ async def download_logs(
     """Download de arquivo de log."""
     _validate_source(source)
     mgr = _get_log_manager()
-    path = mgr.download(source=source)
+    path = await asyncio.to_thread(mgr.download, source)
     if path is None:
         raise HTTPException(404, "Nenhum log encontrado")
 

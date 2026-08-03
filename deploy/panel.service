@@ -1,11 +1,12 @@
 [Unit]
 Description=Painel TV Box - Gerenciamento de TV Boxes Android
-After=network.target
+After=network.target mediamtx.service
 Wants=network-online.target
 
 [Service]
 Type=simple
 User=panel
+Group=panel
 WorkingDirectory=/opt/panel
 ExecStart=/opt/panel/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8080 --workers 1
 Restart=always
@@ -13,6 +14,13 @@ RestartSec=5
 StandardOutput=journal
 StandardError=journal
 Environment=PYTHONUNBUFFERED=1
+Environment=PANEL_DATA_DIR=/var/lib/panel-tvbox
+Environment=PANEL_ADB_SERVER_PORT=5038
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/lib/panel-tvbox /opt/panel/config /opt/panel/devices /opt/panel/groups /opt/panel/scrcpy
 
 [Install]
 WantedBy=multi-user.target

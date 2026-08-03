@@ -270,7 +270,7 @@ const DEVICE_PAGE = (() => {
 
     function startAutoRefresh() {
         if (refreshTimer) clearInterval(refreshTimer);
-        refreshTimer = setInterval(refreshStatus, 15000);
+        refreshTimer = setInterval(refreshStatus, 30000);
     }
 
     function destroy() {
@@ -368,7 +368,9 @@ const DEVICE_PAGE = (() => {
             UI.createToast(msg, res.success !== false ? 'success' : 'error');
             refreshStatus();
         } catch (e) {
-            UI.createToast(`Erro em ${action}: ${e.message}`, 'error');
+            if (!UI.confirmStopScrcpy(e, () => action(action))) {
+                UI.createToast(`Erro em ${action}: ${e.message}`, 'error');
+            }
         }
     }
 

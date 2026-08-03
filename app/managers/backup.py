@@ -1,5 +1,6 @@
 """BackupManager — export/import ZIP de configuração."""
 
+import asyncio
 import json
 import logging
 import shutil
@@ -9,10 +10,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+from app.utils.system import get_data_dir
+
 logger = logging.getLogger("backup")
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-BACKUPS_DIR = PROJECT_ROOT / "backups"
+BACKUPS_DIR = get_data_dir() / "backups"
 
 
 class BackupManager:
@@ -36,7 +39,11 @@ class BackupManager:
         return backups
 
     async def export(self) -> Path:
-        """Cria backup ZIP de toda configuração."""
+        """Cria backup ZIP de toda configuração (fora do event loop)."""
+        return await asyncio.to_thread(self._export_sync)
+
+    def _export_sync(self) -> Path:
+        """Corpo síncrono do export — roda em thread para não travar o event loop."""
         timestamp = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
         zip_path = self.backups_dir / f"backup-{timestamp}.zip"
 
@@ -76,12 +83,16 @@ class BackupManager:
         return zip_path
 
     async def import_backup(self, zip_path: Path) -> dict:
-        """Importa configuração de um arquivo ZIP."""
+        """Importa configuração de um arquivo ZIP (fora do event loop)."""
+        return await asyncio.to_thread(self._import_sync, zip_path)
+
+    def _import_sync(self, zip_path: Path) -> dict:
+        """Corpo síncrono do import — roda em thread."""
         if not zip_path.is_file():
             return {"success": False, "error": "Arquivo não encontrado"}
 
         # Cria backup automático antes de importar
-        pre_backup = await self.export()
+        pre_backup = self._export_sync()
         logger.info("Backup pré-import: %s", pre_backup.name)
 
         files_restored = []

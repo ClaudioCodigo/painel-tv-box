@@ -87,3 +87,24 @@
         flex: 1 1 92px;
     }
 }
+
+/* Contadores de status por grupo (C2) */
+.group-counters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 6px;
+}
+.group-counters .dcard-counter {
+    font-size: 0.7em;
+    padding: 2px 8px;
+}
+.group-name a,
+a.group-name {
+    color: var(--text-primary);
+    text-decoration: none;
+}
+.group-name a:hover {
+    color: var(--text-secondary);
+    text-decoration: underline;
+}

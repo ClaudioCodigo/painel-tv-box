@@ -31,13 +31,17 @@ const WIZARD = (() => {
     function renderStep(step) {
         currentStep = step;
 
-        // Progress bar
-        const pct = Math.round((step / TOTAL_STEPS) * 100);
+        // Progresso: steps numerados (D6)
+        const STEP_NAMES = ['Boas-vindas', 'Servidor', 'MediaMTX', 'ADB', 'Players', 'Watchdog', 'Grupos', 'Dispositivos', 'Revisão', 'Finalizar'];
+        let dots = '';
+        for (let i = 1; i <= TOTAL_STEPS; i++) {
+            const cls = i === step ? 'active' : (i < step ? 'done' : '');
+            const label = STEP_NAMES[i - 1] || `Passo ${i}`;
+            dots += `<span class="wizard-step-dot ${cls}" title="${label}">${i < step ? '✓' : i}</span>`;
+        }
         const progHtml = `
-            <div class="wizard-progress-track">
-                <div class="wizard-progress-bar" style="width:${pct}%"></div>
-            </div>
-            <span class="wizard-progress-text">Passo ${step} de ${TOTAL_STEPS}</span>
+            <div class="wizard-steps">${dots}</div>
+            <span class="wizard-progress-text">${STEP_NAMES[step - 1] || `Passo ${step}`} · ${step} de ${TOTAL_STEPS}</span>
         `;
         document.getElementById('wizard-progress').innerHTML = progHtml;
 

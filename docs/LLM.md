@@ -52,6 +52,18 @@ OBS → RTMP → MediaMTX → RTSP → TV Box (VLC/MPV)
 
 ## 3. Como rodar
 
+### Dados em runtime (fora do repositório)
+
+Backups, screenshots e APKs vivem em um **data dir** (`app/utils/system.py → get_data_dir()`), nunca no repo (git push/pull não mistura dados de máquinas):
+
+| SO | Local |
+|---|---|
+| Env `PANEL_DATA_DIR` | qualquer (usado pelo systemd unit) |
+| Windows | `%LOCALAPPDATA%\PanelTVBox` |
+| Linux (root/serviço) | `/var/lib/panel-tvbox` |
+| Linux (usuário) | `~/.local/share/panel-tvbox` |
+| macOS | `~/Library/Application Support/PanelTVBox` |
+
 ### Desenvolvimento (Windows/macOS/Linux)
 
 ```bash
@@ -67,9 +79,13 @@ python -m venv .venv
 ### Produção (Debian 13)
 
 ```bash
-sudo bash deploy/install.sh   # instala deps, MediaMTX, systemd services, firewall
+sudo bash deploy/install.sh                      # instala deps, MediaMTX, systemd, firewall
+sudo bash deploy/install.sh --lan 192.168.1.0/24 # firewall só para a sub-rede
+sudo bash deploy/install.sh --allow-adb          # (opcional) abre 5555 p/ ADB externo
 # Acesse http://IP:8080
 ```
+
+> O install script cria usuários não-root (`panel`, `mediamtx`), usa `/var/lib/panel-tvbox` como data dir, baixa o MediaMTX do GitHub e NÃO abre ADB para o mundo. O `pip install .` funciona (pyproject com `[build-system]`).
 
 ### Testes
 
@@ -337,17 +353,23 @@ player_extra_args, notes, watchdog_override (não implementado), schedule: [{act
 - **Frontend:** escape tudo que vem da API (`UI.escapeHtml`), nunca concatene dados em `onclick` sem `UI.escAttr`.
 - **Windows:** arquivos de log abertos por 2 handlers quebram rotação (PermissionError) — não adicione um segundo handler para o mesmo arquivo.
 
+### Security helpers (`app/utils/system.py`)
+`is_safe_id`, `is_safe_package`, `is_valid_ipv4`, `is_safe_network_target` (bloqueia loopback/link-local/multicast), `is_safe_rtmp_url` (rtmp/rtmps p/ localhost/privado), `is_safe_http_url_local` — usados no wizard, mediamtx, scrcpy e uninstall-app (anti SSRF + injeção).
+
+### Blocking I/O (stutter)
+I/O síncrono pesado roda via `asyncio.to_thread`: logs (search/tail/sources/download), backup (export/import), scrcpy (extração), APK (escrita). `psutil.cpu_percent(interval=None)` não bloqueia o event loop.
+
 ---
 
 ## 11. Dívida técnica / pontos de atenção (não corrigidos)
 
-1. **Injeção de comando no shell do device** — `player.py` (`rtsp_url`, `intent`), `scripts/android/start_stream.sh` (`$EXTRA` sem aspas), `uninstall-app` (`package`). Precisa de `shlex.quote`/regex.
+1. ~~**Injeção de comando no shell do device**~~ — ✅ corrigido (Rodada 2): `shlex.quote` em `player.py`, `"$EXTRA"` no `start_stream.sh`, package validado no uninstall.
 2. **Watchdog/schedule estáticos** — não reagem a devices adicionados/removidos via API.
 3. **`mediamtx.generated.yml` não regenera no CRUD de devices**.
-4. **I/O síncrono pesado em endpoints async** (logs, backup, scrcpy) — event loop trava; usar `asyncio.to_thread`.
+4. ~~**I/O síncrono pesado em endpoints async**~~ — ✅ corrigido (Rodada 2): `asyncio.to_thread` em logs/backup/scrcpy/APK; `psutil.cpu_percent(interval=None)`.
 5. **Shutdown incompleto** — schedule, scrcpy, `httpx.AsyncClient` do MediaMTX não são encerrados.
-6. **SSRF** — `wizard/validate-device` (ip arbitrário), `mediamtx.api_url`, `scrcpy rtmp_url`.
-7. **DoS** — WebSockets sem limite, uploads sem limite de tamanho.
+6. ~~**SSRF**~~ — ✅ corrigido (Rodada 2): wizard IP, `mediamtx.api_url` e `scrcpy rtmp_url` validados p/ rede local/privada.
+7. **DoS** — uploads limitados (APK 200MB, ZIP 50MB) ✅; WebSockets sem limite de conexões/rate-limit ainda pendente.
 8. **19 instâncias de `ADBManager`** — conexões/estado não compartilhados; considerar singleton no `app.state`.
 9. **Config morta** — `activity_check`, `mediamtx_check`, `command_delay`, `ping.*`, `critical_alert_cooldown`, `watchdog_override` (model existe, não implementado).
 10. **Docs antigos** — `02-SPECS.md`/`ADDING_DEVICE.md`/`WATCHDOG.md`/`UPDATING.md`/`APK_INSTALL.md` divergem do código.

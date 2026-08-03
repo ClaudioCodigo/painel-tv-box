@@ -9,6 +9,7 @@ adb:
   default_port: 5555
   connect_timeout: 10
   command_delay: 0.5
+  server_port: 5038  # servidor ADB do painel isolado do scrcpy (Ideia 4)
 paths:
   devices_dir: devices
   groups_dir: groups

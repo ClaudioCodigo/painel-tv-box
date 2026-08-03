@@ -136,3 +136,28 @@
     font-size: 0.85em;
     color: var(--text-muted);
 }
+
+/* Chips de nível (D1) */
+.logs-level-chips {
+    display: flex;
+    gap: 6px;
+    margin-top: var(--space-3);
+    flex-wrap: wrap;
+}
+.log-chip {
+    padding: 3px 12px;
+    border-radius: 999px;
+    font-size: 0.72em;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    border: 1px solid var(--border-strong);
+    color: var(--text-secondary);
+    background: var(--bg-surface);
+    transition: background var(--dur-fast) ease, color var(--dur-fast) ease;
+}
+.log-chip:hover { background: var(--control-hover); color: var(--text-primary); }
+.log-chip.active {
+    background: var(--text-primary);
+    color: var(--text-inverse);
+    border-color: var(--text-primary);
+}

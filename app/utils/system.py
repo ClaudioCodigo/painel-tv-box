@@ -1,11 +1,44 @@
 """Utilitários de sistema — CPU, RAM, disco, uptime."""
 
 import logging
+import os
 import re
+import sys
 import time
 import unicodedata
+from pathlib import Path
 
 logger = logging.getLogger("system")
+
+
+def get_data_dir() -> Path:
+    """Diretório de dados em runtime (backups, screenshots, apks, logs).
+
+    Fora do repositório para que git push/pull não misture dados de máquinas:
+      1. Env PANEL_DATA_DIR (setado pelo systemd unit);
+      2. Windows: %LOCALAPPDATA%/PanelTVBox;
+      3. macOS: ~/Library/Application Support/PanelTVBox;
+      4. Linux (root/service): /var/lib/panel-tvbox;
+      5. Linux (usuário): $XDG_DATA_HOME/panel-tvbox ou ~/.local/share/panel-tvbox.
+    """
+    env = os.environ.get("PANEL_DATA_DIR")
+    if env:
+        return Path(env)
+
+    if sys.platform == "win32":
+        base = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA") or str(Path.home())
+        return Path(base) / "PanelTVBox"
+
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / "PanelTVBox"
+
+    # Linux
+    if hasattr(os, "geteuid") and os.geteuid() == 0:
+        return Path("/var/lib/panel-tvbox")
+    xdg = os.environ.get("XDG_DATA_HOME")
+    if xdg:
+        return Path(xdg) / "panel-tvbox"
+    return Path.home() / ".local" / "share" / "panel-tvbox"
 
 
 def slugify(text: str) -> str:
@@ -21,6 +54,75 @@ SAFE_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 def is_safe_id(value: str) -> bool:
     """Valida id de device/grupo: só minúsculas, dígitos, . _ - (sem / ou ..)."""
     return bool(SAFE_ID_RE.match(value or ""))
+
+
+PKG_RE = re.compile(r"^[a-zA-Z0-9._-]+$")
+
+
+def is_safe_package(value: str) -> bool:
+    """Valida package name Android (anti injeção em pm uninstall)."""
+    return bool(PKG_RE.match(value or ""))
+
+
+def is_valid_ipv4(value: str) -> bool:
+    """Valida endereço IPv4 (anti SSRF em wizard/validate-device)."""
+    try:
+        import ipaddress
+
+        ipaddress.IPv4Address(value)
+        return True
+    except Exception:
+        return False
+
+
+def is_safe_network_target(value: str) -> bool:
+    """IP aceitável como alvo de conexão: IPv4 fora de loopback/link-local/multicast."""
+    if not is_valid_ipv4(value):
+        return False
+    import ipaddress
+
+    ip = ipaddress.IPv4Address(value)
+    return not (ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_unspecified)
+
+
+def is_safe_rtmp_url(value: str) -> bool:
+    """Valida URL RTMP/RTMPS para destinos locais/privados (anti exfiltração de tela)."""
+    import urllib.parse
+
+    parsed = urllib.parse.urlparse(value or "")
+    if parsed.scheme not in ("rtmp", "rtmps"):
+        return False
+    host = parsed.hostname or ""
+    if host in ("localhost", "127.0.0.1", "::1"):
+        return True
+    try:
+        import ipaddress
+
+        ip = ipaddress.ip_address(host)
+        # privado mas NÃO link-local (169.254.x — metadados cloud) nem multicast
+        return ip.is_private and not ip.is_link_local and not ip.is_multicast
+    except Exception:
+        return False
+
+
+def is_safe_http_url_local(value: str) -> bool:
+    """Valida URL http(s) apontando para localhost/rede privada (anti SSRF)."""
+    import urllib.parse
+
+    parsed = urllib.parse.urlparse(value or "")
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        return False
+    host = parsed.hostname
+    if host in ("localhost", "127.0.0.1", "::1"):
+        return True
+    try:
+        import ipaddress
+
+        ip = ipaddress.ip_address(host)
+        # privado mas NÃO link-local (169.254.x — metadados cloud) nem multicast
+        return ip.is_private and not ip.is_link_local and not ip.is_multicast
+    except Exception:
+        return False
 
 
 def get_metrics() -> dict:
@@ -40,7 +142,8 @@ def get_metrics() -> dict:
             "error": "psutil não instalado",
         }
 
-    cpu = psutil.cpu_percent(interval=0.1)
+    # interval=None → retorna a amostra desde a última chamada SEM bloquear o event loop
+    cpu = psutil.cpu_percent(interval=None)
     ram = psutil.virtual_memory()
     disk = psutil.disk_usage("/")
 

@@ -5,7 +5,7 @@ adb_port: 5555
 location: Administração
 description: Stream do Calendario
 group: administracao
-rtsp_path: ADM01
+rtsp_path: TV_BOX_1
 player: vlc
 root: false
 capabilities:

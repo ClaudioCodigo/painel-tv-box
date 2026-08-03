@@ -155,6 +155,27 @@ const UI = (() => {
             (reason ? `<span class="dcard-status-reason">${escapeHtml(reason)}</span>` : '');
     }
 
+    /**
+     * Trata 409 adb_busy_scrcpy (regra ADB×scrcpy §3.3 do docs/09):
+     * oferece parar o scrcpy e repetir a ação. Retorna true se tratou.
+     */
+    function confirmStopScrcpy(err, onRetry) {
+        if (!err || err.status !== 409 || !String(err.message || '').includes('adb_busy_scrcpy')) {
+            return false;
+        }
+        showModal(
+            'scrcpy ativo',
+            `<p>⚠️ Esta ação usa <strong>ADB</strong> e vai derrubar o espelhamento do scrcpy neste device.</p>` +
+            `<p class="text-muted text-sm">Toque em confirmar para parar o scrcpy e repetir a ação.</p>`,
+            async () => {
+                try { await API.post('/scrcpy/stop'); } catch (e) {}
+                UI.createToast('scrcpy parado — repetindo ação...', 'info');
+                if (onRetry) await onRetry();
+            }
+        );
+        return true;
+    }
+
     function createToast(msg, type = 'info', duration = 4000) {
         const container = document.getElementById('toast-container');
         const toast = document.createElement('div');
@@ -254,5 +275,5 @@ const UI = (() => {
         document.title = `${title} — Painel TV Box`;
     }
 
-    return { createStatCard, createCard, createToast, showModal, hideModal, createBadge, statusClass, statusIcon, setPageTitle, escapeHtml, escJs, escAttr, icon, skeletons, timeAgo, stateView, bindStateRetry, toolbarCounters, groupChip, statusBar };
+    return { createStatCard, createCard, createToast, showModal, hideModal, createBadge, statusClass, statusIcon, setPageTitle, escapeHtml, escJs, escAttr, icon, skeletons, timeAgo, stateView, bindStateRetry, toolbarCounters, groupChip, statusBar, confirmStopScrcpy };
 })();

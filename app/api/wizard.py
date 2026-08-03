@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException
 from app.models.config import PlayersConfig, WatchdogConfig
 from app.models.device import DeviceConfig
 from app.models.group import GroupConfig
-from app.utils.system import slugify
+from app.utils.system import slugify, is_safe_network_target, is_safe_http_url_local
 
 router = APIRouter(prefix="/api/wizard", tags=["wizard"])
 
@@ -40,10 +40,12 @@ async def wizard_finish(data: dict):
         if srv.get("ip"):
             config.system.host.ip = srv["ip"]
 
-    # ── MediaMTX config ──
+    # ── MediaMTX config (valida URL local — anti SSRF) ──
     mtx = data.get("mediamtx", {})
     if config.mediamtx:
         if mtx.get("api_url"):
+            if not is_safe_http_url_local(mtx["api_url"]):
+                raise HTTPException(400, "mediamtx.api_url precisa apontar para localhost/rede privada")
             config.mediamtx.api.url = mtx["api_url"]
         if mtx.get("rtsp_port"):
             config.mediamtx.server.rtsp_port = mtx["rtsp_port"]
@@ -115,6 +117,8 @@ async def wizard_validate_device(data: dict):
 
     if not ip:
         raise HTTPException(400, "IP não informado")
+    if not is_safe_network_target(ip):
+        raise HTTPException(400, "IP inválido (bloqueado: loopback/link-local/multicast)")
 
     from app.managers.adb import ADBManager
 

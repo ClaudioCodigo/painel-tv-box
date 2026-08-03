@@ -25,6 +25,8 @@ docs/.obsidian/
 
 # Arquivos não relacionados ao projeto
 *.xlsx
+*.docx
+scripts/gerar_relatorio_nobreaks.py
 
 # Config (keep template, ignore generated)
 config/mediamtx.generated.yml

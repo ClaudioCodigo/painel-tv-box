@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "painel-tvbox"
 version = "0.1.0"
@@ -19,3 +23,8 @@ dev = [
     "pytest-asyncio>=0.24",
     "httpx",  # TestClient
 ]
+
+[tool.setuptools]
+# App roda como módulo a partir da raiz do projeto (uvicorn app.main:app);
+# sem empacotamento — só precisamos que o pip instale as dependências.
+py-modules = []

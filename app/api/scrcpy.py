@@ -3,6 +3,7 @@
 from fastapi import APIRouter, HTTPException
 
 from app.managers.scrcpy import ScrcpyManager
+from app.utils.system import is_safe_rtmp_url
 
 router = APIRouter(prefix="/api/scrcpy", tags=["scrcpy"])
 
@@ -166,6 +167,9 @@ async def scrcpy_stream(device_id: str, data: dict = {}):
 
     mgr = ScrcpyManager()
     rtmp_url = data.get("rtmp_url", "rtmp://localhost:1935/SCRCPY_DISPLAY")
+    # Anti exfiltração de tela: destino precisa ser localhost/rede privada
+    if not is_safe_rtmp_url(rtmp_url):
+        raise HTTPException(400, "rtmp_url inválido (permitido: rtmp/rtmps para localhost ou rede privada)")
     result = await mgr.start_streaming(device.ip, device.adb_port, rtmp_url)
     return result
 

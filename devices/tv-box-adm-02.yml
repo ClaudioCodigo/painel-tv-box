@@ -1,17 +1,18 @@
-id: tv-box-administracao-samsung
-name: TV BOX Administração - Samsung
-ip: 192.168.254.232
+id: tv-box-adm-02
+name: TV BOX ADM 02
+ip: 192.168.254.96
 adb_port: 5555
 location: Administração
+description: TV BOX Administração - Samsung
 group: administracao
-rtsp_path: TV_BOX_1
+rtsp_path: TV-BOX-ADM-02
 player: vlc
-root: true
+root: false
 capabilities:
   wifi_restart: true
   ethernet_restart: true
   reboot: true
-  root: true
+  root: false
   install_apk: true
   shell: true
   screenshot: true

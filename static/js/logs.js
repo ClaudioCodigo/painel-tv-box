@@ -60,6 +60,12 @@ const LOGS = (() => {
                         </div>
                     </div>
                     <div class="logs-info" id="logs-info"></div>
+                    <div class="logs-level-chips" id="logs-level-chips">
+                        <button class="log-chip active" data-level="">Todos</button>
+                        <button class="log-chip" data-level="INFO">INFO</button>
+                        <button class="log-chip" data-level="WARNING">WARNING</button>
+                        <button class="log-chip" data-level="ERROR">ERROR</button>
+                    </div>
                 </div>
 
                 <!-- Tabela de logs -->
@@ -76,6 +82,17 @@ const LOGS = (() => {
 
         // Auto-refresh a cada 5s
         startAutoRefresh();
+
+        // Chips de nível
+        document.querySelectorAll('.logs-level-chips .log-chip').forEach(chip => {
+            chip.addEventListener('click', () => {
+                const level = chip.dataset.level || '';
+                const sel = document.getElementById('log-level');
+                if (sel) sel.value = level;
+                document.querySelectorAll('.logs-level-chips .log-chip').forEach(c => c.classList.toggle('active', c === chip));
+                search(1);
+            });
+        });
 
         // Carrega dados iniciais
         await search();
@@ -131,8 +148,11 @@ const LOGS = (() => {
             for (const item of res.items) {
                 const levelClass = item.level === 'ERROR' || item.level === 'CRITICAL' ? 'log-error' :
                                    item.level === 'WARNING' ? 'log-warning' : 'log-info';
+                // Timestamp relativo (normaliza 'YYYY-MM-DD HH:MM:SS' → ISO)
+                const rawTs = item.timestamp || '';
+                const isoTs = rawTs ? rawTs.replace(' ', 'T') : '';
                 html += `<tr class="${levelClass}">
-                    <td class="log-ts">${escapeHtml(item.timestamp || '--')}</td>
+                    <td class="log-ts" title="${escapeHtml(rawTs)}">${isoTs ? UI.timeAgo(isoTs) : '--'}</td>
                     <td><span class="log-badge ${levelClass}">${escapeHtml(item.level || '-')}</span></td>
                     <td>${escapeHtml(item.source || '-')}</td>
                     <td class="log-dev">${escapeHtml(item.device && item.device !== '-' ? item.device : '')}</td>

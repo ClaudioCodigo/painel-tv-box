@@ -3,10 +3,12 @@
 # Painel TV Box — Instalação Automática para Debian 13 (Trixie)
 #=============================================================================
 # Uso:
-#   sudo bash deploy/install.sh              # Instalação completa
-#   sudo bash deploy/install.sh --help       # Ajuda
-#   sudo bash deploy/install.sh --no-venv    # Pula criação de venv
-#   sudo bash deploy/install.sh --no-adb     # Pula configuração ADB
+#   sudo bash deploy/install.sh                        # Instalação completa
+#   sudo bash deploy/install.sh --help                # Ajuda
+#   sudo bash deploy/install.sh --no-venv             # Pula criação de venv
+#   sudo bash deploy/install.sh --no-mediamtx         # Não instala o MediaMTX
+#   sudo bash deploy/install.sh --lan 192.168.1.0/24  # Sub-rede do firewall
+#   sudo bash deploy/install.sh --allow-adb           # Abre 5555/tcp para a LAN
 #=============================================================================
 set -euo pipefail
 
@@ -22,31 +24,37 @@ header() { echo -e "\n${BOLD}━━━ $* ━━━${NC}\n"; }
 
 # ── Configurações ──────────────────────────────────────────────────────────
 INSTALL_DIR="/opt/panel"
+DATA_DIR="/var/lib/panel-tvbox"        # backups/logs/dados em runtime (fora do repo)
 USER_NAME="panel"
+MEDIAMTX_USER="mediamtx"
 VENV_DIR="$INSTALL_DIR/venv"
-CONFIG_DIR="$INSTALL_DIR/config"
-DEVICES_DIR="$INSTALL_DIR/devices"
-LOGS_DIR="$INSTALL_DIR/logs"
-BACKUPS_DIR="$INSTALL_DIR/backups"
-SCRIPTS_DIR="$INSTALL_DIR/scripts/android"
 
 PANEL_PORT="8080"
 ADB_PORT="5555"
-MEDIAMTX_PORT="9997"
+MEDIAMTX_API_PORT="9997"
+MEDIAMTX_RTSP_PORT="8554"
+MEDIAMTX_RTMP_PORT="1935"
+
+LAN_NET="192.168.254.0/24"
+ALLOW_ADB=false
+INSTALL_MEDIAMTX=true
+SKIP_VENV=false
 
 # ── Detecta flags ──────────────────────────────────────────────────────────
-SKIP_VENV=false
-SKIP_ADB=false
 for arg in "$@"; do
     case "$arg" in
         --help|-h)
-            echo "Uso: sudo bash deploy/install.sh [--no-venv] [--no-adb]"
-            echo "  --no-venv   Pula criação do virtualenv"
-            echo "  --no-adb    Pula configuração do servidor ADB"
+            echo "Uso: sudo bash deploy/install.sh [opções]"
+            echo "  --no-venv       Pula criação do virtualenv"
+            echo "  --no-mediamtx   Não instala o MediaMTX"
+            echo "  --lan CIDR      Sub-rede liberada no firewall (default: $LAN_NET)"
+            echo "  --allow-adb     Abre 5555/tcp (ADB) para a LAN"
             exit 0
             ;;
         --no-venv) SKIP_VENV=true ;;
-        --no-adb)  SKIP_ADB=true  ;;
+        --no-mediamtx) INSTALL_MEDIAMTX=false ;;
+        --allow-adb) ALLOW_ADB=true ;;
+        --lan) shift; LAN_NET="${1:-$LAN_NET}" ;;
     esac
 done
 
@@ -65,16 +73,17 @@ echo "╔═══════════════════════�
 echo "║         Painel TV Box — Instalação Debian 13        ║"
 echo "╚══════════════════════════════════════════════════════╝"
 echo -e "${NC}"
-echo "  Projeto:  $PROJECT_DIR"
-echo "  Destino:  $INSTALL_DIR"
-echo "  Usuário:  $USER_NAME"
-echo "  Porta:    $PANEL_PORT"
+echo "  Projeto:   $PROJECT_DIR"
+echo "  Destino:   $INSTALL_DIR"
+echo "  Dados:     $DATA_DIR (backups/logs — fora do repositório)"
+echo "  Usuário:   $USER_NAME"
+echo "  Rede LAN:  $LAN_NET"
 echo ""
 
 # ═══════════════════════════════════════════════════════════════════════════
 # PASSO 1: Verificar sistema
 # ═══════════════════════════════════════════════════════════════════════════
-header "Passo 1/7 — Verificando sistema"
+header "Passo 1/8 — Verificando sistema"
 
 OS_ID=""
 if [ -f /etc/os-release ]; then
@@ -84,18 +93,14 @@ fi
 
 if [ "$OS_ID" != "debian" ]; then
     warn "Sistema: $OS_ID (recomendado: Debian 13)"
-    warn "O script foi otimizado para Debian 13, mas pode funcionar em outras distros."
-else
-    log "Sistema: Debian $VERSION_ID ($VERSION_CODENAME)"
 fi
-
 ARCH=$(uname -m)
 log "Arquitetura: $ARCH"
 
 # ═══════════════════════════════════════════════════════════════════════════
 # PASSO 2: Instalar pacotes
 # ═══════════════════════════════════════════════════════════════════════════
-header "Passo 2/7 — Instalando pacotes do sistema"
+header "Passo 2/8 — Instalando pacotes do sistema"
 
 info "Atualizando lista de pacotes..."
 apt-get update -qq
@@ -107,7 +112,9 @@ REQUIRED_PACKAGES=(
     git
     curl
     wget
+    rsync
     android-tools-adb
+    ufw
     systemd
 )
 
@@ -123,23 +130,15 @@ done
 if [ ${#MISSING[@]} -gt 0 ]; then
     info "Instalando pacotes faltantes: ${MISSING[*]}"
     apt-get install -y -qq "${MISSING[@]}"
-    for pkg in "${MISSING[@]}"; do
-        if dpkg -l "$pkg" 2>/dev/null | grep -q '^ii'; then
-            log "$pkg instalado"
-        else
-            warn "Falha ao instalar $pkg"
-        fi
-    done
 fi
 
-# Verifica versão do Python
 PYTHON_VERSION=$(python3 --version 2>&1 | grep -oP '\d+\.\d+')
 info "Python $PYTHON_VERSION detectado"
 
 # ═══════════════════════════════════════════════════════════════════════════
-# PASSO 3: Criar usuário e diretórios
+# PASSO 3: Criar usuários e diretórios
 # ═══════════════════════════════════════════════════════════════════════════
-header "Passo 3/7 — Criando usuário e estrutura de diretórios"
+header "Passo 3/8 — Criando usuários e estrutura de diretórios"
 
 if id "$USER_NAME" &>/dev/null; then
     log "Usuário $USER_NAME já existe"
@@ -148,25 +147,38 @@ else
     log "Usuário $USER_NAME criado"
 fi
 
+if [ "$INSTALL_MEDIAMTX" = true ] && ! id "$MEDIAMTX_USER" &>/dev/null; then
+    useradd -r -s /usr/sbin/nologin -M -d /var/lib/mediamtx "$MEDIAMTX_USER"
+    log "Usuário $MEDIAMTX_USER criado"
+fi
+
+# /opt/panel (código) + /var/lib/panel-tvbox (dados em runtime)
 mkdir -p "$INSTALL_DIR"
-mkdir -p "$CONFIG_DIR" "$DEVICES_DIR" "$LOGS_DIR" "$BACKUPS_DIR" "$SCRIPTS_DIR"
-log "Diretórios criados em $INSTALL_DIR"
+mkdir -p "$DATA_DIR/backups" "$DATA_DIR/logs" "$DATA_DIR/screenshots" "$DATA_DIR/apks"
+log "Diretórios criados: $INSTALL_DIR e $DATA_DIR"
 
 # ═══════════════════════════════════════════════════════════════════════════
 # PASSO 4: Copiar arquivos do projeto
 # ═══════════════════════════════════════════════════════════════════════════
-header "Passo 4/7 — Copiando arquivos do projeto"
+header "Passo 4/8 — Copiando arquivos do projeto"
 
 info "Copiando de $PROJECT_DIR → $INSTALL_DIR"
 
-# Copia tudo exceto venv/, __pycache__/, .git/
-rsync -a --delete \
+# Sem --delete (não apaga arquivos locais de /opt/panel); exclui runtime/binários
+rsync -a \
     --exclude='.git/' \
     --exclude='__pycache__/' \
     --exclude='*.pyc' \
     --exclude='venv/' \
     --exclude='.venv/' \
-    --exclude='logs/*.log' \
+    --exclude='logs/' \
+    --exclude='backups/' \
+    --exclude='scrcpy/versions/' \
+    --exclude='scrcpy/downloads/' \
+    --exclude='scrcpy/*.apk' \
+    --exclude='scrcpy/mpv_splits/' \
+    --exclude='.reasonix/' \
+    --exclude='*.xlsx' \
     "$PROJECT_DIR/" "$INSTALL_DIR/"
 
 log "Arquivos copiados"
@@ -174,7 +186,7 @@ log "Arquivos copiados"
 # ═══════════════════════════════════════════════════════════════════════════
 # PASSO 5: Criar virtualenv e instalar dependências Python
 # ═══════════════════════════════════════════════════════════════════════════
-header "Passo 5/7 — Configurando ambiente Python"
+header "Passo 5/8 — Configurando ambiente Python"
 
 if [ "$SKIP_VENV" = true ]; then
     warn "Pulando criação do virtualenv (--no-venv)"
@@ -190,41 +202,124 @@ else
     PIP_CMD="$VENV_DIR/bin/pip"
 fi
 
-info "Instalando dependências Python..."
+info "Instalando dependências Python (pyproject.toml)..."
 $PIP_CMD install --quiet --upgrade pip
-$PIP_CMD install --quiet \
-    fastapi>=0.115.0 \
-    "uvicorn[standard]>=0.30.0" \
-    pydantic>=2.0 \
-    pyyaml>=6.0 \
-    httpx>=0.27.0 \
-    psutil>=6.0 \
-    python-multipart>=0.0.9
-
+$PIP_CMD install --quiet "$PROJECT_DIR" || {
+    # Fallback: instala explícito se o pyproject empacotar de forma inesperada
+    warn "pip install . falhou — instalando dependências explicitamente"
+    $PIP_CMD install --quiet \
+        "fastapi>=0.115.0" "uvicorn[standard]>=0.30.0" pydantic>=2.0 \
+        pyyaml>=6.0 httpx>=0.27.0 psutil>=6.0 python-multipart>=0.0.9
+}
 log "Dependências Python instaladas"
 
 # ═══════════════════════════════════════════════════════════════════════════
-# PASSO 6: Configurar systemd
+# PASSO 6: MediaMTX (download do binário + serviço não-root)
 # ═══════════════════════════════════════════════════════════════════════════
-header "Passo 6/7 — Configurando serviços systemd"
+if [ "$INSTALL_MEDIAMTX" = true ]; then
+    header "Passo 6/8 — Instalando MediaMTX"
 
-# Define caminho correto do Python no venv
+    MEDIAMTX_BIN="/usr/local/bin/mediamtx"
+    MEDIAMTX_DATA="/var/lib/mediamtx"
+
+    if [ ! -x "$MEDIAMTX_BIN" ]; then
+        # Mapeia arquitetura para asset do release
+        case "$ARCH" in
+            x86_64|amd64) MTX_ARCH="amd64" ;;
+            aarch64|arm64) MTX_ARCH="arm64" ;;
+            armv7l|armhf) MTX_ARCH="armv7" ;;
+            *) MTX_ARCH="" ;;
+        esac
+
+        if [ -n "$MTX_ARCH" ]; then
+            info "Baixando MediaMTX ($MTX_ARCH) do GitHub..."
+            TMP_DIR=$(mktemp -d)
+            # Resolve a última release via API
+            LATEST=$(curl -fsSL https://api.github.com/repos/bluenviron/mediamtx/releases/latest \
+                        | grep -oP '"tag_name":\s*"\K[^"]+' || echo "v1.9.2")
+            ASSET="mediamtx_${LATEST#v}_linux_${MTX_ARCH}.tar.gz"
+            if curl -fsSL -o "$TMP_DIR/mediamtx.tar.gz" \
+                    "https://github.com/bluenviron/mediamtx/releases/download/${LATEST}/${ASSET}"; then
+                mkdir -p "$MEDIAMTX_DATA"
+                tar -xzf "$TMP_DIR/mediamtx.tar.gz" -C "$TMP_DIR"
+                install -m 0755 "$TMP_DIR/mediamtx" "$MEDIAMTX_BIN"
+                log "MediaMTX ${LATEST} instalado em $MEDIAMTX_BIN"
+            else
+                warn "Falha no download do MediaMTX — instale manualmente em $MEDIAMTX_BIN"
+            fi
+            rm -rf "$TMP_DIR"
+        else
+            warn "Arquitetura $ARCH sem asset MediaMTX — instale manualmente em $MEDIAMTX_BIN"
+        fi
+    else
+        log "MediaMTX já instalado em $MEDIAMTX_BIN"
+    fi
+
+    mkdir -p "$MEDIAMTX_DATA"
+    chown -R "$MEDIAMTX_USER:$MEDIAMTX_USER" "$MEDIAMTX_DATA"
+
+    # Gera o service (usuário não-root, hardening)
+    cat > /etc/systemd/system/mediamtx.service << EOF
+[Unit]
+Description=MediaMTX Streaming Server (RTSP/RTMP/WebRTC)
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=$MEDIAMTX_USER
+Group=$MEDIAMTX_USER
+WorkingDirectory=$MEDIAMTX_DATA
+ExecStart=$MEDIAMTX_BIN $MEDIAMTX_DATA/mediamtx.yml
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=$MEDIAMTX_DATA
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    # Copia a config gerada pelo painel (se existir) para o data dir
+    if [ -f "$INSTALL_DIR/config/mediamtx.generated.yml" ]; then
+        install -o "$MEDIAMTX_USER" -g "$MEDIAMTX_USER" -m 0644 \
+            "$INSTALL_DIR/config/mediamtx.generated.yml" "$MEDIAMTX_DATA/mediamtx.yml"
+        log "Config do MediaMTX copiada para $MEDIAMTX_DATA/mediamtx.yml"
+    else
+        warn "mediamtx.generated.yml não encontrado — gere pelo wizard do painel e re-execute este passo"
+    fi
+
+    systemctl daemon-reload
+    systemctl enable mediamtx.service
+    systemctl start mediamtx.service || warn "Falha ao iniciar mediamtx.service (journalctl -u mediamtx.service)"
+else
+    warn "MediaMTX não instalado (--no-mediamtx)"
+fi
+
+# ═══════════════════════════════════════════════════════════════════════════
+# PASSO 7: systemd (painel) + firewall
+# ═══════════════════════════════════════════════════════════════════════════
+header "Passo 7/8 — Serviço do painel + firewall"
+
 if [ "$SKIP_VENV" = true ]; then
     PYTHON_BIN="python3"
 else
     PYTHON_BIN="$VENV_DIR/bin/uvicorn"
 fi
 
-# Gera o service do painel
 cat > /etc/systemd/system/panel.service << EOF
 [Unit]
 Description=Painel TV Box - Gerenciamento de TV Boxes Android
-After=network.target
+After=network.target mediamtx.service
 Wants=network-online.target
 
 [Service]
 Type=simple
 User=$USER_NAME
+Group=$USER_NAME
 WorkingDirectory=$INSTALL_DIR
 ExecStart=$PYTHON_BIN app.main:app --host 0.0.0.0 --port $PANEL_PORT --workers 1
 Restart=always
@@ -232,98 +327,78 @@ RestartSec=5
 StandardOutput=journal
 StandardError=journal
 Environment=PYTHONUNBUFFERED=1
+Environment=PANEL_DATA_DIR=$DATA_DIR
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=$DATA_DIR $INSTALL_DIR/config $INSTALL_DIR/devices $INSTALL_DIR/groups $INSTALL_DIR/scrcpy
 
 [Install]
 WantedBy=multi-user.target
 EOF
-
-# Gera o service do MediaMTX (opcional — template)
-if [ ! -f /etc/systemd/system/mediamtx.service ]; then
-    cat > /etc/systemd/system/mediamtx.service << 'EOF'
-[Unit]
-Description=MediaMTX Streaming Server
-After=network.target
-
-[Service]
-Type=simple
-ExecStart=/usr/local/bin/mediamtx
-WorkingDirectory=/opt/mediamtx
-Restart=always
-RestartSec=3
-User=root
-
-[Install]
-WantedBy=multi-user.target
-EOF
-    warn "Service mediamtx.service criado (binário e config precisam ser instalados manualmente)"
-else
-    log "mediamtx.service já existe"
-fi
 
 systemctl daemon-reload
-log "Serviços systemd configurados"
+log "Serviço panel.service configurado"
 
-# ═══════════════════════════════════════════════════════════════════════════
-# PASSO 6b: Firewall
-# ═══════════════════════════════════════════════════════════════════════════
-info "Configurando firewall..."
-
+# Firewall — libera apenas para a LAN, NUNCA 5555 para o mundo
 if command -v ufw &>/dev/null; then
-    ufw allow "$PANEL_PORT/tcp" comment "Painel TV Box"
-    ufw allow "$ADB_PORT/tcp" comment "ADB"
-    ufw allow 8554/tcp comment "MediaMTX RTSP"
-    ufw allow 1935/tcp comment "MediaMTX RTMP"
-    ufw allow "$MEDIAMTX_PORT/tcp" comment "MediaMTX API"
+    info "Configurando firewall (liberando para $LAN_NET)..."
+    ufw allow from "$LAN_NET" to any port "$PANEL_PORT/tcp" comment "Painel TV Box"
+    if [ "$INSTALL_MEDIAMTX" = true ]; then
+        ufw allow from "$LAN_NET" to any port "$MEDIAMTX_RTSP_PORT/tcp" comment "MediaMTX RTSP"
+        ufw allow from "$LAN_NET" to any port "$MEDIAMTX_RTMP_PORT/tcp" comment "MediaMTX RTMP"
+        ufw allow from "$LAN_NET" to any port "$MEDIAMTX_API_PORT/tcp" comment "MediaMTX API"
+    fi
+    if [ "$ALLOW_ADB" = true ]; then
+        ufw allow from "$LAN_NET" to any port "$ADB_PORT/tcp" comment "ADB (LAN)"
+        warn "ADB 5555 liberado para $LAN_NET (--allow-adb)"
+    else
+        info "ADB 5555 NÃO foi aberto (use --allow-adb se precisar de adb connect externo)"
+    fi
     log "Firewall UFW configurado"
-elif command -v firewall-cmd &>/dev/null; then
-    firewall-cmd --permanent --add-port="$PANEL_PORT/tcp"
-    firewall-cmd --permanent --add-port="8554/tcp"
-    firewall-cmd --permanent --add-port="1935/tcp"
-    firewall-cmd --reload
-    log "Firewall firewalld configurado"
 else
-    warn "Nenhum firewall detectado. Configure manualmente as portas:"
-    warn "  $PANEL_PORT/tcp (Painel), 8554/tcp (RTSP), 1935/tcp (RTMP)"
+    warn "UFW não encontrado — abra manualmente para $LAN_NET: $PANEL_PORT, 8554, 1935, 9997"
 fi
 
 # ═══════════════════════════════════════════════════════════════════════════
-# PASSO 7: Finalizar
+# PASSO 8: Finalizar
 # ═══════════════════════════════════════════════════════════════════════════
-header "Passo 7/7 — Finalizando"
+header "Passo 8/8 — Finalizando"
 
-# Ajusta permissões
+# Permissões: código só-leitura para panel; data dir gravável
 chown -R "$USER_NAME:$USER_NAME" "$INSTALL_DIR"
-chmod 755 "$INSTALL_DIR"
-chmod 644 "$INSTALL_DIR/config/"*.yml 2>/dev/null || true
+chown -R "$USER_NAME:$USER_NAME" "$DATA_DIR"
+chmod 750 "$INSTALL_DIR"
+chmod 750 "$DATA_DIR"
+find "$INSTALL_DIR/config" -type f -name "*.yml" -exec chmod 640 {} + 2>/dev/null || true
+find "$DATA_DIR" -type d -exec chmod 750 {} +
 
 # Habilita e inicia o serviço
 systemctl enable panel.service
-systemctl start panel.service || warn "Falha ao iniciar panel.service (verifique com: journalctl -u panel.service)"
+systemctl start panel.service || warn "Falha ao iniciar panel.service (journalctl -u panel.service -n 50)"
 
-# Status
 echo ""
 echo -e "${BOLD}╔══════════════════════════════════════════════════════╗${NC}"
-echo -e "${BOLD}║           Instalação Concluída! 🚀                 ║${NC}"
+echo -e "${BOLD}║           Instalação Concluída!                      ║${NC}"
 echo -e "${BOLD}╚══════════════════════════════════════════════════════╝${NC}"
 echo ""
-echo -e "  ${GREEN}Painel:${NC}        http://$(hostname -I | awk '{print $1}'):$PANEL_PORT"
-echo -e "  ${GREEN}Diretório:${NC}     $INSTALL_DIR"
-echo -e "  ${GREEN}Logs:${NC}          journalctl -u panel.service -f"
-echo -e "  ${GREEN}Status:${NC}        systemctl status panel.service"
+IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+echo -e "  ${GREEN}Painel:${NC}     http://${IP:-<IP>}:$PANEL_PORT"
+echo -e "  ${GREEN}Código:${NC}     $INSTALL_DIR"
+echo -e "  ${GREEN}Dados:${NC}      $DATA_DIR (backups/logs — fora do git)"
+echo -e "  ${GREEN}Logs:${NC}       journalctl -u panel.service -f"
 echo ""
 
-# Verifica se o serviço está rodando
 if systemctl is-active --quiet panel.service; then
     log "Painel está rodando!"
 else
-    warn "Painel não está rodando. Verifique os logs: journalctl -u panel.service -n 50"
+    warn "Painel não está rodando. Verifique: journalctl -u panel.service -n 50"
 fi
 
 echo ""
 info "Próximos passos:"
-info "  Acesse http://$(hostname -I | awk '{print $1}'):$PANEL_PORT e configure pelo Wizard"
-info "  Configure ADB nos TV Boxes: Settings → Developer Options → USB Debugging"
-info "  Verifique conectividade: adb connect <IP_TV_BOX>:5555"
-echo ""
-info "Documentação: $INSTALL_DIR/docs/"
+info "  Acesse http://${IP:-<IP>}:$PANEL_PORT e configure pelo Wizard"
+info "  ADB nos TV Boxes: Settings → Developer Options → USB Debugging"
+info "  Após gerar o wizard, re-execute: sudo bash deploy/install.sh --no-venv --no-mediamtx  (para sincronizar configs)"
 echo ""

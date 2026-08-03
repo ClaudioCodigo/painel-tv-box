@@ -42,18 +42,20 @@ const BACKUP = (() => {
             const backups = res.backups || [];
 
             if (backups.length === 0) {
-                el.innerHTML = '<div class="empty-state">Nenhum backup encontrado.</div>';
+                el.innerHTML = UI.stateView('empty', 'Exporte um backup para começar.', { icon: 'archive', title: 'Nenhum backup' });
                 return;
             }
 
             let html = '<div class="backup-items">';
             for (const b of backups) {
-                const size = (b.size_bytes / 1024).toFixed(1);
+                const size = formatBytes(b.size_bytes || 0);
+                // created vem ISO; mostra relativo com absoluto no title
+                const createdIso = b.created ? b.created.replace('T', ' ') : '';
                 html += `
                     <div class="backup-item">
                         <div class="backup-info">
                             <div class="backup-name">${UI.escapeHtml(b.name)}</div>
-                            <div class="backup-meta">${size} KB — ${b.created || '--'}</div>
+                            <div class="backup-meta" title="${UI.escapeHtml(createdIso)}">${size} — ${b.created ? UI.timeAgo(b.created) : '--'}</div>
                         </div>
                         <div class="backup-actions">
                             <button class="btn btn-sm btn-secondary" onclick="BACKUP.doDownload('${UI.escAttr(b.name)}')">${UI.icon('download')}</button>
@@ -65,8 +67,17 @@ const BACKUP = (() => {
             html += '</div>';
             el.innerHTML = html;
         } catch (e) {
-            el.innerHTML = `<div class="error-state">Erro: ${e.message}</div>`;
+            el.innerHTML = UI.stateView('error', e.message, { retry: true });
+            UI.bindStateRetry(el, loadList);
         }
+    }
+
+    function formatBytes(num) {
+        if (!num || num === 0) return '0 B';
+        const units = ['B', 'KB', 'MB', 'GB'];
+        let i = 0;
+        while (num >= 1024 && i < units.length - 1) { num /= 1024; i++; }
+        return num.toFixed(1) + ' ' + units[i];
     }
 
     async function doExport() {
@@ -119,15 +130,17 @@ const BACKUP = (() => {
     async function doRestore(name) {
         UI.showModal(
             `Restaurar ${name}`,
-            `<p>Tem certeza? A configuração atual será substituída.<br>Um backup automático será criado antes.</p>`,
+            `<p>Tem certeza? A configuração atual será substituída.<br>` +
+            `Um <strong>backup automático</strong> será criado antes da restauração.<br>` +
+            `<span class="text-muted text-sm">Restaura: config/, devices/ e groups/.</span></p>`,
             async () => {
                 try {
                     const res = await API.post(`/backup/restore/${encodeURIComponent(name)}`);
                     if (res.success) {
-                        UI.createToast(`✅ ${res.count} arquivos restaurados de ${name}`, 'success');
+                        UI.createToast(`${res.count} arquivos restaurados de ${name}`, 'success');
                         await loadList();
                     } else {
-                        UI.createToast(`❌ ${res.error || 'erro'}`, 'error');
+                        UI.createToast(`${res.error || 'erro'}`, 'error');
                     }
                 } catch (e) {
                     UI.createToast(`❌ ${e.message}`, 'error');

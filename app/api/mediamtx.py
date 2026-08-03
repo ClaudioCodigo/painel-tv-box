@@ -3,6 +3,7 @@
 from fastapi import APIRouter, HTTPException
 
 from app.managers.mediamtx import MediaMTXManager
+from app.utils.system import is_safe_http_url_local
 
 router = APIRouter(prefix="/api/mediamtx", tags=["mediamtx"])
 
@@ -13,17 +14,22 @@ def _get_config():
     return app.main.config
 
 
-@router.get("/health")
-async def mediamtx_health():
-    """Verifica se MediaMTX está respondendo."""
+def _get_mgr() -> MediaMTXManager:
+    """Resolve a URL do MediaMTX exigindo localhost/rede privada (anti SSRF)."""
     config = _get_config()
     if not config or not config.mediamtx:
         raise HTTPException(503, "MediaMTX config não carregada")
-
     url = config.mediamtx.api.url if hasattr(config.mediamtx, "api") else "http://localhost:9997"
     timeout = config.mediamtx.api.timeout if hasattr(config.mediamtx, "api") else 5
+    if not is_safe_http_url_local(url):
+        raise HTTPException(400, "mediamtx.api_url precisa apontar para localhost/rede privada")
+    return MediaMTXManager(api_url=url, timeout=timeout)
 
-    mtx = MediaMTXManager(api_url=url, timeout=timeout)
+
+@router.get("/health")
+async def mediamtx_health():
+    """Verifica se MediaMTX está respondendo."""
+    mtx = _get_mgr()
     result = await mtx.health()
     return result
 
@@ -31,14 +37,7 @@ async def mediamtx_health():
 @router.get("/paths")
 async def mediamtx_list_paths():
     """Lista todas as paths do MediaMTX (readers, publisher, estado)."""
-    config = _get_config()
-    if not config or not config.mediamtx:
-        raise HTTPException(503, "MediaMTX config não carregada")
-
-    url = config.mediamtx.api.url if hasattr(config.mediamtx, "api") else "http://localhost:9997"
-    timeout = config.mediamtx.api.timeout if hasattr(config.mediamtx, "api") else 5
-
-    mtx = MediaMTXManager(api_url=url, timeout=timeout)
+    mtx = _get_mgr()
     result = await mtx.list_paths()
     return result
 
@@ -46,14 +45,7 @@ async def mediamtx_list_paths():
 @router.get("/paths/{name}")
 async def mediamtx_get_path(name: str):
     """Retorna detalhes de uma path específica."""
-    config = _get_config()
-    if not config or not config.mediamtx:
-        raise HTTPException(503, "MediaMTX config não carregada")
-
-    url = config.mediamtx.api.url if hasattr(config.mediamtx, "api") else "http://localhost:9997"
-    timeout = config.mediamtx.api.timeout if hasattr(config.mediamtx, "api") else 5
-
-    mtx = MediaMTXManager(api_url=url, timeout=timeout)
+    mtx = _get_mgr()
     result = await mtx.get_path(name)
     if not result.get("success"):
         raise HTTPException(404, f"Path '{name}' não encontrada")
@@ -63,14 +55,7 @@ async def mediamtx_get_path(name: str):
 @router.post("/paths/{name}")
 async def mediamtx_add_path(name: str, data: dict = {}):
     """Cria uma nova path no MediaMTX."""
-    config = _get_config()
-    if not config or not config.mediamtx:
-        raise HTTPException(503, "MediaMTX config não carregada")
-
-    url = config.mediamtx.api.url if hasattr(config.mediamtx, "api") else "http://localhost:9997"
-    timeout = config.mediamtx.api.timeout if hasattr(config.mediamtx, "api") else 5
-
-    mtx = MediaMTXManager(api_url=url, timeout=timeout)
+    mtx = _get_mgr()
     result = await mtx.add_path(name, data)
     if not result.get("success"):
         raise HTTPException(500, result.get("error", "Falha ao criar path"))
@@ -80,14 +65,7 @@ async def mediamtx_add_path(name: str, data: dict = {}):
 @router.delete("/paths/{name}")
 async def mediamtx_delete_path(name: str):
     """Remove uma path do MediaMTX."""
-    config = _get_config()
-    if not config or not config.mediamtx:
-        raise HTTPException(503, "MediaMTX config não carregada")
-
-    url = config.mediamtx.api.url if hasattr(config.mediamtx, "api") else "http://localhost:9997"
-    timeout = config.mediamtx.api.timeout if hasattr(config.mediamtx, "api") else 5
-
-    mtx = MediaMTXManager(api_url=url, timeout=timeout)
+    mtx = _get_mgr()
     result = await mtx.delete_path(name)
     if not result.get("success"):
         raise HTTPException(404, f"Path '{name}' não encontrada")

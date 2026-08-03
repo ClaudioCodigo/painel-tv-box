@@ -17,3 +17,30 @@
 .settings-card + .settings-card {
     margin-top: var(--space-4);
 }
+
+/* Seletor de tema (D5) */
+.theme-options {
+    display: flex;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+    margin-top: var(--space-2);
+}
+.theme-option {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 0.85em;
+    color: var(--text-secondary);
+    transition: background var(--dur-fast) ease, border-color var(--dur-fast) ease;
+}
+.theme-option:hover { background: var(--control-hover); color: var(--text-primary); }
+.theme-option:has(input:checked) {
+    border-color: var(--text-primary);
+    background: var(--text-primary);
+    color: var(--text-inverse);
+}
+.theme-option .icon { color: inherit; }
