@@ -16,11 +16,12 @@ StandardError=journal
 Environment=PYTHONUNBUFFERED=1
 Environment=PANEL_DATA_DIR=/var/lib/panel-tvbox
 Environment=PANEL_ADB_SERVER_PORT=5038
+Environment=PANEL_MEDIAMTX_CONFIG=/var/lib/mediamtx/mediamtx.yml
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
 ProtectHome=true
-ReadWritePaths=/var/lib/panel-tvbox /opt/panel/config /opt/panel/devices /opt/panel/groups /opt/panel/scrcpy
+ReadWritePaths=/var/lib/panel-tvbox /opt/panel/config /opt/panel/devices /opt/panel/groups /opt/panel/scrcpy /var/lib/mediamtx
 
 [Install]
 WantedBy=multi-user.target

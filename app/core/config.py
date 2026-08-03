@@ -294,4 +294,17 @@ class ConfigurationManager:
 
         dump_yaml_simple(output_path, config)
         logger.info("MediaMTX config gerada: %s (%d paths)", output_path, len(paths))
+
+        # Sincroniza com o config do serviço (managed deploy): se o env
+        # PANEL_MEDIAMTX_CONFIG estiver setado e gravável, escreve lá também —
+        # o wizard/update atualiza o MediaMTX em execução sem cópia manual.
+        service_cfg = os.environ.get("PANEL_MEDIAMTX_CONFIG", "")
+        if service_cfg and Path(service_cfg) != output_path:
+            try:
+                dest = Path(service_cfg)
+                dump_yaml_simple(dest, config)
+                logger.info("MediaMTX config sincronizada para o serviço: %s", dest)
+            except Exception as e:
+                logger.warning("Falha ao sincronizar config do MediaMTX (%s): %s", service_cfg, e)
+
         return output_path

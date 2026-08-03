@@ -302,14 +302,25 @@ EOF
         install -o "$MEDIAMTX_USER" -g "$MEDIAMTX_USER" -m 0644 \
             "$INSTALL_DIR/config/mediamtx.generated.yml" "$MEDIAMTX_DATA/mediamtx.yml"
         log "Config do MediaMTX copiada para $MEDIAMTX_DATA/mediamtx.yml"
-    elif [ -f "$INSTALL_DIR/config/mediamtx.yml" ]; then
-        # Fallback: config padrão funcional — o wizard do painel sobrescreve depois
-        install -o "$MEDIAMTX_USER" -g "$MEDIAMTX_USER" -m 0644 \
-            "$INSTALL_DIR/config/mediamtx.yml" "$MEDIAMTX_DATA/mediamtx.yml"
-        warn "Usando config padrão (config/mediamtx.yml) — gere o wizard para paths dos devices"
     else
-        warn "Nenhuma config do MediaMTX encontrada — o serviço pode falhar até gerar pelo wizard"
+        # Fallback: config mínimo VÁLIDO do MediaMTX com API ligada (porta 9997).
+        # NOTA: config/mediamtx.yml é o template do PAINEL (não serve p/ o MediaMTX).
+        cat > "$MEDIAMTX_DATA/mediamtx.yml" << 'MTX_DEFAULT'
+# Config padrão do MediaMTX (gerada pelo install.sh)
+# O wizard do painel sobrescreve com os paths dos devices (mediamtx.generated.yml).
+api: true
+rtsp: {}
+rtmp: {}
+logLevel: info
+MTX_DEFAULT
+        chown "$MEDIAMTX_USER:$MEDIAMTX_USER" "$MEDIAMTX_DATA/mediamtx.yml"
+        chmod 0640 "$MEDIAMTX_DATA/mediamtx.yml"
+        warn "Usando config padrão do MediaMTX (API na 9997) — conclua o wizard p/ paths dos devices"
     fi
+
+    # Painel (owner) grava o config do serviço; MediaMTX (grupo) lê
+    chown "$USER_NAME:$MEDIAMTX_USER" "$MEDIAMTX_DATA/mediamtx.yml" 2>/dev/null || true
+    chmod 0660 "$MEDIAMTX_DATA/mediamtx.yml"
 
     systemctl daemon-reload
     systemctl enable mediamtx.service
@@ -347,11 +358,13 @@ StandardOutput=journal
 StandardError=journal
 Environment=PYTHONUNBUFFERED=1
 Environment=PANEL_DATA_DIR=$DATA_DIR
+Environment=PANEL_ADB_SERVER_PORT=5038
+Environment=PANEL_MEDIAMTX_CONFIG=$MEDIAMTX_DATA/mediamtx.yml
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
 ProtectHome=true
-ReadWritePaths=$DATA_DIR $INSTALL_DIR/config $INSTALL_DIR/devices $INSTALL_DIR/groups $INSTALL_DIR/scrcpy
+ReadWritePaths=$DATA_DIR $INSTALL_DIR/config $INSTALL_DIR/devices $INSTALL_DIR/groups $INSTALL_DIR/scrcpy $MEDIAMTX_DATA
 
 [Install]
 WantedBy=multi-user.target
