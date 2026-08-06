@@ -128,3 +128,28 @@ class TestADBServerIsolation:
         monkeypatch.setenv("PANEL_ADB_SERVER_PORT", "5042")
         m = ADBManager(binary="adb")
         assert m.server_port == 5042
+
+    @pytest.mark.asyncio
+    async def test_server_port_from_config_fallback(self, monkeypatch):
+        """Sem env, cai na config adb.server_port (fonte única com o scrcpy)."""
+        from app.managers.adb import ADBManager
+        from app.utils.system import get_panel_adb_server_port
+
+        monkeypatch.delenv("PANEL_ADB_SERVER_PORT", raising=False)
+
+        class FakeADB:
+            server_port = 5060
+
+        class FakeSystem:
+            adb = FakeADB()
+
+        class FakeConfig:
+            system = FakeSystem()
+
+        import app.main
+
+        monkeypatch.setattr(app.main, "config", FakeConfig())
+        assert get_panel_adb_server_port() == 5060
+        m = ADBManager(binary="adb")
+        assert m.server_port == 5060
+        monkeypatch.setattr(app.main, "config", None)

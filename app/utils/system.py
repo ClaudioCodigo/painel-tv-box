@@ -110,6 +110,29 @@ def is_safe_http_url_local(value: str) -> bool:
         return False
 
 
+def get_panel_adb_server_port() -> int | None:
+    """Porta do servidor ADB usado pelo painel (e pelo scrcpy).
+
+    Fonte única: env PANEL_ADB_SERVER_PORT (setada pelo serviço/install.ps1)
+    ou `adb.server_port` em config/system.yml. O scrcpy usa a MESMA porta —
+    assim ele sempre enxerga o device que o painel conectou.
+    """
+    env_port = os.environ.get("PANEL_ADB_SERVER_PORT", "")
+    if env_port.isdigit():
+        return int(env_port)
+    try:
+        import app.main
+
+        cfg = app.main.config
+        if cfg and getattr(cfg, "system", None) and getattr(cfg.system, "adb", None):
+            sp = getattr(cfg.system.adb, "server_port", None)
+            if sp:
+                return int(sp)
+    except Exception:
+        pass
+    return None
+
+
 def get_metrics() -> dict:
     """Retorna métricas do host (CPU, RAM, disco, uptime)."""
     try:

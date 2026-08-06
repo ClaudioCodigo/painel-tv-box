@@ -27,18 +27,16 @@ MAX_KEEP_VERSIONS = 3
 GITHUB_API = "https://api.github.com/repos/genymobile/scrcpy/releases"
 
 
-def _env_default_adb():
-    """Env sem ADB_SERVER_PORT: o scrcpy usa o servidor ADB default (5037),
-    isolado do servidor do painel (Ideia 4 — ADB_SERVER_PORT no ADBManager)."""
-    return {k: v for k, v in os.environ.items() if k != "ADB_SERVER_PORT"}
-
-
 def _env_panel_adb():
-    """Env com ADB_SERVER_PORT do painel (para adb exec-out do streaming)."""
+    """Env com ADB_SERVER_PORT do painel (scrcpy + streaming usam o mesmo
+    servidor que tem o device conectado). Sem porta isolada, não injeta nada
+    (fica no default 5037, igual ao ADBManager)."""
+    from app.utils.system import get_panel_adb_server_port
+
     env = dict(os.environ)
-    port = os.environ.get("PANEL_ADB_SERVER_PORT", "")
+    port = get_panel_adb_server_port()
     if port:
-        env["ADB_SERVER_PORT"] = port
+        env["ADB_SERVER_PORT"] = str(port)
     return env
 
 # Versões do scrcpy são numéricas pontuadas (ex: 2.4, 3.0.1)
@@ -418,7 +416,7 @@ class ScrcpyManager:
                 logger.info("scrcpy tentativa %d/%d target=%s cmd=%s", attempt, max_attempts, target, " ".join(cmd))
                 proc = await asyncio.create_subprocess_exec(
                     *cmd,
-                    env=_env_default_adb(),
+                    env=_env_panel_adb(),
                     stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
                 )
                 try:

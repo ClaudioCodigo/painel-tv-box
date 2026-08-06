@@ -116,6 +116,7 @@ const SCRCPY = (() => {
             ]);
             const card = document.getElementById('scrcpy-status-card');
             if (card) card.innerHTML = `
+                ${status.service_session ? '<div class="alert alert-warning" style="margin-bottom:8px">⚠️ O painel está rodando como <b>serviço Windows</b> (Sessão 0) — a janela do Mirror <b>não aparece</b> no desktop. Use <b>Streaming</b> (screenrecord→RTSP), que funciona sem tela.</div>' : ''}
                 <div class="info-row"><span class="info-key">Versão Ativa</span><span class="info-val">${status.current_version||'nenhuma'}</span></div>
                 <div class="info-row"><span class="info-key">Binário</span><span class="info-val">${status.binary_exists?'✅':'❌'}</span></div>
                 <div class="info-row"><span class="info-key">Versões</span><span class="info-val">${status.versions_count}</span></div>`;

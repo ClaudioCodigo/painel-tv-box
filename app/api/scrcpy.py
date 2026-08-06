@@ -22,8 +22,22 @@ async def scrcpy_status():
         "binary_exists": binary is not None and binary.is_file() if binary else False,
         "installed_versions": versions,
         "versions_count": len(versions),
+        "service_session": _is_service_session(),
         "diagnostics": mgr.get_diagnostics(),
     }
+
+
+def _is_service_session() -> bool:
+    """True se o painel roda sem sessão interativa (serviço Windows/NSSM).
+
+    Em Session 0, janelas GUI (scrcpy mirroring) NÃO aparecem no desktop —
+    nesse cenário só o Streaming funciona.
+    """
+    import os
+
+    if os.name != "nt":
+        return False
+    return not os.environ.get("SESSIONNAME")
 
 
 @router.post("/check")

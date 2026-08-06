@@ -18,11 +18,12 @@ class ADBManager:
     def __init__(self, binary: str = "adb", connect_timeout: int = 10, server_port: int | None = None):
         self.binary = binary
         self.connect_timeout = connect_timeout
-        # Servidor ADB isolado (Ideia 4): painel usa porta própria para não
-        # interferir no transporte do scrcpy (default 5037).
+        # Servidor ADB do painel: porta isolada (env PANEL_ADB_SERVER_PORT ou
+        # config adb.server_port). O scrcpy usa a MESMA porta (vê o device).
         if server_port is None:
-            env_port = os.environ.get("PANEL_ADB_SERVER_PORT", "")
-            server_port = int(env_port) if env_port.isdigit() else None
+            from app.utils.system import get_panel_adb_server_port
+
+            server_port = get_panel_adb_server_port()
         self.server_port = server_port
         self._connected: set[str] = set()
         self._locks: dict[str, asyncio.Lock] = {}
