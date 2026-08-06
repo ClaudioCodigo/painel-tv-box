@@ -338,7 +338,12 @@ if ($AllowAdb) {
 Step "Validando instalacao"
 
 # D-15: garantir que nenhuma config real fique rastreada no .git de $Dest
-$tracked = & git -C $Dest ls-files 2>$null | Where-Object { $_ -match "^(config|devices|groups)/.*\.yml$" }
+$tracked = $null
+if (Get-Command git -ErrorAction SilentlyContinue) {
+    $tracked = & git -C $Dest ls-files 2>$null | Where-Object { $_ -match "^(config|devices|groups)/.*\.yml$" }
+} else {
+    Warn "Git nao encontrado - pulando validacao do indice (instale o Git p/ atualizar pelo painel)."
+}
 if ($tracked) {
     Warn "CONFIG LOCAL RASTREADA no git de $Dest - remova do indice:"
     $tracked | ForEach-Object { Fail "  $_" }
