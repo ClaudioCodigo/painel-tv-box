@@ -81,6 +81,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-06
-Stopped at: ROADMAP.md + STATE.md criados; próxima etapa é /gsd-plan-phase 1
-Resume file: .planning/.continue-here.md
+Last session: 2026-08-06 (resume no OpenCode)
+Stopped at: Inicialização GSD concluída (PROJECT/config/research/REQUIREMENTS/ROADMAP/STATE/AGENTS.md commitados); próxima etapa é /gsd-discuss-phase 1
+Resume file: .planning/.continue-here.md (atualizado — next = discuss-phase 1)
