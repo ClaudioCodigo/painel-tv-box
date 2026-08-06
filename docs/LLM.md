@@ -40,9 +40,9 @@ OBS → RTMP → MediaMTX → RTSP → TV Box (VLC/MPV)
 ├── devices/                 # Um YAML por TV Box
 ├── groups/                  # Um YAML por grupo
 ├── scripts/android/         # Shell scripts enviados para os TV Boxes via ADB
-├── deploy/                  # install.sh, panel.service, mediamtx.service (Linux/Debian)
-├── backups/                 # Zips de backup + screenshots/ + apks/
-├── logs/                    # adb.log, system.log, watchdog.log... (rotacionados, 5MB x3)
+├── deploy/                  # install.ps1 (instalador Windows) + legacy/ (Linux arquivado)
+├── backups/                 # Zips de backup + screenshots/ + apks/ (no data dir, fora do repo)
+├── logs/                    # adb.log, system.log, watchdog.log... (no data dir, rotacionados, 5MB x3)
 ├── scrcpy/                  # Binários do scrcpy, versions/, downloads/, version.json
 ├── tests/                   # pytest (9 arquivos)
 └── docs/                    # Documentação (parte desatualizada — ver §11)
@@ -56,15 +56,14 @@ OBS → RTMP → MediaMTX → RTSP → TV Box (VLC/MPV)
 
 Backups, screenshots e APKs vivem em um **data dir** (`app/utils/system.py → get_data_dir()`), nunca no repo (git push/pull não mistura dados de máquinas):
 
-| SO | Local |
+| Fonte | Local |
 |---|---|
-| Env `PANEL_DATA_DIR` | qualquer (usado pelo systemd unit) |
-| Windows | `%LOCALAPPDATA%\PanelTVBox` |
-| Linux (root/serviço) | `/var/lib/panel-tvbox` |
-| Linux (usuário) | `~/.local/share/panel-tvbox` |
-| macOS | `~/Library/Application Support/PanelTVBox` |
+| Env `PANEL_DATA_DIR` | qualquer (setado pelo serviço NSSM) |
+| Windows (default) | `%LOCALAPPDATA%\PanelTVBox` |
 
-### Desenvolvimento (Windows/macOS/Linux)
+> Plataforma: **Windows 10+ apenas** (Linux/macOS descartados).
+
+### Desenvolvimento (Windows)
 
 ```bash
 python -m venv .venv
@@ -76,21 +75,24 @@ python -m venv .venv
 
 > ⚠️ `pip install -e .` **falha** (pyproject.toml não tem `[build-system]`/empacotamento). Instale as dependências direto, como acima.
 
-### Produção (Debian 13)
+### Produção (Windows 10+)
 
-```bash
-sudo bash deploy/install.sh                      # instala deps, MediaMTX, systemd, firewall
-sudo bash deploy/install.sh --lan 192.168.1.0/24 # firewall só para a sub-rede
-sudo bash deploy/install.sh --allow-adb          # (opcional) abre 5555 p/ ADB externo
-# Acesse http://IP:8080
+**Duplo clique em `instalar.bat`** (na raiz) → executa `deploy/install.ps1`:
+
+```powershell
+# opções avançadas (opcional):
+.\deploy\install.ps1 -AllowAdb       # abre ADB 5555 só na LAN + bloqueio em Public/Domain
+.\deploy\install.ps1 -NoMediamtx     # sem MediaMTX
+.\deploy\install.ps1 -SkipVenv       # reutiliza venv existente
+.\deploy\install.ps1 -RepoUrl <url>  # origem alternativa (se a pasta não for git)
 ```
 
-> O install script cria usuários não-root (`panel`, `mediamtx`), usa `/var/lib/panel-tvbox` como data dir, baixa o MediaMTX do GitHub e NÃO abre ADB para o mundo. O `pip install .` funciona (pyproject com `[build-system]`).
+> O instalador baixa ffmpeg/ADB/MediaMTX/NSSM, copia para `C:\PanelTVBox` preservando `.git`, cria o venv, registra os serviços NSSM `panel-tvbox` + `mediamtx` (auto-restart) e abre o firewall só para a LAN (8080/8554/1935/9997; ADB 5555 fechado por default). Logs dos serviços em `%LOCALAPPDATA%\PanelTVBox\logs`. A porta 5038 (`PANEL_ADB_SERVER_PORT`) isola o ADB do painel do scrcpy (default 5037).
 
 ### Testes
 
 ```bash
-.venv/Scripts/python -m pytest -q        # 70 testes
+.venv/Scripts/python -m pytest -q        # 111 testes
 node --check static/js/*.js              # sintaxe de todo o JS
 ```
 
@@ -375,7 +377,7 @@ I/O síncrono pesado roda via `asyncio.to_thread`: logs (search/tail/sources/dow
 8. **19 instâncias de `ADBManager`** — conexões/estado não compartilhados; considerar singleton no `app.state`.
 9. **Config morta** — `activity_check`, `mediamtx_check`, `command_delay`, `ping.*`, `critical_alert_cooldown`, `watchdog_override` (model existe, não implementado).
 10. **Docs antigos** — `02-SPECS.md`/`ADDING_DEVICE.md`/`WATCHDOG.md`/`UPDATING.md`/`APK_INSTALL.md` divergem do código.
-11. **`deploy/install.sh`** — firewall abre 5555/9997/8554/1935 sem restrição; `mediamtx.service` roda como root; `rsync --delete`.
+11. **`deploy/` (histórico)** — o install.sh/units systemd (agora em `deploy/legacy/`) abriam firewall sem restrição e rodavam como root; corrigido no instalador Windows (`install.ps1`): firewall `LocalSubnet`, serviços NSSM, data dir fora do repo.
 12. **MediaMTX gerado sem auth** (`pass: ''`, `apiAllowOrigins: ['*']`).
 13. **Sem lockfile** (pyproject com `>=`); sem cobertura configurada.
 

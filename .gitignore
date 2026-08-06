@@ -48,3 +48,8 @@ Thumbs.db
 docs/nobreak.md
 
 docs/Sem t*.md
+
+# artefatos de sessao/agente (nao versionar)
+*.jsonl
+pi-session-*.html
+*.pdf

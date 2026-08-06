@@ -1,12 +1,12 @@
 ---
 gsd_state_version: '1.0'
-status: planning
+status: in_progress
 progress:
   total_phases: 3
-  completed_phases: 0
+  completed_phases: 3
   total_plans: 0
   completed_plans: 0
-  percent: 0
+  percent: 100
 ---
 
 # Project State
@@ -16,14 +16,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-06)
 
 **Core value:** Manter os TV Boxes transmitindo de forma confiável e acessível na rede local — agora rodando como serviço Windows estável (auto-restart) em vez de scripts Linux.
-**Current focus:** Phase 1 — Instalador Windows
+**Current focus:** Fases 1-3 executadas (instalador Windows, refatoracao Windows-only, docs) — commit/push pendente
 
 ## Current Position
 
-Phase: 1 of 3 (Instalador Windows)
-Plan: 0 of 0 in current phase (plans TBD — definidos no plan-phase)
-Status: Ready to plan
-Last activity: 2026-08-06 — ROADMAP.md criado (3 fases, 16/16 requisitos mapeados)
+Phase: 1-3 of 3 (todas concluidas — instalador, refatoracao, docs)
+Plan: executado (install.ps1 + instalar.bat + refactor + docs)
+Status: Done - aguardando commit/push
+Last activity: 2026-08-06 — Fases 1-3 executadas
 
 Progress: [░░░░░░░░░░] 0%
 

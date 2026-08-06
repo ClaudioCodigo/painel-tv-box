@@ -41,17 +41,6 @@ def _env_panel_adb():
         env["ADB_SERVER_PORT"] = port
     return env
 
-
-def _is_headless() -> bool:
-    """True em servidor sem tela (Linux sem DISPLAY/WAYLAND_DISPLAY).
-
-    O scrcpy (mirroring) exige display — num servidor headless use o
-    Streaming (`adb exec-out screenrecord | ffmpeg`), que não precisa de tela.
-    """
-    if os.name == "nt":
-        return False
-    return not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
-
 # Versões do scrcpy são numéricas pontuadas (ex: 2.4, 3.0.1)
 SAFE_VERSION_RE = re.compile(r"^[0-9]+(\.[0-9]+){0,4}$")
 
@@ -164,25 +153,12 @@ class ScrcpyManager:
 
     @staticmethod
     def _platform_info(version: str) -> dict:
-        """Retorna asset, binário e tipo de archive conforme SO."""
-        import platform as pf
-        s = pf.system().lower()
-        m = pf.machine().lower()
-
-        if s == "linux" and "x86_64" in m:
-            return {"asset": f"scrcpy-linux-x86_64-v{version}.tar.gz", "binary": "scrcpy", "type": "tar.gz"}
-        if s == "linux" and "aarch64" in m:
-            return {"asset": f"scrcpy-linux-aarch64-v{version}.tar.gz", "binary": "scrcpy", "type": "tar.gz"}
-        if s == "windows":
-            return {"asset": f"scrcpy-win64-v{version}.zip", "binary": "scrcpy.exe", "type": "zip"}
-        if s == "darwin":
-            arch = "aarch64" if ("arm" in m or "aarch64" in m) else "x86_64"
-            return {"asset": f"scrcpy-macos-{arch}-v{version}.tar.gz", "binary": "scrcpy", "type": "tar.gz"}
-        return {"asset": f"scrcpy-linux-x86_64-v{version}.tar.gz", "binary": "scrcpy", "type": "tar.gz"}
+        """Asset, binário e tipo de archive para Windows (win64)."""
+        return {"asset": f"scrcpy-win64-v{version}.zip", "binary": "scrcpy.exe", "type": "zip"}
 
     @staticmethod
     def _platform_binary_name() -> str:
-        return "scrcpy.exe" if os.name == "nt" else "scrcpy"
+        return "scrcpy.exe"
 
     # ── Check updates ─────────────────────────────────
 
@@ -410,15 +386,8 @@ class ScrcpyManager:
             session = self._sessions[target]
             return {"success": True, "pid": session.get("pid"), "device": target, "already_running": True}
 
-        # Servidor sem tela: o scrcpy morre com "No available video device"
-        if _is_headless():
-            return {
-                "success": False,
-                "error": "Servidor sem tela (headless) — o scrcpy precisa de DISPLAY. "
-                         "Use o modo Streaming (screenrecord→ffmpeg→RTSP) ou instale um X virtual (xvfb).",
-            }
-
-        adb_bin = SCRCPY_DIR / ("adb.exe" if os.name == "nt" else "adb")
+        # Windows tem display sempre — mirroring direto
+        adb_bin = SCRCPY_DIR / "adb.exe"
         adb = ADBManager(binary=str(adb_bin) if adb_bin.is_file() else "adb", connect_timeout=7200)
         if not await adb.connect(device_ip, device_port):
             self._metrics["start_failures"] += 1
@@ -559,7 +528,7 @@ class ScrcpyManager:
 
         ffmpeg_bin = sh.which("ffmpeg")
         if not ffmpeg_bin:
-            return {"success": False, "error": "ffmpeg não encontrado — instale (apt install ffmpeg)"}
+            return {"success": False, "error": "ffmpeg não encontrado no PATH — o install.ps1 instala ffmpeg em C:\\PanelTVBox\\ffmpeg\\bin; adicione ao PATH do serviço (AppEnvironmentExtra)"}
 
         # adb exec-out screenrecord → H.264 no stdout → ffmpeg → RTMP
         adb_cmd = [adb.binary, "-s", target, "exec-out",
@@ -642,7 +611,7 @@ class ScrcpyManager:
                     logger.info("Stream parado: %s", target)
 
             import subprocess
-            cmd = ["pkill", "-f", "scrcpy"] if os.name != "nt" else ["taskkill", "/F", "/IM", "scrcpy.exe"]
+            cmd = ["taskkill", "/F", "/IM", "scrcpy.exe"]
             proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
             await proc.wait()
             self._metrics["stops"] += 1

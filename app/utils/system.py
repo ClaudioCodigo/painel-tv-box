@@ -3,7 +3,6 @@
 import logging
 import os
 import re
-import sys
 import time
 import unicodedata
 from pathlib import Path
@@ -14,31 +13,17 @@ logger = logging.getLogger("system")
 def get_data_dir() -> Path:
     """Diretório de dados em runtime (backups, screenshots, apks, logs).
 
-    Fora do repositório para que git push/pull não misture dados de máquinas:
-      1. Env PANEL_DATA_DIR (setado pelo systemd unit);
-      2. Windows: %LOCALAPPDATA%/PanelTVBox;
-      3. macOS: ~/Library/Application Support/PanelTVBox;
-      4. Linux (root/service): /var/lib/panel-tvbox;
-      5. Linux (usuário): $XDG_DATA_HOME/panel-tvbox ou ~/.local/share/panel-tvbox.
+    Fora do repositório para que git push/pull não misture dados de máquinas.
+    O painel roda apenas em Windows:
+      1. Env PANEL_DATA_DIR (se definido);
+      2. Windows: %LOCALAPPDATA%/PanelTVBox (default).
     """
     env = os.environ.get("PANEL_DATA_DIR")
     if env:
         return Path(env)
 
-    if sys.platform == "win32":
-        base = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA") or str(Path.home())
-        return Path(base) / "PanelTVBox"
-
-    if sys.platform == "darwin":
-        return Path.home() / "Library" / "Application Support" / "PanelTVBox"
-
-    # Linux
-    if hasattr(os, "geteuid") and os.geteuid() == 0:
-        return Path("/var/lib/panel-tvbox")
-    xdg = os.environ.get("XDG_DATA_HOME")
-    if xdg:
-        return Path(xdg) / "panel-tvbox"
-    return Path.home() / ".local" / "share" / "panel-tvbox"
+    base = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA") or str(Path.home())
+    return Path(base) / "PanelTVBox"
 
 
 def slugify(text: str) -> str:

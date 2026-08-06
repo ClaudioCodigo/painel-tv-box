@@ -1,106 +1,76 @@
-# Guia de Instalação — Debian 13 (Trixie)
+# Guia de Instalação — Windows 10+ / Windows Server 2019+
 
-> **Atualizado (Rodada 2):** o script foi reescrito — usuários não-root, data dir `/var/lib/panel-tvbox` (backups fora do git), firewall restrito à LAN, MediaMTX baixado automaticamente, hardening systemd. Detalhes no topo do `deploy/install.sh`.
+> **Atualizado (refatoração Windows-only):** o Linux foi descartado pelo cliente — o painel roda **somente em Windows**. Instalação por **duplo clique** (`instalar.bat`), painel e MediaMTX como **serviços NSSM** com auto-restart, firewall restrito à LAN.
 
 ## Pré-requisitos
 
-- Debian 13 instalado
-- Acesso root ou sudo
-- Conexão de rede
-- TV Box Android com ADB via TCP habilitado
+- Windows 10 64-bit ou Windows Server 2019+ (com **Windows PowerShell 5.1**, já incluído)
+- **Python 3.10+** instalado (python.org, marcar "Add to PATH") — usado para criar o venv
+- Rede local com os TV Boxes Android (ADB via TCP habilitado)
+- O instalador baixa sozinho: ffmpeg, ADB/platform-tools, MediaMTX e NSSM (não precisa winget)
 
 ## 1. Instalação Automática (recomendado)
 
-```bash
-# Clone o repositório
-git clone https://github.com/seu-repo/panel-tvbox.git
-cd panel-tvbox
-
-# Execute como root
-sudo bash deploy/install.sh
-```
+1. Clone/descompacte o projeto em qualquer pasta (ex.: `C:\Users\Cliente\painel-tv-box`).
+2. **Duplo clique em `instalar.bat`** (na raiz).
+3. Aceite o **UAC** (Administrador — necessário para serviços e firewall).
+4. Acompanhe o progresso na janela (7 passos). Ao final, o navegador abre `http://localhost:8080`.
+5. Na 1ª execução, o **wizard** cria as configs (adicionar TV Boxes, players, etc.).
 
 O script faz tudo automaticamente:
-1. ✅ Verifica sistema e arquitetura
-2. ✅ Instala pacotes: python3, pip, venv, git, adb, systemd
-3. ✅ Cria usuário `panel` e estrutura de diretórios
-4. ✅ Copia arquivos do projeto para `/opt/panel`
-5. ✅ Cria virtualenv e instala dependências Python
-6. ✅ Configura serviços systemd (panel, mediamtx)
-7. ✅ Configura firewall (UFW ou firewalld)
-8. ✅ Habilita e inicia o serviço
 
-## 2. Instalação Manual
+1. ✅ Baixa binários: **ffmpeg** (gyan.dev), **ADB/platform-tools** (Google), **MediaMTX** (GitHub) e **NSSM 2.24**
+2. ✅ Copia o código para **`C:\PanelTVBox`** preservando `.git` (o painel se atualiza por `git pull`)
+3. ✅ Cria o virtualenv Python e instala as dependências (`pyproject.toml`)
+4. ✅ Registra os serviços NSSM **`panel-tvbox`** (uvicorn :8080) e **`mediamtx`** (RTSP/RTMP) com **auto-restart**
+5. ✅ Firewall: regras **somente LAN** (`LocalSubnet`) para 8080/8554/1935/9997; porta ADB 5555 permanece **fechada**
+6. ✅ Aponta `adb.binary` para `C:\PanelTVBox\bin\platform-tools\adb.exe` (se não configurado manualmente)
 
-### 2.1 Pacotes
+### Flags opcionais
 
-```bash
-apt update
-apt install -y python3 python3-pip python3-venv git curl wget android-tools-adb
+```powershell
+.\deploy\install.ps1 -Help            # ajuda
+.\deploy\install.ps1 -AllowAdb        # abre ADB 5555 só na LAN + bloqueio explícito em Public/Domain
+.\deploy\install.ps1 -NoMediamtx      # não instala/registra o MediaMTX
+.\deploy\install.ps1 -SkipVenv        # reutiliza o venv existente
+.\deploy\install.ps1 -RepoUrl <url>   # clona de outro repositório se a origem não for git
 ```
 
-### 2.2 Criar diretórios
+O instalador é **idempotente**: reexecutar sobre instalação existente preserva `config/`, `devices/` e dados locais; não duplica serviços.
 
-```bash
-mkdir -p /opt/panel
-mkdir -p /opt/panel/{config,devices,groups,logs,backups,scripts/android}
+## 2. Instalação Manual (desenvolvimento)
+
+```powershell
+git clone https://github.com/ClaudioCodigo/painel-tv-box.git
+cd painel-tv-box
+
+python -m venv .venv
+.venv\Scripts\python -m pip install .
+# fallback explícito:
+.venv\Scripts\python -m pip install "fastapi>=0.115.0" "uvicorn[standard]>=0.30.0" pydantic pyyaml httpx psutil python-multipart
+
+.venv\Scripts\python -m uvicorn app.main:app --host 0.0.0.0 --port 8080
 ```
 
-### 2.3 Copiar projeto
+## 3. Serviços (NSSM) e atualização
 
-```bash
-cp -r app/ static/ templates/ scripts/ config/ deploy/ pyproject.toml /opt/panel/
-```
+- **Gerenciar:** `services.msc` → `panel-tvbox` / `mediamtx` (iniciar/parar/reiniciar).
+- **Logs dos serviços:** `%LOCALAPPDATA%\PanelTVBox\logs\panel.out.log`, `panel.err.log`, `mediamtx.out.log` (fora do repo).
+- **Atualização do código:** pelo próprio painel (página Configurações → Atualizar), via `git pull` em `C:\PanelTVBox` — o instalador **não** faz pull.
 
-### 2.4 Criar virtualenv
+## 4. Firewall
 
-```bash
-python3 -m venv /opt/panel/venv
-source /opt/panel/venv/bin/activate
-pip install --upgrade pip
-pip install fastapi "uvicorn[standard]" pydantic pyyaml httpx psutil python-multipart
-```
+| Porta | Serviço | Default |
+|---|---|---|
+| 8080/tcp | Painel web | aberta (só LAN) |
+| 8554/tcp | MediaMTX RTSP | aberta (só LAN) |
+| 1935/tcp | MediaMTX RTMP | aberta (só LAN) |
+| 9997/tcp | MediaMTX API | aberta (só LAN) |
+| 5555/tcp | ADB | **fechada** (abrir com `-AllowAdb`; bloqueio explícito em Public/Domain) |
 
-### 2.5 Configurar systemd
+Se o Windows Firewall estiver desligado, o instalador **avisa** (risco de exposição) mas continua.
 
-```bash
-cp deploy/panel.service /etc/systemd/system/
-cp deploy/mediamtx.service /etc/systemd/system/  # se tiver MediaMTX
-systemctl daemon-reload
-systemctl enable panel.service
-systemctl start panel.service
-```
-
-### 2.6 Firewall
-
-```bash
-# UFW
-ufw allow 8080/tcp comment "Painel TV Box"
-ufw allow 5555/tcp comment "ADB"
-ufw allow 8554/tcp comment "MediaMTX RTSP"
-ufw allow 1935/tcp comment "MediaMTX RTMP"
-
-# firewalld
-firewall-cmd --permanent --add-port=8080/tcp
-firewall-cmd --permanent --add-port=8554/tcp
-firewall-cmd --permanent --add-port=1935/tcp
-firewall-cmd --reload
-```
-
-### 2.7 Verificar
-
-```bash
-systemctl status panel.service
-journalctl -u panel.service -f
-
-# Testar API
-curl http://localhost:8080/api/system/health
-
-# Acessar
-# http://IP_DO_SERVIDOR:8080
-```
-
-## 3. Configuração ADB nos TV Boxes
+## 5. Configuração ADB nos TV Boxes
 
 Em cada TV Box Android:
 
@@ -113,61 +83,36 @@ Em cada TV Box Android:
 7. Conecte o TV Box na rede Wi-Fi ou Ethernet
 8. Descubra o IP: `adb shell ip addr show wlan0 | grep 'inet '`
 
-No servidor, teste a conexão:
-```bash
-adb connect 192.168.254.XXX:5555
-adb devices
-adb shell echo "ADB funcionando"
-```
+No painel, adicione o TV Box pelo wizard ou página Devices; a conexão ADB é testada automaticamente (`adb connect IP:5555`).
 
-## 4. Configuração do MediaMTX (opcional)
+## 6. Dados e estrutura
 
-```bash
-# Download
-wget https://github.com/bluenviron/mediamtx/releases/latest/download/mediamtx_linux_amd64.tar.gz
-tar -xzf mediamtx_linux_amd64.tar.gz
-cp mediamtx /usr/local/bin/
-mkdir -p /opt/mediamtx
-cp mediamtx.yml /opt/mediamtx/
-
-# Config mediaMTX (use o gerado pelo painel em config/mediamtx.generated.yml)
-# ou copie o template do painel:
-cp /opt/panel/config/mediamtx.generated.yml /opt/mediamtx/mediamtx.yml
-
-# Iniciar
-systemctl start mediamtx.service
-```
-
-## 5. Estrutura de Diretórios
+**Dados em runtime (fora do repo — git push/pull não mistura máquinas):** `%LOCALAPPDATA%\PanelTVBox` (backups, screenshots, apks, logs).
 
 ```
-/opt/panel/
+C:\PanelTVBox\
 ├── app/              # Código Python (FastAPI)
-│   ├── api/          # Rotas REST
-│   ├── core/         # Config, WebSocket, lifecycle
-│   ├── managers/     # ADB, MediaMTX, Device, Watchdog
-│   ├── models/       # Pydantic models
-│   ├── services/     # Recovery, Provision
-│   └── utils/        # Sistema, YAML
-├── config/           # YAML de configuração (gerado pelo Wizard)
-├── devices/          # YAML por TV Box
-├── groups/           # YAML por grupo
 ├── static/           # CSS, JS
-├── templates/        # HTML
+├── templates/        # HTML (SPA)
+├── config/           # YAML de configuração (gitignored; templates .example no repo)
+├── devices/          # YAML por TV Box (gitignored)
+├── groups/           # YAML por grupo (gitignored)
 ├── scripts/android/  # Scripts .sh pushados pros TV Boxes
-├── logs/             # Logs do sistema
-├── backups/          # Backups ZIP
-├── venv/             # Virtualenv Python
-├── deploy/           # systemd, install script
-└── docs/             # Documentação
+├── bin/              # ffmpeg, platform-tools, mediamtx, nssm (baixados)
+├── .venv/            # Virtualenv Python
+├── .git/             # preservado (UpdateManager faz git pull)
+└── deploy/           # install.ps1 (instalador) + legacy/ (Linux arquivado)
 ```
 
-## 6. Logs
+## 7. Verificação
 
-```bash
-# Systemd
-journalctl -u panel.service -f
+```powershell
+# API
+curl http://localhost:8080/api/system/health
 
-# Arquivos do painel
-tail -f /opt/panel/logs/{system,adb,mediamtx,watchdog,user,api}.log
+# Serviços
+Get-Service panel-tvbox, mediamtx
+
+# Logs
+Get-Content "$env:LOCALAPPDATA\PanelTVBox\logs\panel.err.log" -Tail 50 -Wait
 ```

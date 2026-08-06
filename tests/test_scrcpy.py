@@ -22,21 +22,14 @@ class TestScrcpyManager:
     """Testes para o ScrcpyManager."""
 
     def test_platform_info_windows(self):
-        import os
-        if os.name == "nt":
-            info = ScrcpyManager._platform_info("4.1")
-            assert info["asset"] == "scrcpy-win64-v4.1.zip"
-            assert info["binary"] == "scrcpy.exe"
-            assert info["type"] == "zip"
-
-    def test_platform_info_linux(self):
+        # Windows-only: sempre win64
         info = ScrcpyManager._platform_info("4.1")
-        # No Windows, retorna win64. No Linux retorna linux.
-        import os
-        if os.name == "nt":
-            assert "win64" in info["asset"]
-        else:
-            assert "linux" in info["asset"]
+        assert info["asset"] == "scrcpy-win64-v4.1.zip"
+        assert info["binary"] == "scrcpy.exe"
+        assert info["type"] == "zip"
+
+    def test_platform_binary_name_windows(self):
+        assert ScrcpyManager._platform_binary_name() == "scrcpy.exe"
 
     def test_get_current_version_empty(self, mgr):
         assert mgr.get_current_version() is None

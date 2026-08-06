@@ -1,6 +1,8 @@
 # Registro de Implementação — UI Redesign + Fases A e B
 
 > **Atualizado em:** 2026-08-03 · **Escopo:** redesign monocromático (spec `06`) + remodelagem UX (spec `08`, fases A e B) + heartbeat (spec `09`) + **Rodada 2** (deploy Debian 13, backup em data dir, threads, segurança restante). Estado real do código; docs `07` (plano) e `08` (spec) são os contratos.
+>
+> **Rodada 3 (refatoração Windows-only):** Linux descartado pelo cliente — painel roda **somente em Windows 10+**. `deploy/install.ps1` + `instalar.bat` (instalação por duplo clique, serviços NSSM, firewall LAN), deploy Linux arquivado em `deploy/legacy/`, código simplificado (`scrcpy` win64-only, `get_data_dir` só Windows), docs README/INSTALL/LLM reescritos. Ver `.planning/ROADMAP.md` e `.planning/phases/01-instalador-windows/`.
 
 ---
 
