@@ -10,18 +10,19 @@ from app.core.auth import (
     create_session_token,
     get_admin_username,
     set_admin,
+    validate_credentials,
     verify_admin,
 )
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
-# Usuário: 2-64 chars, sem separadores de caminho/controle (espaços e acentos ok)
-USERNAME_RE = re.compile(r"^[^\x00-\x1f/\\<>:\"|?*]{2,64}$")
-
 
 class LoginBody(BaseModel):
-    username: str = Field(..., min_length=1, max_length=64)
-    password: str = Field(..., min_length=1, max_length=256)
+    # Com admin configurado: usa username/password.
+    # Sem admin (migração): aceita o token legado do painel.
+    username: str | None = Field(default=None, min_length=1, max_length=64)
+    password: str | None = Field(default=None, min_length=1, max_length=256)
+    token: str | None = Field(default=None, max_length=256)
 
 
 class SetAdminBody(BaseModel):
@@ -44,9 +45,20 @@ async def auth_status():
 
 @router.post("/login")
 async def login(body: LoginBody):
-    """Autentica com usuário/senha do administrador e emite token de sessão."""
+    """Autentica com usuário/senha do administrador e emite token de sessão.
+
+    Sem admin configurado (migração de instalações existentes), aceita o
+    token legado de `config/.panel_token` para não bloquear o acesso."""
     if not admin_configured():
+        # Migração: token legado ainda vale até o admin ser criado
+        from app.core.auth import check_token
+
+        if body.token and check_token(body.token):
+            return {"success": True, "token": body.token, "username": "painel", "expires_in": None}
         raise HTTPException(status_code=409, detail="admin_nao_configurado")
+
+    if not body.username or not body.password:
+        raise HTTPException(status_code=401, detail="Usuário ou senha inválidos")
 
     if not verify_admin(body.username, body.password):
         raise HTTPException(status_code=401, detail="Usuário ou senha inválidos")
@@ -64,12 +76,9 @@ async def login(body: LoginBody):
 async def auth_set_admin(body: SetAdminBody):
     """Cria/atualiza o administrador (exige sessão válida; o wizard também
     cria na 1ª execução via /api/wizard/finish)."""
-    if not USERNAME_RE.match(body.username.strip()):
-        raise HTTPException(400, "Usuário inválido (2-64 caracteres, sem / \\ < > : \" | ? *)")
-    if len(body.password) < 8:
-        raise HTTPException(400, "Senha precisa ter pelo menos 8 caracteres")
-    if body.username.strip().lower() in body.password.lower():
-        raise HTTPException(400, "A senha não pode conter o nome de usuário")
+    error = validate_credentials(body.username, body.password)
+    if error:
+        raise HTTPException(400, error)
 
     was_configured = admin_configured()
     created = set_admin(body.username, body.password)

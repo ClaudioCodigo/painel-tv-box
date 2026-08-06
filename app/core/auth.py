@@ -17,6 +17,7 @@ import hashlib
 import hmac
 import json
 import logging
+import re
 import secrets
 import time
 from pathlib import Path
@@ -34,8 +35,35 @@ SESSION_SECRET_FILE = CONFIG_DIR / ".session_secret"
 SESSION_TTL = 12 * 3600  # 12h
 PBKDF2_ITERATIONS = 200_000
 
+# Username: allowlist estrita — letras/dígitos e . _ @ - (SEM espaços,
+# sem controle, sem separadores de caminho, sem aspas/colchetes).
+USERNAME_RE = re.compile(r"^[A-Za-z0-9._@-]{2,64}$")
+# Caracteres de controle (incl. \0, \n, \r, DEL) — rejeitados na senha.
+PASSWORD_CTRL_RE = re.compile(r"[\x00-\x1f\x7f]")
+
 _token_cache: str = ""
 _secret_cache: str = ""
+
+
+def validate_credentials(username: str, password: str) -> str | None:
+    """Valida usuário/senha para criar/alterar o administrador.
+
+    Retorna uma mensagem de erro legível ou None se válido. Usada pela API
+    (/api/auth/set-admin) E pelo wizard (/api/wizard/finish) — nunca crie
+    admin fora desta validação.
+    """
+    username = (username or "").strip()
+    if not USERNAME_RE.match(username):
+        return "Usuário inválido — use 2-64 caracteres: letras, números, . _ @ - (sem espaços)"
+    if not password or PASSWORD_CTRL_RE.search(password):
+        return "Senha inválida — não pode conter caracteres de controle"
+    if len(password) < 8:
+        return "Senha precisa ter pelo menos 8 caracteres"
+    if len(password) > 256:
+        return "Senha muito longa (máximo 256 caracteres)"
+    if username.lower() in password.lower():
+        return "A senha não pode conter o nome de usuário"
+    return None
 
 
 # ─────────────────────────────────────────────────────────────────────────────

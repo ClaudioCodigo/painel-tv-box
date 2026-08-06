@@ -102,8 +102,11 @@ async def wizard_finish(data: dict):
 
     if admin.get("username") and admin.get("password"):
         if not admin_configured():
-            if len(str(admin["password"])) < 8:
-                raise HTTPException(400, "Senha do administrador precisa ter pelo menos 8 caracteres")
+            from app.core.auth import validate_credentials
+
+            error = validate_credentials(str(admin["username"]), str(admin["password"]))
+            if error:
+                raise HTTPException(400, error)
             set_admin(str(admin["username"]), str(admin["password"]))
             created_admin = True
         # Se já existe admin, ignora (não sobrescreve em re-execução)

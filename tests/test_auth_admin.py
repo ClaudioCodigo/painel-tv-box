@@ -120,6 +120,17 @@ async def test_login_409_when_no_admin(auth_files):
 
 
 @pytest.mark.asyncio
+async def test_login_legacy_token_when_no_admin(auth_files):
+    """Migração: sem admin, o token legado ainda faz login (não trava acesso)."""
+    async with await _client() as c:
+        r = await c.post("/api/auth/login", json={"token": LEGACY_TOKEN})
+        assert r.status_code == 200
+        assert r.json()["token"] == LEGACY_TOKEN
+        r = await c.post("/api/auth/login", json={"token": "invalido"})
+        assert r.status_code == 409
+
+
+@pytest.mark.asyncio
 async def test_login_ok_and_wrong(auth_files):
     auth.set_admin("admin", "senha-super-secreta-1")
     async with await _client() as c:
@@ -176,3 +187,41 @@ async def test_set_admin_api_validations(auth_files):
             json={"username": "../etc/passwd", "password": "senha-super-secreta-1"},
         )
         assert r.status_code == 400
+        # usuário com espaço é rejeitado (username, não nome completo)
+        r = await c.post(
+            "/api/auth/set-admin",
+            headers={"Authorization": f"Bearer {LEGACY_TOKEN}"},
+            json={"username": "admin da silva", "password": "senha-super-secreta-1"},
+        )
+        assert r.status_code == 400
+        # payload/controle na senha é rejeitado
+        r = await c.post(
+            "/api/auth/set-admin",
+            headers={"Authorization": f"Bearer {LEGACY_TOKEN}"},
+            json={"username": "admin", "password": "senha\ncom\ncontrole"},
+        )
+        assert r.status_code == 400
+
+
+# ── validate_credentials (regra única: API + wizard) ─────────────────────────
+
+def test_validate_credentials_ok():
+    assert auth.validate_credentials("admin", "senha-super-secreta-1") is None
+    assert auth.validate_credentials("claudio.lima@tvbox", "senha-super-secreta-1") is None
+    assert auth.validate_credentials("tv_admin-2", "senha-super-secreta-1") is None
+
+
+def test_validate_credentials_rejects():
+    # espaço no username
+    assert auth.validate_credentials("admin da silva", "senha-super-secreta-1") is not None
+    # payload/separadores de caminho
+    assert auth.validate_credentials("../etc/passwd", "senha-super-secreta-1") is not None
+    assert auth.validate_credentials("a/b", "senha-super-secreta-1") is not None
+    assert auth.validate_credentials('x"y', "senha-super-secreta-1") is not None
+    # controle
+    assert auth.validate_credentials("admin", "senha\nquebrada") is not None
+    assert auth.validate_credentials("admin", "senha\x00nula") is not None
+    # curta / longa / contém o usuário
+    assert auth.validate_credentials("admin", "curta") is not None
+    assert auth.validate_credentials("admin", "x" * 300) is not None
+    assert auth.validate_credentials("admin", "ADMIN-senha-fraca") is not None

@@ -576,6 +576,9 @@ const WIZARD = (() => {
             _saveAdmin();
             const adminPayload = {};
             if (data.admin.username.trim() && data.admin.password) {
+                if (!/^[A-Za-z0-9._@-]{2,64}$/.test(data.admin.username.trim())) {
+                    throw new Error('Usuário inválido — use 2-64 caracteres: letras, números, . _ @ - (sem espaços)');
+                }
                 if (data.admin.password.length < 8) {
                     throw new Error('Senha do administrador precisa ter pelo menos 8 caracteres');
                 }

@@ -17,23 +17,23 @@
             }
         })();
     </script>
-    <link rel="stylesheet" href="/static/css/tokens.css?v=22">
-    <link rel="stylesheet" href="/static/css/base.css?v=22">
-    <link rel="stylesheet" href="/static/css/layout.css?v=22">
-    <link rel="stylesheet" href="/static/css/components.css?v=22">
-    <link rel="stylesheet" href="/static/css/motion.css?v=22">
-    <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=22">
-    <link rel="stylesheet" href="/static/css/pages/devices.css?v=22">
-    <link rel="stylesheet" href="/static/css/pages/device.css?v=22">
-    <link rel="stylesheet" href="/static/css/pages/groups.css?v=22">
-    <link rel="stylesheet" href="/static/css/pages/mediamtx.css?v=22">
-    <link rel="stylesheet" href="/static/css/pages/logs.css?v=22">
-    <link rel="stylesheet" href="/static/css/pages/shell.css?v=22">
-    <link rel="stylesheet" href="/static/css/pages/scrcpy.css?v=22">
-    <link rel="stylesheet" href="/static/css/pages/backup.css?v=22">
-    <link rel="stylesheet" href="/static/css/pages/settings.css?v=22">
-    <link rel="stylesheet" href="/static/css/pages/wizard.css?v=22">
-    <link rel="stylesheet" href="/static/css/pages/auth.css?v=22">
+    <link rel="stylesheet" href="/static/css/tokens.css?v=24">
+    <link rel="stylesheet" href="/static/css/base.css?v=24">
+    <link rel="stylesheet" href="/static/css/layout.css?v=24">
+    <link rel="stylesheet" href="/static/css/components.css?v=24">
+    <link rel="stylesheet" href="/static/css/motion.css?v=24">
+    <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=24">
+    <link rel="stylesheet" href="/static/css/pages/devices.css?v=24">
+    <link rel="stylesheet" href="/static/css/pages/device.css?v=24">
+    <link rel="stylesheet" href="/static/css/pages/groups.css?v=24">
+    <link rel="stylesheet" href="/static/css/pages/mediamtx.css?v=24">
+    <link rel="stylesheet" href="/static/css/pages/logs.css?v=24">
+    <link rel="stylesheet" href="/static/css/pages/shell.css?v=24">
+    <link rel="stylesheet" href="/static/css/pages/scrcpy.css?v=24">
+    <link rel="stylesheet" href="/static/css/pages/backup.css?v=24">
+    <link rel="stylesheet" href="/static/css/pages/settings.css?v=24">
+    <link rel="stylesheet" href="/static/css/pages/wizard.css?v=24">
+    <link rel="stylesheet" href="/static/css/pages/auth.css?v=24">
 </head>
 <body>
 
@@ -138,6 +138,8 @@
             <form id="auth-form">
                 <input type="text" id="auth-username-input" class="form-input" placeholder="Usuário" autocomplete="username" required style="margin-bottom:8px">
                 <input type="password" id="auth-password-input" class="form-input" placeholder="Senha" autocomplete="current-password" required>
+                <input type="password" id="auth-token-input" class="form-input hidden" placeholder="Token de acesso" autocomplete="off" style="margin-bottom:8px">
+                <a href="#" id="auth-mode-toggle" class="text-sm text-muted hidden" style="display:block;margin-top:8px">usar token de acesso</a>
                 <button type="submit" class="btn btn-primary" style="width:100%;margin-top:12px">Entrar</button>
                 <div id="auth-status" class="text-danger text-sm" style="margin-top:8px"></div>
             </form>
@@ -145,25 +147,25 @@
     </div>
 
     <!-- Scripts -->
-    <script src="/static/js/icons.js?v=22"></script>
-    <script src="/static/js/theme.js?v=22"></script>
-    <script src="/static/js/motion.js?v=22"></script>
-    <script src="/static/js/auth.js?v=22"></script>
-    <script src="/static/js/ws.js?v=22"></script>
-    <script src="/static/js/api.js?v=22"></script>
-    <script src="/static/js/components.js?v=22"></script>
-    <script src="/static/js/dashboard.js?v=22"></script>
-    <script src="/static/js/wizard.js?v=22"></script>
-    <script src="/static/js/device.js?v=22"></script>
-    <script src="/static/js/mediamtx.js?v=22"></script>
-    <script src="/static/js/logs.js?v=22"></script>
-    <script src="/static/js/backup.js?v=22"></script>
-    <script src="/static/js/settings.js?v=22"></script>
-    <script src="/static/js/groups.js?v=22"></script>
-    <script src="/static/js/group.js?v=22"></script>
-    <script src="/static/js/scrcpy.js?v=22"></script>
-    <script src="/static/js/devices.js?v=22"></script>
-    <script src="/static/js/shell.js?v=22"></script>
-    <script src="/static/js/app.js?v=22"></script>
+    <script src="/static/js/icons.js?v=24"></script>
+    <script src="/static/js/theme.js?v=24"></script>
+    <script src="/static/js/motion.js?v=24"></script>
+    <script src="/static/js/auth.js?v=24"></script>
+    <script src="/static/js/ws.js?v=24"></script>
+    <script src="/static/js/api.js?v=24"></script>
+    <script src="/static/js/components.js?v=24"></script>
+    <script src="/static/js/dashboard.js?v=24"></script>
+    <script src="/static/js/wizard.js?v=24"></script>
+    <script src="/static/js/device.js?v=24"></script>
+    <script src="/static/js/mediamtx.js?v=24"></script>
+    <script src="/static/js/logs.js?v=24"></script>
+    <script src="/static/js/backup.js?v=24"></script>
+    <script src="/static/js/settings.js?v=24"></script>
+    <script src="/static/js/groups.js?v=24"></script>
+    <script src="/static/js/group.js?v=24"></script>
+    <script src="/static/js/scrcpy.js?v=24"></script>
+    <script src="/static/js/devices.js?v=24"></script>
+    <script src="/static/js/shell.js?v=24"></script>
+    <script src="/static/js/app.js?v=24"></script>
 </body>
 </html>

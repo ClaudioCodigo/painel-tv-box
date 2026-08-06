@@ -68,10 +68,14 @@ const SETTINGS = (() => {
         const status = document.getElementById('sec-admin-status');
         const user = document.getElementById('sec-admin-user');
         const pass = document.getElementById('sec-admin-pass');
-        if (!user || !user.value.trim()) { if (status) status.innerHTML = '<span class="text-danger">Informe o usuário</span>'; return; }
+        const uname = user ? user.value.trim() : '';
+        if (!/^[A-Za-z0-9._@-]{2,64}$/.test(uname)) {
+            if (status) status.innerHTML = '<span class="text-danger">Usuário inválido — use 2-64 caracteres: letras, números, . _ @ - (sem espaços)</span>';
+            return;
+        }
         if (!pass || pass.value.length < 8) { if (status) status.innerHTML = '<span class="text-danger">Senha precisa ter pelo menos 8 caracteres</span>'; return; }
         try {
-            const res = await API.post('/auth/set-admin', { username: user.value.trim(), password: pass.value });
+            const res = await API.post('/auth/set-admin', { username: uname, password: pass.value });
             if (res && res.success) {
                 if (status) status.innerHTML = '<span class="text-success">✅ Administrador salvo. Use usuário/senha no login da próxima vez.</span>';
                 pass.value = '';
