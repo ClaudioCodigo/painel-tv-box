@@ -17,23 +17,23 @@
             }
         })();
     </script>
-    <link rel="stylesheet" href="/static/css/tokens.css?v=21">
-    <link rel="stylesheet" href="/static/css/base.css?v=21">
-    <link rel="stylesheet" href="/static/css/layout.css?v=21">
-    <link rel="stylesheet" href="/static/css/components.css?v=21">
-    <link rel="stylesheet" href="/static/css/motion.css?v=21">
-    <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=21">
-    <link rel="stylesheet" href="/static/css/pages/devices.css?v=21">
-    <link rel="stylesheet" href="/static/css/pages/device.css?v=21">
-    <link rel="stylesheet" href="/static/css/pages/groups.css?v=21">
-    <link rel="stylesheet" href="/static/css/pages/mediamtx.css?v=21">
-    <link rel="stylesheet" href="/static/css/pages/logs.css?v=21">
-    <link rel="stylesheet" href="/static/css/pages/shell.css?v=21">
-    <link rel="stylesheet" href="/static/css/pages/scrcpy.css?v=21">
-    <link rel="stylesheet" href="/static/css/pages/backup.css?v=21">
-    <link rel="stylesheet" href="/static/css/pages/settings.css?v=21">
-    <link rel="stylesheet" href="/static/css/pages/wizard.css?v=21">
-    <link rel="stylesheet" href="/static/css/pages/auth.css?v=21">
+    <link rel="stylesheet" href="/static/css/tokens.css?v=22">
+    <link rel="stylesheet" href="/static/css/base.css?v=22">
+    <link rel="stylesheet" href="/static/css/layout.css?v=22">
+    <link rel="stylesheet" href="/static/css/components.css?v=22">
+    <link rel="stylesheet" href="/static/css/motion.css?v=22">
+    <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=22">
+    <link rel="stylesheet" href="/static/css/pages/devices.css?v=22">
+    <link rel="stylesheet" href="/static/css/pages/device.css?v=22">
+    <link rel="stylesheet" href="/static/css/pages/groups.css?v=22">
+    <link rel="stylesheet" href="/static/css/pages/mediamtx.css?v=22">
+    <link rel="stylesheet" href="/static/css/pages/logs.css?v=22">
+    <link rel="stylesheet" href="/static/css/pages/shell.css?v=22">
+    <link rel="stylesheet" href="/static/css/pages/scrcpy.css?v=22">
+    <link rel="stylesheet" href="/static/css/pages/backup.css?v=22">
+    <link rel="stylesheet" href="/static/css/pages/settings.css?v=22">
+    <link rel="stylesheet" href="/static/css/pages/wizard.css?v=22">
+    <link rel="stylesheet" href="/static/css/pages/auth.css?v=22">
 </head>
 <body>
 
@@ -130,35 +130,40 @@
         <div class="auth-card">
             <div class="auth-brand">TV</div>
             <h2>Painel TV Box</h2>
-            <p class="text-muted text-sm">Digite o token de acesso configurado no servidor<br>(arquivo <code>config/.panel_token</code>).</p>
+            <p class="text-muted text-sm">Acesse com o <b>usuário e senha do administrador</b>.</p>
+            <div id="auth-setup-hint" class="text-warning text-sm hidden" style="margin-bottom:8px">
+                ⚠️ Administrador ainda não configurado — crie em <b>Configurações → Segurança</b>
+                (ou no wizard, na 1ª instalação).
+            </div>
             <form id="auth-form">
-                <input type="password" id="auth-token-input" class="form-input" placeholder="Token de acesso" autocomplete="current-password" required>
-                <button type="submit" class="btn btn-primary" style="width:100%">Entrar</button>
+                <input type="text" id="auth-username-input" class="form-input" placeholder="Usuário" autocomplete="username" required style="margin-bottom:8px">
+                <input type="password" id="auth-password-input" class="form-input" placeholder="Senha" autocomplete="current-password" required>
+                <button type="submit" class="btn btn-primary" style="width:100%;margin-top:12px">Entrar</button>
                 <div id="auth-status" class="text-danger text-sm" style="margin-top:8px"></div>
             </form>
         </div>
     </div>
 
     <!-- Scripts -->
-    <script src="/static/js/icons.js?v=21"></script>
-    <script src="/static/js/theme.js?v=21"></script>
-    <script src="/static/js/motion.js?v=21"></script>
-    <script src="/static/js/auth.js?v=21"></script>
-    <script src="/static/js/ws.js?v=21"></script>
-    <script src="/static/js/api.js?v=21"></script>
-    <script src="/static/js/components.js?v=21"></script>
-    <script src="/static/js/dashboard.js?v=21"></script>
-    <script src="/static/js/wizard.js?v=21"></script>
-    <script src="/static/js/device.js?v=21"></script>
-    <script src="/static/js/mediamtx.js?v=21"></script>
-    <script src="/static/js/logs.js?v=21"></script>
-    <script src="/static/js/backup.js?v=21"></script>
-    <script src="/static/js/settings.js?v=21"></script>
-    <script src="/static/js/groups.js?v=21"></script>
-    <script src="/static/js/group.js?v=21"></script>
-    <script src="/static/js/scrcpy.js?v=21"></script>
-    <script src="/static/js/devices.js?v=21"></script>
-    <script src="/static/js/shell.js?v=21"></script>
-    <script src="/static/js/app.js?v=21"></script>
+    <script src="/static/js/icons.js?v=22"></script>
+    <script src="/static/js/theme.js?v=22"></script>
+    <script src="/static/js/motion.js?v=22"></script>
+    <script src="/static/js/auth.js?v=22"></script>
+    <script src="/static/js/ws.js?v=22"></script>
+    <script src="/static/js/api.js?v=22"></script>
+    <script src="/static/js/components.js?v=22"></script>
+    <script src="/static/js/dashboard.js?v=22"></script>
+    <script src="/static/js/wizard.js?v=22"></script>
+    <script src="/static/js/device.js?v=22"></script>
+    <script src="/static/js/mediamtx.js?v=22"></script>
+    <script src="/static/js/logs.js?v=22"></script>
+    <script src="/static/js/backup.js?v=22"></script>
+    <script src="/static/js/settings.js?v=22"></script>
+    <script src="/static/js/groups.js?v=22"></script>
+    <script src="/static/js/group.js?v=22"></script>
+    <script src="/static/js/scrcpy.js?v=22"></script>
+    <script src="/static/js/devices.js?v=22"></script>
+    <script src="/static/js/shell.js?v=22"></script>
+    <script src="/static/js/app.js?v=22"></script>
 </body>
 </html>

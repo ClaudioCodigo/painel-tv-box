@@ -15,6 +15,7 @@ const WIZARD = (() => {
         watchdog: null,
         groups: [],
         devices: [],
+        admin: { username: '', password: '' },
     };
 
     // ── Render ─────────────────────────────────
@@ -49,6 +50,14 @@ const WIZARD = (() => {
         const html = STEP_RENDERERS[step]();
         let navHtml = '<div class="wizard-nav">';
 
+        // Oculta o box de admin se já existir administrador configurado
+        if (typeof AUTH !== 'undefined' && AUTH.fetchStatus) {
+            AUTH.fetchStatus().then((st) => {
+                const box = document.getElementById('w-admin-box');
+                if (box && st && st.admin_configured) box.style.display = 'none';
+            });
+        }
+
         if (step > 1) {
             navHtml += `<button class="btn btn-secondary" onclick="WIZARD.goPrev()">← Anterior</button>`;
         } else {
@@ -80,6 +89,7 @@ const WIZARD = (() => {
 
     function saveStepData() {
         switch (currentStep) {
+            case 1: _saveAdmin(); break;
             case 2: _saveServer(); break;
             case 3: _saveMediaMTX(); break;
             case 4: _saveADB(); break;
@@ -123,7 +133,21 @@ const WIZARD = (() => {
                 <li><strong>Pelo menos 1 TV Box</strong> com ADB via TCP habilitado</li>
                 <li>🔗 <strong>Configuração do MediaMTX</strong> (ou usar os defaults)</li>
             </ul>
-            <p>O processo leva cerca de 2 minutos. Bora? 🚀</p>
+            <div id="w-admin-box" class="settings-card" style="margin-top:16px">
+                <div class="section-title">🔐 Criar administrador</div>
+                <p class="text-muted text-sm">Usuário e senha para acessar o painel (obrigatório na 1ª instalação).</p>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Usuário</label>
+                        <input type="text" id="w-admin-user" value="${data.admin.username}" placeholder="admin" autocomplete="username">
+                    </div>
+                    <div class="form-group">
+                        <label>Senha (mín. 8 caracteres)</label>
+                        <input type="password" id="w-admin-pass" value="${data.admin.password}" placeholder="••••••••" autocomplete="new-password">
+                    </div>
+                </div>
+            </div>
+            <p class="text-muted text-sm" style="margin-top:12px">O processo leva cerca de 2 minutos. Bora? 🚀</p>
         `,
 
         2: () => `
@@ -358,6 +382,11 @@ const WIZARD = (() => {
 
     // ── Save handlers ──────────────────────────
 
+    function _saveAdmin() {
+        data.admin.username = val('w-admin-user');
+        data.admin.password = val('w-admin-pass');
+    }
+
     function _saveServer() {
         data.server.ip = val('w-srv-ip');
         data.server.port = parseInt(val('w-srv-port')) || 8080;
@@ -543,6 +572,17 @@ const WIZARD = (() => {
         if (status) status.innerHTML = '<div class="test-result loading">Gerando configurações...</div>';
 
         try {
+            // Admin (criado na 1ª execução)
+            _saveAdmin();
+            const adminPayload = {};
+            if (data.admin.username.trim() && data.admin.password) {
+                if (data.admin.password.length < 8) {
+                    throw new Error('Senha do administrador precisa ter pelo menos 8 caracteres');
+                }
+                adminPayload.username = data.admin.username.trim();
+                adminPayload.password = data.admin.password;
+            }
+
             // Build payload completo
             const payload = {
                 server: {
@@ -554,6 +594,7 @@ const WIZARD = (() => {
                 adb: data.adb,
                 players: data.players,
                 watchdog: data.watchdog,
+                admin: adminPayload,
                 groups: data.groups.map(g => ({
                     id: slugify(g.name || 'grupo'),
                     name: g.name,
@@ -575,6 +616,10 @@ const WIZARD = (() => {
             const res = await API.post('/wizard/finish', payload);
 
             if (res.success) {
+                // Auto-login quando o admin foi criado no wizard
+                if (res.session_token && typeof AUTH !== 'undefined') {
+                    AUTH.setToken(res.session_token);
+                }
                 if (status) status.innerHTML = `<div class="test-result success">✅ Configuração concluída! (${res.files_created.devices} dispositivos, ${res.files_created.groups} grupos)</div>`;
                 UI.createToast('Painel configurado! 🎉', 'success', 5000);
                 setTimeout(() => { window.location.hash = '#/'; }, 500);

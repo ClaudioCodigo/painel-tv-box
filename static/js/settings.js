@@ -18,6 +18,25 @@ const SETTINGS = (() => {
                     <div id="update-status" class="settings-status"></div>
                 </div>
 
+                <div class="section-title mt-md">${UI.icon('lock')} Segurança</div>
+                <div class="settings-card">
+                    <p class="text-muted text-sm">Usuário e senha do administrador do painel. Credenciais ficam só nesta máquina (gitignored).</p>
+                    <div class="form-grid" style="margin-bottom:8px">
+                        <div class="form-group">
+                            <label>Usuário</label>
+                            <input type="text" id="sec-admin-user" class="form-input" placeholder="admin" autocomplete="username">
+                        </div>
+                        <div class="form-group">
+                            <label>Nova senha (mín. 8 caracteres)</label>
+                            <input type="password" id="sec-admin-pass" class="form-input" placeholder="••••••••" autocomplete="new-password">
+                        </div>
+                    </div>
+                    <div class="settings-actions">
+                        <button class="btn btn-primary btn-sm" onclick="SETTINGS.saveAdmin()">${UI.icon('check')} Salvar administrador</button>
+                    </div>
+                    <div id="sec-admin-status" class="settings-status"></div>
+                </div>
+
                 <div class="section-title mt-md">${UI.icon('trash')} Cache</div>
                 <div class="settings-card">
                     <p class="text-muted text-sm">Se a interface não atualizar após mudanças, limpe o cache.</p>
@@ -43,6 +62,27 @@ const SETTINGS = (() => {
 
         await loadServerInfo();
         syncThemeRadios();
+    }
+
+    async function saveAdmin() {
+        const status = document.getElementById('sec-admin-status');
+        const user = document.getElementById('sec-admin-user');
+        const pass = document.getElementById('sec-admin-pass');
+        if (!user || !user.value.trim()) { if (status) status.innerHTML = '<span class="text-danger">Informe o usuário</span>'; return; }
+        if (!pass || pass.value.length < 8) { if (status) status.innerHTML = '<span class="text-danger">Senha precisa ter pelo menos 8 caracteres</span>'; return; }
+        try {
+            const res = await API.post('/auth/set-admin', { username: user.value.trim(), password: pass.value });
+            if (res && res.success) {
+                if (status) status.innerHTML = '<span class="text-success">✅ Administrador salvo. Use usuário/senha no login da próxima vez.</span>';
+                pass.value = '';
+                // se criou agora, já autentica a sessão atual
+                if (res.token && typeof AUTH !== 'undefined') AUTH.setToken(res.token);
+            } else {
+                if (status) status.innerHTML = `<span class="text-danger">❌ ${(res && res.detail) || 'Falha'}</span>`;
+            }
+        } catch (e) {
+            if (status) status.innerHTML = `<span class="text-danger">❌ ${UI.escapeHtml(e.message)}</span>`;
+        }
     }
 
     async function loadServerInfo() {
@@ -168,5 +208,5 @@ const SETTINGS = (() => {
         UI.createToast(`Tema ${isDark ? 'claro' : 'escuro'} ativado`, 'success');
     }
 
-    return { render, checkUpdate, applyUpdate, clearCache, toggleTheme, setTheme, syncThemeRadios };
+    return { render, checkUpdate, applyUpdate, clearCache, toggleTheme, setTheme, syncThemeRadios, saveAdmin };
 })();

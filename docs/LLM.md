@@ -98,16 +98,17 @@ node --check static/js/*.js              # sintaxe de todo o JS
 
 ---
 
-## 4. Autenticação (implementada na auditoria)
+## 4. Autenticação (usuário/senha do administrador — D-05..D-08)
 
-- **Modelo:** token compartilhado único (tipo API key), não sessão/JWT.
-- **Onde vive:** `config/.panel_token` (criado no primeiro boot com `secrets.token_urlsafe(32)`; **gitignored**). Se apagar o arquivo e reiniciar, um novo token é gerado (e logado o caminho).
-- **Login:** `POST /api/auth/login` com `{"token": "<token>"}` → `{"success": true, "token": "..."}`.
+- **Modelo:** login com **usuário/senha do administrador** → **token de sessão** assinado (HMAC-SHA256, TTL 12h), não mais token compartilhado único.
+- **Admin:** criado no **wizard** (1ª instalação, `POST /api/wizard/finish` com `admin: {username, password}`) ou em **Configurações → Segurança** (`POST /api/auth/set-admin`, exige sessão). Credenciais em `config/admin.json` (gitignored): hash **PBKDF2-SHA256** (200k iterações, salt aleatório), comparação em tempo constante; `config/.session_secret` (gitignored) assina os tokens.
+- **Login:** `POST /api/auth/login` com `{"username", "password"}` → `{"success", "token", "username", "expires_in"}`. Sem admin configurado → **409 `admin_nao_configurado`**.
 - **Envio:** header `Authorization: Bearer <token>` **ou** query `?token=` (necessário para `<img src>` e `window.open`, que não enviam headers).
-- **Proteção:** `Depends(require_auth)` aplicado a todos os routers (`app/main.py`); WebSockets `/ws` e `/ws/shell/{id}` validam `?token=` antes do `accept()` (sem token → fechado 403/4401).
-- **Rotas públicas:** `/api/system/health`, `/api/auth/login`, e `/api/wizard/*` + `/api/system/wizard-status` **enquanto o wizard não estiver completo**.
-- **Desligar:** `config/system.yml` → `security: {enabled: false}`. Sem config carregada (`app.main.config is None`) o comportamento é **fail-closed** (exige token).
-- **Frontend:** `static/js/auth.js` (`AUTH`): token em `localStorage['panel_token']`; overlay de login em `base.html` (`#auth-overlay`); `api.js` injeta o header e chama `AUTH.requireLogin()` em 401; `ws.js` só conecta com token e reconecta em `auth:logged-in`; botão "Sair" no rodapé da sidebar.
+- **Proteção:** `Depends(require_auth)` aplicado a todos os routers (`app/main.py`) **e** às rotas app-level `/api/system/metrics` e `/metrics/history` (gap corrigido); WebSockets `/ws` e `/ws/shell/{id}` validam `?token=` antes do `accept()` (sem token → fechado 403/4401).
+- **Rotas públicas:** `/api/system/health`, `/api/auth/status`, `/api/auth/login`, e `/api/wizard/*` + `/api/system/wizard-status` **enquanto o wizard não estiver completo**.
+- **Backward compat:** sem `admin.json`, o painel aceita o token legado `config/.panel_token` (instalações existentes/testes); **ao criar o admin, apenas sessões de login valem**.
+- **Desligar:** `config/system.yml` → `security: {enabled: false}`. Sem config carregada (`app.main.config is None`) o comportamento é **fail-closed** (exige credencial).
+- **Frontend:** `static/js/auth.js` (`AUTH`): token de sessão em `localStorage['panel_token']`; overlay de login (usuário/senha) em `base.html` (`#auth-overlay`) com hint "admin não configurado" via `GET /api/auth/status`; `api.js` injeta o header e chama `AUTH.requireLogin()` em 401; `ws.js` só conecta com token e reconecta em `auth:logged-in`; botão "Sair" no rodapé da sidebar; wizard cria o admin no passo 1 (auto-login via `session_token` no finish).
 - **Helper para URLs no browser:** `API.authUrl(path)` → anexa `?token=` (usado em screenshots e download de backup).
 
 ---
@@ -173,7 +174,9 @@ player_extra_args, notes, watchdog_override (não implementado), schedule: [{act
 ### Auth
 | Método | Rota | Descrição |
 |---|---|---|
-| POST | `/api/auth/login` | Pública. `{"token"}` → `{"success", "token"}` |
+| POST | `/api/auth/login` | Pública. `{"username","password"}` → `{"success","token","username"}` (409 se não há admin) |
+| POST | `/api/auth/set-admin` | Protegida. Cria/atualiza admin; devolve `token` na 1ª criação |
+| GET | `/api/auth/status` | Pública. `{"admin_configured","wizard_completed","method"}` |
 | POST | `/api/heartbeat/{device_id}` | **Chave dedicada** `X-Heartbeat-Key` (não o token). Registra `last_heartbeat` (+ activity) sem ADB; rate limit 5s; 204/401/404/429 |
 
 ### System

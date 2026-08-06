@@ -95,10 +95,23 @@ async def wizard_finish(data: dict):
         except Exception as e:
             raise HTTPException(422, f"Erro no device '{d.get('id')}': {e}")
 
+    # ── Admin (criar administrador na 1ª execução — D-06/D-08) ──
+    admin = data.get("admin") or {}
+    created_admin = False
+    from app.core.auth import admin_configured, set_admin
+
+    if admin.get("username") and admin.get("password"):
+        if not admin_configured():
+            if len(str(admin["password"])) < 8:
+                raise HTTPException(400, "Senha do administrador precisa ter pelo menos 8 caracteres")
+            set_admin(str(admin["username"]), str(admin["password"]))
+            created_admin = True
+        # Se já existe admin, ignora (não sobrescreve em re-execução)
+
     # ── Finaliza ──
     config.finalize_wizard()
 
-    return {
+    result = {
         "success": True,
         "wizard_completed": True,
         "files_created": {
@@ -107,6 +120,12 @@ async def wizard_finish(data: dict):
             "groups": len(config.groups),
         },
     }
+    if created_admin:
+        # Auto-login: devolve token de sessão do admin recém-criado
+        from app.core.auth import create_session_token
+
+        result["session_token"] = create_session_token(admin["username"].strip())
+    return result
 
 
 @router.post("/validate-device")

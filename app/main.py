@@ -75,7 +75,7 @@ async def system_health():
     }
 
 
-@app.get("/api/system/metrics")
+@app.get("/api/system/metrics", dependencies=[Depends(require_auth)])
 async def system_metrics():
     from app.utils.system import get_metrics
 
@@ -90,7 +90,7 @@ async def system_metrics():
     return m
 
 
-@app.get("/api/system/metrics/history")
+@app.get("/api/system/metrics/history", dependencies=[Depends(require_auth)])
 async def system_metrics_history(last_n: int = 30):
     """Retorna histórico de métricas para sparklines."""
     import app.main as main_module

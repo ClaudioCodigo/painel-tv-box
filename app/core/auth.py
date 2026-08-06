@@ -1,15 +1,24 @@
-"""Autenticação simples por token compartilhado (painel de rede local).
+"""Autenticação do painel: login com usuário/senha de administrador.
 
-O token é gerado automaticamente no primeiro boot e persistido em
-config/.panel_token (fora do versionamento). Todas as rotas /api/*
-(exceto health, login e wizard pendente) exigem o token via header
-`Authorization: Bearer <token>` ou query `?token=` (necessário para
-downloads/img via window.open e <img>).
+- As credenciais do admin ficam em `config/admin.json` (gitignored), criadas
+  pelo wizard (1ª execução) ou pela página Configurações. Hash PBKDF2-SHA256
+  com salt aleatório; comparação em tempo constante.
+- O login emite um **token de sessão** assinado (HMAC-SHA256, expira em 12h)
+  usando um segredo persistido em `config/.session_secret` (gitignored).
+  Enviado via `Authorization: Bearer <token>` ou query `?token=` (downloads/
+  imagens via window.open/<img>); o WebSocket valida via `?token=`.
+- **Compat/backward:** enquanto NÃO houver admin configurado, o painel aceita
+  o token legado `config/.panel_token` (instalações existentes). Assim que o
+  admin é criado, apenas sessões de login são aceitas.
 """
 
+import base64
+import hashlib
 import hmac
+import json
 import logging
 import secrets
+import time
 from pathlib import Path
 
 from fastapi import HTTPException, Request
@@ -17,13 +26,145 @@ from fastapi import HTTPException, Request
 logger = logging.getLogger("system")
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-TOKEN_FILE = PROJECT_ROOT / "config" / ".panel_token"
+CONFIG_DIR = PROJECT_ROOT / "config"
+TOKEN_FILE = CONFIG_DIR / ".panel_token"
+ADMIN_FILE = CONFIG_DIR / "admin.json"
+SESSION_SECRET_FILE = CONFIG_DIR / ".session_secret"
+
+SESSION_TTL = 12 * 3600  # 12h
+PBKDF2_ITERATIONS = 200_000
 
 _token_cache: str = ""
+_secret_cache: str = ""
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Admin (usuário/senha)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def admin_configured() -> bool:
+    try:
+        return ADMIN_FILE.is_file()
+    except Exception:
+        return False
+
+
+def _hash_password(password: str, salt: bytes) -> str:
+    return hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, PBKDF2_ITERATIONS).hex()
+
+
+def set_admin(username: str, password: str) -> dict:
+    """Cria/atualiza o administrador. Retorna o registro salvo (sem o hash)."""
+    salt = secrets.token_bytes(16)
+    data = {
+        "username": username.strip(),
+        "salt": salt.hex(),
+        "hash": _hash_password(password, salt),
+        "created_at": int(time.time()),
+    }
+    ADMIN_FILE.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    try:
+        ADMIN_FILE.chmod(0o600)
+    except Exception:
+        pass
+    logger.info("Administrador do painel configurado (usuário '%s')", data["username"])
+    return {"username": data["username"], "created_at": data["created_at"]}
+
+
+def verify_admin(username: str, password: str) -> bool:
+    """Verifica usuário/senha em tempo constante (anti enumeração de usuário)."""
+    try:
+        data = json.loads(ADMIN_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return False
+    user_ok = hmac.compare_digest(username.strip().encode("utf-8"), data.get("username", "").encode("utf-8"))
+    salt = bytes.fromhex(data.get("salt", ""))
+    expected = data.get("hash", "")
+    pass_ok = hmac.compare_digest(_hash_password(password, salt).encode("utf-8"), expected.encode("utf-8"))
+    return user_ok and pass_ok
+
+
+def get_admin_username() -> str:
+    try:
+        return json.loads(ADMIN_FILE.read_text(encoding="utf-8")).get("username", "")
+    except Exception:
+        return ""
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Token de sessão (assinado, expira)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _session_secret() -> str:
+    global _secret_cache
+    if _secret_cache:
+        return _secret_cache
+    try:
+        if SESSION_SECRET_FILE.is_file():
+            s = SESSION_SECRET_FILE.read_text(encoding="utf-8").strip()
+            if s:
+                _secret_cache = s
+                return s
+        s = secrets.token_urlsafe(48)
+        SESSION_SECRET_FILE.write_text(s, encoding="utf-8")
+        try:
+            SESSION_SECRET_FILE.chmod(0o600)
+        except Exception:
+            pass
+        _secret_cache = s
+        return s
+    except Exception as e:
+        logger.error("Falha ao gerenciar segredo de sessão: %s", e)
+        return ""
+
+
+def _b64url_encode(raw: bytes) -> str:
+    return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
+
+
+def _b64url_decode(data: str) -> bytes:
+    pad = "=" * (-len(data) % 4)
+    return base64.urlsafe_b64decode(data + pad)
+
+
+def create_session_token(username: str) -> str:
+    payload = {
+        "sub": username,
+        "iat": int(time.time()),
+        "exp": int(time.time()) + SESSION_TTL,
+        "jti": secrets.token_urlsafe(12),
+    }
+    body = _b64url_encode(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
+    sig = hmac.new(_session_secret().encode("utf-8"), body.encode("ascii"), hashlib.sha256).digest()
+    return f"{body}.{_b64url_encode(sig)}"
+
+
+def verify_session_token(token: str | None) -> str | None:
+    """Valida assinatura/expiração; retorna o username ou None."""
+    if not token or "." not in token:
+        return None
+    body, sig = token.rsplit(".", 1)
+    secret = _session_secret()
+    if not secret:
+        return None
+    expected = hmac.new(secret.encode("utf-8"), body.encode("ascii"), hashlib.sha256).digest()
+    try:
+        if not hmac.compare_digest(expected, _b64url_decode(sig)):
+            return None
+        payload = json.loads(_b64url_decode(body))
+    except Exception:
+        return None
+    if int(payload.get("exp", 0)) < time.time():
+        return None
+    return str(payload.get("sub", "")) or None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Token legado (config/.panel_token) — aceito apenas enquanto não há admin
+# ─────────────────────────────────────────────────────────────────────────────
 
 def get_or_create_token() -> str:
-    """Lê o token do arquivo; gera e persiste um novo se não existir."""
+    """Lê o token legado; gera e persiste um novo se não existir."""
     global _token_cache
     if _token_cache:
         return _token_cache
@@ -40,7 +181,7 @@ def get_or_create_token() -> str:
         except Exception:
             pass
         _token_cache = tok
-        logger.warning("Painel: token de acesso gerado em %s (guarde-o em local seguro)", TOKEN_FILE)
+        logger.warning("Painel: token de acesso gerado em %s (use até criar o administrador)", TOKEN_FILE)
         return tok
     except Exception as e:
         logger.error("Falha ao gerenciar token de acesso: %s", e)
@@ -48,16 +189,22 @@ def get_or_create_token() -> str:
 
 
 def check_token(candidate: str | None) -> bool:
-    """Comparação em tempo constante com o token armazenado."""
+    """Valida a credencial de acesso.
+
+    Com admin configurado: aceita apenas token de sessão válido.
+    Sem admin (instalação nova/legada): aceita o token legado do painel.
+    """
     if not candidate:
         return False
+    if admin_configured():
+        return verify_session_token(candidate) is not None
     token = get_or_create_token()
     if not token:
         return False
     return hmac.compare_digest(candidate.encode("utf-8"), token.encode("utf-8"))
 
 
-PUBLIC_PATHS = {"/api/system/health", "/api/auth/login"}
+PUBLIC_PATHS = {"/api/system/health", "/api/auth/login", "/api/auth/status"}
 
 
 def _extract_token(request: Request) -> str | None:
@@ -68,12 +215,12 @@ def _extract_token(request: Request) -> str | None:
 
 
 async def require_auth(request: Request):
-    """Dependency global: exige token válido em rotas protegidas."""
+    """Dependency global: exige credencial válida em rotas protegidas."""
     if request.url.path in PUBLIC_PATHS:
         return
 
-    # Se a segurança estiver desligada na config, não exige token.
-    # Sem config carregada (app.main.config is None) → fail-closed: exige token.
+    # Se a segurança estiver desligada na config, não exige credencial.
+    # Sem config carregada (app.main.config is None) → fail-closed: exige.
     try:
         import app.main
 
@@ -111,5 +258,5 @@ async def require_auth(request: Request):
 
 
 async def require_auth_ws(websocket) -> bool:
-    """Valida token para conexões WebSocket (via ?token=)."""
+    """Valida credencial para conexões WebSocket (via ?token=)."""
     return check_token(websocket.query_params.get("token"))

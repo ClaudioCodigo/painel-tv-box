@@ -40,6 +40,8 @@ groups/*.yml
 
 # Segredos
 config/.panel_token
+config/admin.json
+config/.session_secret
 
 # OS
 .DS_Store

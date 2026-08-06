@@ -94,12 +94,13 @@ node --check static\js\*.js          # sintaxe de todo o JS
 
 ---
 
-## 🔐 Autenticação
+## 🔐 Autenticação (usuário/senha do administrador)
 
-- Token compartilhado gerado no primeiro boot em **`config/.panel_token`** (gitignored).
-- `POST /api/auth/login` com `{"token": "..."}`; envie via header `Authorization: Bearer <token>` ou `?token=` (downloads/imagens).
-- Rotas públicas: `/api/system/health`, `/api/auth/login` e o wizard (antes de concluir).
-- Desligar: `config/system.yml → security: {enabled: false}`.
+- O **administrador** é criado no **wizard** (1ª instalação) ou em **Configurações → Segurança** (criar/alterar). Credenciais ficam em `config/admin.json` (gitignored), com hash **PBKDF2-SHA256** (salt aleatório) e comparação em tempo constante.
+- `POST /api/auth/login` com `{"username", "password"}` → **token de sessão** (HMAC-SHA256, expira em 12h); envie via header `Authorization: Bearer <token>` ou `?token=` (downloads/imagens).
+- Rotas públicas: `/api/system/health`, `/api/auth/status`, `/api/auth/login` e o wizard (antes de concluir).
+- **Backward compat:** enquanto não houver admin configurado, o token legado `config/.panel_token` continua valendo; **ao criar o admin, apenas sessões de login são aceitas**.
+- Desligar a exigência: `config/system.yml → security: {enabled: false}`.
 - O **heartbeat** usa uma chave dedicada (`security.heartbeat_key`), não o token do painel.
 
 > ⚠️ **Config, devices e groups são LOCAIS** (gitignored): contêm IPs, `heartbeat_key` e credenciais da máquina e **não sobem no `git push`**. O repositório mantém apenas templates `.example`; o painel cria os arquivos reais no 1º boot.
