@@ -81,6 +81,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-06 (resume no OpenCode)
-Stopped at: Inicialização GSD concluída (PROJECT/config/research/REQUIREMENTS/ROADMAP/STATE/AGENTS.md commitados); próxima etapa é /gsd-discuss-phase 1
-Resume file: .planning/.continue-here.md (atualizado — next = discuss-phase 1)
+Last session: 2026-08-06 (discuss-phase 1)
+Stopped at: Phase 1 context gathered — next é /gsd-plan-phase 1
+Resume file: .planning/phases/01-instalador-windows/01-CONTEXT.md
