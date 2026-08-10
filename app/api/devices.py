@@ -15,6 +15,23 @@ def _get_config():
 
     return app.main.config
 
+def _sync_mediamtx(config):
+    """Regenera o config do MediaMTX e reinicia o servico (aplica paths novos/removidos)."""
+    try:
+        config.generate_mediamtx_yml()
+        import os
+        import subprocess
+        from pathlib import Path
+
+        if os.name == "nt":
+            nssm = Path(__file__).resolve().parent.parent.parent / "bin" / "nssm.exe"
+            subprocess.Popen([str(nssm), "restart", "mediamtx"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        else:
+            subprocess.Popen(["systemctl", "restart", "mediamtx"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return True
+    except Exception:
+        return False
+
 
 @router.get("")
 async def list_devices():
@@ -52,6 +69,10 @@ async def create_device(data: dict):
     except ValueError as e:
         raise HTTPException(400, str(e))
 
+    # Aplica o rtsp_path do novo device no MediaMTX
+    if device.rtsp_path:
+        _sync_mediamtx(config)
+
     # Auto-provision: tenta enviar scripts para o TV Box
     try:
         from app.managers.adb import ADBManager
@@ -75,6 +96,7 @@ async def update_device(device_id: str, data: dict):
     if not config.get_device(device_id):
         raise HTTPException(404, "Dispositivo não encontrado")
 
+    old_path = config.get_device(device_id).rtsp_path if config.get_device(device_id) else None
     try:
         updated = config.update_device(device_id, data)
     except Exception as e:
@@ -82,6 +104,25 @@ async def update_device(device_id: str, data: dict):
 
     if updated is None:
         raise HTTPException(500, "Falha ao atualizar dispositivo")
+    # Re-provisiona scripts/conf se mudou IP ou ID do device
+    if "ip" in data or "id" in data:
+        import asyncio
+
+        from app.managers.adb import ADBManager
+        from app.services.provision import ProvisionService
+
+        async def _reprovision():
+            try:
+                await ProvisionService(adb_manager=ADBManager()).provision(updated)
+            except Exception:
+                pass
+
+        asyncio.create_task(_reprovision())
+
+    # Se o rtsp_path mudou, regenera o MediaMTX
+    if updated.rtsp_path != old_path:
+        _sync_mediamtx(config)
+
     return updated.model_dump()
 
 
@@ -94,6 +135,7 @@ async def delete_device(device_id: str):
         config.delete_device(device_id)
     except ValueError as e:
         raise HTTPException(400, str(e))
+    _sync_mediamtx(config)
     return {"deleted": device_id}
 
 

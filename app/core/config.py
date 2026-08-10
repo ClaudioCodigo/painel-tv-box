@@ -281,6 +281,9 @@ class ConfigurationManager:
                     "maxReaders": 1,
                 }
 
+        # Path reservado para o streaming de tela do scrcpy (painel publica aqui)
+        paths.setdefault("SCRCPY_DISPLAY", {"source": "publisher"})
+
         rtsp_port = base.get("server", {}).get("rtsp_port", 8554)
         rtmp_port = base.get("server", {}).get("rtmp_port", 1935)
         api_port = base.get("server", {}).get("api_port", 9997)
@@ -288,8 +291,8 @@ class ConfigurationManager:
         config = {
             "logLevel": base.get("logLevel", "warn"),
             "writeQueueSize": base.get("writeQueueSize", 2048),
-            "readTimeout": base.get("readTimeout", "10s"),
-            "writeTimeout": base.get("writeTimeout", "10s"),
+            "readTimeout": base.get("readTimeout", "60s"),
+            "writeTimeout": base.get("writeTimeout", "60s"),
             "rtsp": True,
             "rtspAddress": f":{rtsp_port}",
             "rtspTransports": base.get("rtspTransports", ["udp", "tcp"]),

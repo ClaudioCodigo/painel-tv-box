@@ -27,16 +27,18 @@ MAX_KEEP_VERSIONS = 3
 GITHUB_API = "https://api.github.com/repos/genymobile/scrcpy/releases"
 
 
-def _env_panel_adb():
-    """Env com ADB_SERVER_PORT do painel (scrcpy + streaming usam o mesmo
-    servidor que tem o device conectado). Sem porta isolada, não injeta nada
-    (fica no default 5037, igual ao ADBManager)."""
-    from app.utils.system import get_panel_adb_server_port
+def _env_default_adb():
+    """Env sem ADB_SERVER_PORT: o scrcpy usa o servidor ADB default (5037),
+    isolado do servidor do painel (Ideia 4 — ADB_SERVER_PORT no ADBManager)."""
+    return {k: v for k, v in os.environ.items() if k != "ADB_SERVER_PORT"}
 
+
+def _env_panel_adb():
+    """Env com ADB_SERVER_PORT do painel (para adb exec-out do streaming)."""
     env = dict(os.environ)
-    port = get_panel_adb_server_port()
+    port = os.environ.get("PANEL_ADB_SERVER_PORT", "")
     if port:
-        env["ADB_SERVER_PORT"] = str(port)
+        env["ADB_SERVER_PORT"] = port
     return env
 
 # Versões do scrcpy são numéricas pontuadas (ex: 2.4, 3.0.1)
@@ -50,6 +52,7 @@ def is_safe_version(version: str) -> bool:
 
 class ScrcpyManager:
     _sessions: dict[str, dict] = {}
+    _streams: dict[str, dict] = {}  # target -> {adb, ffmpeg, running}
     _recent_events = deque(maxlen=50)
     _metrics = {
         "starts": 0,
@@ -63,7 +66,7 @@ class ScrcpyManager:
     def __init__(self):
         self._ensure_dirs()
         self._meta = self._load_meta()
-        self._streams: dict[str, dict] = {}  # target -> {adb, ffmpeg, running}
+
 
     def _ensure_dirs(self):
         for d in [SCRCPY_DIR, VERSIONS_DIR, DOWNLOADS_DIR]:
@@ -416,7 +419,7 @@ class ScrcpyManager:
                 logger.info("scrcpy tentativa %d/%d target=%s cmd=%s", attempt, max_attempts, target, " ".join(cmd))
                 proc = await asyncio.create_subprocess_exec(
                     *cmd,
-                    env=_env_panel_adb(),
+                    env=_env_default_adb(),
                     stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
                 )
                 try:
@@ -531,9 +534,11 @@ class ScrcpyManager:
         # adb exec-out screenrecord → H.264 no stdout → ffmpeg → RTMP
         adb_cmd = [adb.binary, "-s", target, "exec-out",
                    "screenrecord", "--output-format=h264",
-                   "--size", "1024x576", "--bit-rate", "4000000", "-"]
+                   "--bit-rate", "4000000", "-"]
         ffmpeg_cmd = [ffmpeg_bin, "-fflags", "nobuffer", "-i", "pipe:0",
-                      "-c", "copy", "-f", "flv", "-flvflags", "no_duration_filesize",
+                      "-c:v", "libx264", "-preset", "ultrafast", "-tune", "zerolatency",
+                      "-pix_fmt", "yuv420p", "-g", "50",
+                      "-f", "flv", "-flvflags", "no_duration_filesize",
                       rtmp_url]
 
         try:
@@ -542,9 +547,28 @@ class ScrcpyManager:
                 stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
             )
             proc_ffmpeg = await asyncio.create_subprocess_exec(
-                *ffmpeg_cmd, stdin=proc_adb.stdout,
+                *ffmpeg_cmd, stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
             )
+
+            async def _pump():
+                try:
+                    while True:
+                        chunk = await proc_adb.stdout.read(65536)
+
+                        if not chunk:
+                            break
+                        proc_ffmpeg.stdin.write(chunk)
+                        await proc_ffmpeg.stdin.drain()
+                except Exception:
+                    pass
+                finally:
+                    try:
+                        proc_ffmpeg.stdin.close()
+                    except Exception:
+                        pass
+
+            asyncio.create_task(_pump())
 
             # Aguarda 6s para ver se ffmpeg crasha (tela morta, URL ruim, etc.)
             await asyncio.sleep(6)

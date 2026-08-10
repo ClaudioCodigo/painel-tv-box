@@ -2,11 +2,17 @@
 
 import asyncio
 import logging
+import time
 from datetime import datetime
 
 from app.models.device import DeviceConfig
 
 logger = logging.getLogger("watchdog")
+
+# Diretório remoto dos scripts Android (mesmo de app/services/provision.py)
+REMOTE_DIR = "/data/local/tmp/panel"
+# Scripts que o guardião pode ressuscitar se parados
+GUARDIAN_SCRIPTS = ("heartbeat.sh", "netwatch.sh")
 
 
 class WatchdogManager:
@@ -19,6 +25,8 @@ class WatchdogManager:
         self._tasks: dict[str, asyncio.Task] = {}
         self._running = False
         self._send_event = None
+        # Guardião: último check por device (timestamp monotônico)
+        self._guardian_last: dict[str, float] = {}
 
     def set_event_broadcast(self, send_event):
         """Define callback para broadcast de eventos WebSocket."""
@@ -58,6 +66,73 @@ class WatchdogManager:
     def _is_stream_issue(reason: str) -> bool:
         r = reason.lower()
         return "stream" in r or "player" in r
+
+    async def _guardian_check(self, device: DeviceConfig):
+        """Guardião: ressuscita heartbeat.sh/netwatch.sh se parados no device.
+
+        Respeita a regra ADB×scrcpy (docs/09 §3.3): zero ADB enquanto houver
+        sessão scrcpy ativa no device ou heartbeat fresco. Só usa ADB quando o
+        heartbeat expirou — sinal de script morto ou box recém-reiniciado.
+        """
+        g = getattr(self.cfg, "guardian", None) if self.cfg else None
+        if not g or not g.enabled:
+            return
+        adb = getattr(self.health, "adb", None)
+        if not adb:
+            return
+
+        # Cooldown por device
+        now = time.monotonic()
+        if now - self._guardian_last.get(device.id, 0) < g.check_interval:
+            return
+        self._guardian_last[device.id] = now
+
+        # Device offline: recovery já cuida; não fica martelando ADB inalcançável
+        if device.state.status == "offline":
+            return
+
+        # Regra ADB×scrcpy: se scrcpy ativo → zero ADB no device
+        from app.managers.scrcpy import ScrcpyManager
+
+        if ScrcpyManager.is_device_active(f"{device.ip}:{device.adb_port}"):
+            logger.debug("Guardião pulou %s — scrcpy ativo (regra ADB×scrcpy)", device.id)
+            return
+
+        # Heartbeat fresco = scripts vivos (heartbeat é o próprio script)
+        hb_timeout = getattr(self.cfg, "heartbeat_timeout", 60) if self.cfg else 60
+        if device.state.last_heartbeat and (
+            datetime.now() - device.state.last_heartbeat
+        ).total_seconds() < hb_timeout:
+            return
+
+        for script in GUARDIAN_SCRIPTS:
+            try:
+                out, code = await adb.shell(
+                    device.ip,
+                    f"sh {REMOTE_DIR}/{script} status",
+                    port=device.adb_port,
+                    timeout=g.adb_timeout,
+                )
+                stopped = code != 0 or "PARADO" in out
+                if not stopped:
+                    continue
+                logger.warning("Guardião: %s PARADO em %s — reiniciando", script, device.id)
+                await adb.shell(
+                    device.ip,
+                    f"sh {REMOTE_DIR}/{script} start",
+                    port=device.adb_port,
+                    timeout=g.adb_timeout,
+                )
+                if self._send_event:
+                    await self._send_event({
+                        "type": "guardian",
+                        "device_id": device.id,
+                        "script": script,
+                        "action": "restart",
+                        "timestamp": datetime.now().isoformat(),
+                    })
+            except Exception as e:
+                logger.warning("Guardião falhou ao checar %s em %s: %s", script, device.id, e)
 
     async def _watch_loop(self, device: DeviceConfig):
         """Loop principal de health check + recovery."""
@@ -138,6 +213,9 @@ class WatchdogManager:
                                 "message": f"Recuperação falhou após {len(rec_result.get('steps_taken', []))} passos",
                                 "timestamp": datetime.now().isoformat(),
                             })
+
+                # Guardião: ressuscita heartbeat/netwatch se parados (com cooldown)
+                await self._guardian_check(device)
 
                 await asyncio.sleep(interval)
 

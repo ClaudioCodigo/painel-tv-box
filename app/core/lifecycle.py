@@ -1,5 +1,6 @@
 """Application lifecycle: startup and shutdown hooks."""
 
+import asyncio
 import logging
 
 logger = logging.getLogger("system")
@@ -62,7 +63,12 @@ async def startup(fastapi_app):
         mtx_mgr = MediaMTXManager(
             api_url=cm.mediamtx.api.url if cm.mediamtx and hasattr(cm.mediamtx, "api") else "http://localhost:9997",
         )
-        player_mgr = PlayerManager(adb_manager=adb, players_config=cm.players)
+        player_mgr = PlayerManager(
+            adb_manager=adb,
+            players_config=cm.players,
+            host_ip=cm.system.host.ip,
+            rtsp_port=cm.mediamtx.server.rtsp_port,
+        )
 
         health_mgr = HealthManager(
             adb_manager=adb,
@@ -96,6 +102,21 @@ async def startup(fastapi_app):
         sched_mgr.start()
         fastapi_app.state.schedule_manager = sched_mgr
         logger.info("ScheduleManager iniciado")
+
+        # Sincroniza scripts/conf nos TV boxes (IP do painel, versao dos scripts)
+        from app.services.provision import ProvisionService
+
+        async def _auto_provision():
+            prov = ProvisionService(adb_manager=ADBManager())
+            for dev in cm.devices:
+                try:
+                    await prov.provision(dev)
+                    logger.info("Auto-provision %s ok", dev.id)
+                except Exception as e:
+                    logger.warning("Auto-provision %s falhou: %s", dev.id, e)
+
+        asyncio.create_task(_auto_provision())
+        logger.info("Auto-provision agendado para %d devices", len(cm.devices))
 
     logger.info("Painel TV Box iniciado")
 

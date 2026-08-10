@@ -18,3 +18,7 @@ recovery:
   reboot_max: 1
   reboot_boot_timeout: 120
   critical_alert_cooldown: 300
+guardian:
+  enabled: true
+  check_interval: 300
+  adb_timeout: 10

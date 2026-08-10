@@ -78,7 +78,6 @@ class TestProvisionHeartbeatPush:
         prov = ProvisionService(adb_manager=adb)
         device = DeviceConfig(id="qa", ip="10.0.0.5", adb_port=5555)
         result = await prov.provision(device)
-
         # O heartbeat.conf foi enviado (sem erro de push)
         assert result["success"] is True
         assert "heartbeat.conf" in result["scripts_pushed"]
@@ -95,3 +94,66 @@ class TestProvisionHeartbeatPush:
         # O script de start foi invocado no device
         start_calls = [c for c in adb.shell.call_args_list if "heartbeat.sh start" in c.args[1]]
         assert len(start_calls) == 1
+        netwatch_calls = [c for c in adb.shell.call_args_list if "netwatch.sh start" in c.args[1]]
+        assert len(netwatch_calls) == 1
+
+
+class TestBootHook:
+    @pytest.mark.asyncio
+    async def test_installs_boot_hook_when_root(self, monkeypatch, tmp_path):
+        """Device com root=true → instala boot_hook.sh como install-recovery.sh."""
+        import app.main as main_module
+
+        monkeypatch.setattr(main_module, "config", make_config())
+        monkeypatch.setattr("app.services.provision.SCRIPTS_DIR", tmp_path)
+
+        for name in MANIFEST:
+            (tmp_path / name).write_text("#!/system/bin/sh\necho ok\n", encoding="utf-8")
+
+        class FakeADB:
+            def __init__(self):
+                self.shell = AsyncMock(side_effect=lambda *a, **k: ("", 0))
+            async def push(self, ip, local, remote, port=5555, timeout=30):
+                return True
+
+        adb = FakeADB()
+        prov = ProvisionService(adb_manager=adb)
+        device = DeviceConfig(id="qa", ip="10.0.0.5", adb_port=5555, root=True)
+        result = await prov.provision(device)
+
+        install_calls = [c.args[1] for c in adb.shell.await_args_list
+                         if "install-recovery.sh" in c.args[1]]
+        assert len(install_calls) == 1, "deve chamar a instalação do boot hook"
+        cmd = install_calls[0]
+        assert "mount -o rw,remount /system" in cmd
+        assert "boot_hook.sh" in cmd
+        assert "chmod 755" in cmd
+        assert "boot_hook" in result["scripts_pushed"]
+
+    @pytest.mark.asyncio
+    async def test_skips_boot_hook_without_root(self, monkeypatch, tmp_path):
+        """Device sem root → não tenta instalar (guardian cobre pós-reboot)."""
+        import app.main as main_module
+
+        monkeypatch.setattr(main_module, "config", make_config())
+        monkeypatch.setattr("app.services.provision.SCRIPTS_DIR", tmp_path)
+
+        for name in MANIFEST:
+            (tmp_path / name).write_text("#!/system/bin/sh\necho ok\n", encoding="utf-8")
+
+        class FakeADB:
+            def __init__(self):
+                self.shell = AsyncMock(return_value=("", 0))
+
+            async def push(self, ip, local, remote, port=5555, timeout=30):
+                return True
+
+        adb = FakeADB()
+        prov = ProvisionService(adb_manager=adb)
+        device = DeviceConfig(id="qa", ip="10.0.0.5", adb_port=5555, root=False)
+        result = await prov.provision(device)
+
+        install_calls = [c.args[1] for c in adb.shell.await_args_list
+                         if "install-recovery.sh" in c.args[1]]
+        assert install_calls == [], "sem root não deve instalar boot hook"
+        assert "boot_hook" not in result["scripts_pushed"]

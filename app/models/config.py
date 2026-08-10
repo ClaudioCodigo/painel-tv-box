@@ -81,6 +81,17 @@ class WatchdogRecoveryConfig(BaseModel):
     critical_alert_cooldown: int = 300
 
 
+class WatchdogGuardianConfig(BaseModel):
+    """Guardião do watchdog — ressuscita heartbeat.sh/netwatch.sh mortos.
+
+    Regra ADB×scrcpy (docs/09 §3.3): só toca ADB quando o heartbeat expirou
+    E não há sessão scrcpy ativa no device.
+    """
+    enabled: bool = True
+    check_interval: int = 300  # s entre verificações por device
+    adb_timeout: int = 10
+
+
 class WatchdogConfig(BaseModel):
     check_interval: int = 10
     heartbeat_timeout: int = 60  # heartbeat fresco = device na rede (sem ADB)
@@ -89,6 +100,7 @@ class WatchdogConfig(BaseModel):
     activity_check: bool = True
     mediamtx_check: bool = True
     recovery: WatchdogRecoveryConfig = Field(default_factory=WatchdogRecoveryConfig)
+    guardian: WatchdogGuardianConfig = Field(default_factory=WatchdogGuardianConfig)
 
 
 # ── players.yml ────────────────────────────────────────

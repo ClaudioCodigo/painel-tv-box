@@ -37,8 +37,9 @@ app = FastAPI(
     description="Gerenciamento e monitoramento de TV Boxes Android",
     version="0.1.0",
     lifespan=lifespan,
-    docs_url="/docs",
-    redoc_url="/redoc",
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
 )
 
 # Config singleton (carregado no startup)

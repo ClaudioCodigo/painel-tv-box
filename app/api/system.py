@@ -4,6 +4,56 @@ from fastapi import APIRouter
 
 router = APIRouter(prefix="/api/system", tags=["system"])
 
+import os
+import re
+import subprocess
+from pathlib import Path
+
+from fastapi import HTTPException
+from pydantic import BaseModel
+
+_IPV4_RE = re.compile(r"^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$")
+
+
+class HostIpBody(BaseModel):
+    ip: str
+
+
+def _is_valid_ipv4(ip: str) -> bool:
+    m = _IPV4_RE.match(ip or "")
+    if not m:
+        return False
+    return all(0 <= int(g) <= 255 for g in m.groups())
+
+
+@router.put("/host-ip")
+async def set_host_ip(body: HostIpBody):
+    """Atualiza o IP do servidor (host) e salva o system.yml."""
+    config = _get_config()
+    if not config or not config.system:
+        raise HTTPException(400, "Config indisponivel")
+    ip = (body.ip or "").strip()
+    if not _is_valid_ipv4(ip):
+        raise HTTPException(400, "IP invalido")
+    config.system.host.ip = ip
+    config.save_system()
+    return {"success": True, "ip": ip, "restart_required": True}
+
+
+@router.post("/restart")
+async def restart_panel():
+    """Reinicia o servico do painel (sem esperar)."""
+    try:
+        if os.name == "nt":
+            nssm = Path(__file__).resolve().parent.parent.parent / "bin" / "nssm.exe"
+            cmd = [str(nssm), "restart", "panel-tvbox"]
+        else:
+            cmd = ["systemctl", "restart", "panel"]
+        subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return {"success": True, "restarting": True}
+    except Exception as e:
+        raise HTTPException(500, "Falha ao reiniciar: " + str(e))
+
 
 def _get_config():
     import app.main

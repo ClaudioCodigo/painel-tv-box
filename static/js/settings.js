@@ -56,6 +56,15 @@ const SETTINGS = (() => {
                 <div class="section-title mt-md">${UI.icon('server')} Servidor</div>
                 <div class="settings-card">
                     <div id="server-info" class="loading">Carregando...</div>
+                    <div class="form-group" style="margin-top:12px">
+                        <label class="form-label">IP do servidor (host)</label>
+                        <div style="display:flex;gap:8px">
+                            <input type="text" id="server-ip" class="form-input" style="flex:1" placeholder="192.168.254.219">
+                            <button class="btn btn-primary" onclick="SETTINGS.saveServerIp()">${UI.icon('check')} Salvar</button>
+                        </div>
+                        <p class="text-muted text-sm" style="margin-top:6px">Ao salvar, o painel reinicia e re-sincroniza os TV boxes automaticamente.</p>
+                    </div>
+                    <div id="server-ip-status" class="settings-status"></div>
                 </div>
             </div>
         `;
@@ -94,11 +103,16 @@ const SETTINGS = (() => {
         if (!el) return;
 
         try {
-            const [health, metrics, devices] = await Promise.all([
+            const [health, metrics, devices, cfg] = await Promise.all([
                 API.get('/system/health'),
                 API.get('/system/metrics'),
                 API.get('/devices').catch(() => []),
+                API.get('/system/config').catch(() => null),
             ]);
+            const serverIp = (cfg && cfg.system && cfg.system.host && cfg.system.host.ip) || ''
+            const ipInput = document.getElementById('server-ip');
+            if (ipInput && serverIp) ipInput.value = serverIp;
+
             const uptime = fmtUptime(metrics.uptime_seconds || 0);
             const devCount = Array.isArray(devices) ? devices.length : 0;
 
@@ -111,6 +125,10 @@ const SETTINGS = (() => {
                 <div class="info-row"><span class="info-key">CPU</span><span class="info-val">${metrics.cpu_percent}%</span></div>
                 <div class="info-row"><span class="info-key">RAM</span><span class="info-val">${metrics.ram_used_gb}/${metrics.ram_total_gb} GB (${metrics.ram_percent}%)</span></div>
                 <div class="info-row"><span class="info-key">Disco</span><span class="info-val">${metrics.disk_used_gb}/${metrics.disk_total_gb} GB (${metrics.disk_percent}%)</span></div>
+                <div class="info-row"><span class="info-key">IP do servidor</span><span class="info-val mono">${UI.escapeHtml(serverIp)}</span></div>
+                <div class="info-row"><span class="info-key">Painel</span><span class="info-val mono">http://${UI.escapeHtml(serverIp)}:8080</span></div>
+                <div class="info-row"><span class="info-key">RTSP</span><span class="info-val mono">rtsp://${UI.escapeHtml(serverIp)}:8554/TV-ADM-1</span></div>
+                <div class="info-row"><span class="info-key">RTMP</span><span class="info-val mono">rtmp://${UI.escapeHtml(serverIp)}:1935/TV-ADM-1</span></div>
             `;
         } catch (e) {
             el.innerHTML = `<span class="text-danger">Erro: ${UI.escapeHtml(e.message)}</span>`;
@@ -140,6 +158,38 @@ const SETTINGS = (() => {
         UI.createToast(`Tema: ${choice}`, 'success');
     }
 
+    async function saveServerIp() {
+        const input = document.getElementById('server-ip');
+        const status = document.getElementById('server-ip-status');
+        const ip = input ? input.value.trim() : '';
+        if (!/^(\d{1,3}\.){3}\d{1,3}$/.test(ip)) {
+            if (status) status.innerHTML = '<span class="text-danger">IP invalido</span>';
+            return;
+        }
+        try {
+            const res = await API.put('/system/host-ip', { ip });
+            if (res && res.success) {
+                UI.showModal(
+                    'IP salvo - reiniciar painel',
+                    '<p>O painel vai reiniciar e ficar fora do ar por <strong>~2 minutos</strong>.</p>' +
+                    '<p>Durante o reinicio, os TV boxes serao re-sincronizados automaticamente (scripts + heartbeat com o novo IP).</p>' +
+                    '<p>Nao feche esta pagina - ela recarrega sozinha.</p>',
+                    async () => {
+                        if (status) status.innerHTML = '<span class="text-success">IP salvo - reiniciando o painel...</span>';
+                        UI.createToast('Reiniciando painel...', 'info', 5000);
+                        setTimeout(async () => {
+                            try { await API.post('/system/restart'); } catch (e) { /* conexao caiu - esperado */ }
+                            setTimeout(() => window.location.reload(), 9000);
+                        }, 500);
+                    }
+                );
+            } else {
+                if (status) status.innerHTML = `<span class="text-danger">${UI.escapeHtml((res && res.detail) || 'Falha')}</span>`;
+            }
+        } catch (e) {
+            if (status) status.innerHTML = `<span class="text-danger">${UI.escapeHtml(e.message)}</span>`;
+        }
+    }
     async function checkUpdate() {
         const status = document.getElementById('update-status');
         const btn = document.getElementById('btn-apply');
@@ -212,5 +262,5 @@ const SETTINGS = (() => {
         UI.createToast(`Tema ${isDark ? 'claro' : 'escuro'} ativado`, 'success');
     }
 
-    return { render, checkUpdate, applyUpdate, clearCache, toggleTheme, setTheme, syncThemeRadios, saveAdmin };
+    return { render, checkUpdate, applyUpdate, clearCache, toggleTheme, setTheme, syncThemeRadios, saveAdmin, saveServerIp };
 })();

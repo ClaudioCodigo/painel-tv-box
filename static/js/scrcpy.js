@@ -94,6 +94,18 @@ const SCRCPY = (() => {
   <div id="scrcpy-stream-url" style="margin-top:8px"></div>
  </div>
 
+ <div class="settings-card full">
+  <h3 style="margin-bottom:8px">Tela ao vivo (navegador)</h3>
+  <p class="text-muted text-sm">Captura a tela do box a cada ~3s e mostra aqui no browser - nao depende do scrcpy.</p>
+  <div style="display:flex;gap:8px;margin-bottom:8px;align-items:center">
+   <button class="btn btn-success" onclick="SCRCPY.startLive()">${UI.icon('play')} Ver tela</button>
+   <button class="btn btn-danger" onclick="SCRCPY.stopLive()">${UI.icon('stop')} Parar</button>
+   <span class="text-muted text-sm" id="scrcpy-live-status"></span>
+  </div>
+  <div id="scrcpy-live-box" style="display:none">
+   <img id="scrcpy-live-img" alt="Tela do dispositivo" style="width:100%;max-width:960px;border:1px solid var(--border-color);border-radius:8px;background:#000">
+  </div>
+ </div>
  <div class="section-title mt-md">${UI.icon('archive')} Versões</div>
  <div class="settings-card">
   <div style="display:flex;gap:8px;margin-bottom:12px">
@@ -116,7 +128,6 @@ const SCRCPY = (() => {
             ]);
             const card = document.getElementById('scrcpy-status-card');
             if (card) card.innerHTML = `
-                ${status.service_session ? '<div class="alert alert-warning" style="margin-bottom:8px">⚠️ O painel está rodando como <b>serviço Windows</b> (Sessão 0) — a janela do Mirror <b>não aparece</b> no desktop. Use <b>Streaming</b> (screenrecord→RTSP), que funciona sem tela.</div>' : ''}
                 <div class="info-row"><span class="info-key">Versão Ativa</span><span class="info-val">${status.current_version||'nenhuma'}</span></div>
                 <div class="info-row"><span class="info-key">Binário</span><span class="info-val">${status.binary_exists?'✅':'❌'}</span></div>
                 <div class="info-row"><span class="info-key">Versões</span><span class="info-val">${status.versions_count}</span></div>`;
@@ -194,6 +205,54 @@ const SCRCPY = (() => {
         } catch(e) { UI.createToast(`❌ ${e.message}`,'error'); }
     }
 
+    let liveTimer = null;
+    let liveDeviceId = '';
+    let liveBusy = false;
+
+    function stopLiveTimer() {
+        if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
+    }
+
+    function stopLive() {
+        stopLiveTimer();
+        liveDeviceId = '';
+        liveBusy = false;
+        const status = document.getElementById('scrcpy-live-status');
+        if (status) status.textContent = '';
+    }
+
+    async function startLive() {
+        const deviceId = document.getElementById('scrcpy-device')?.value;
+        if (!deviceId) { UI.createToast('Selecione um dispositivo primeiro', 'warning'); return; }
+        liveDeviceId = deviceId;
+        const box = document.getElementById('scrcpy-live-box');
+        const status = document.getElementById('scrcpy-live-status');
+        if (box) box.style.display = 'block';
+        if (status) status.textContent = 'Capturando...';
+        stopLiveTimer();
+        liveTimer = setInterval(refreshLiveShot, 3000);
+        await refreshLiveShot();
+    }
+
+    async function refreshLiveShot() {
+        if (!liveDeviceId || liveBusy) return;
+        liveBusy = true;
+        const img = document.getElementById('scrcpy-live-img');
+        const status = document.getElementById('scrcpy-live-status');
+        try {
+            const cap = await API.post(`/devices/${liveDeviceId}/screenshot`);
+            if (!cap.success) {
+                if (status) status.textContent = cap.error || 'Falha na captura';
+                return;
+            }
+            if (img) img.src = API.authUrl(`/devices/${liveDeviceId}/screenshot?t=${Date.now()}`);
+            if (status) status.textContent = 'Atualizado ' + new Date().toLocaleTimeString();
+        } catch (e) {
+            if (status) status.textContent = e.message || 'Falha';
+        } finally {
+            liveBusy = false;
+        }
+    }
     async function checkUpdates() {
         try {
             const r = await API.post('/scrcpy/check');
@@ -236,5 +295,5 @@ const SCRCPY = (() => {
         });
     }
 
-    return { render, startMirroring, startStreaming, stopMirroring, checkUpdates, installLatest, activateVersion, deleteVersion };
+    return { render, startMirroring, startStreaming, stopMirroring, startLive, stopLive, checkUpdates, installLatest, activateVersion, deleteVersion };
 })();

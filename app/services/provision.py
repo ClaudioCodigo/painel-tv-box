@@ -23,7 +23,9 @@ MANIFEST = [
     "healthcheck.sh",
     "install_apk.sh",
     "update.sh",
+    "netwatch.sh",
     "heartbeat.sh",  # batida HTTP device→servidor (docs/09)
+    "boot_hook.sh",  # religa heartbeat/netwatch no boot (só instala com root)
 ]
 
 HEARTBEAT_INTERVAL = 20  # s entre batidas
@@ -97,6 +99,9 @@ class ProvisionService:
                         await self.adb.shell(
                             ip, f"sh {REMOTE_DIR}/heartbeat.sh start", port=port, timeout=15
                         )
+                        await self.adb.shell(
+                            ip, f"sh {REMOTE_DIR}/netwatch.sh start", port=port, timeout=15
+                        )
                         results.append("heartbeat.conf")
                     else:
                         errors.append("push heartbeat.conf falhou")
@@ -104,6 +109,34 @@ class ProvisionService:
                     os.unlink(tmp_path)
         except Exception as e:
             errors.append(f"heartbeat: {e}")
+
+        # 3c. Boot hook (item 4 do HANDOFF): com root, instala boot_hook.sh como
+        #     /system/bin/install-recovery.sh — o init.rc executa esse arquivo no
+        #     boot (service flash_recovery, class main/oneshot) religando
+        #     heartbeat+netwatch sem depender do painel. Sem root, pula (o
+        #     guardião do watchdog cobre a ressuscitação pós-reboot).
+        if getattr(device, "root", False):
+            try:
+                # Não sobrescreve um install-recovery.sh REAL do firmware (OTA):
+                # só instala se o arquivo não existir ou já for o nosso
+                # (contém a marca PANEL_DIR do boot_hook).
+                install_cmd = (
+                    f"su -c 'mount -o rw,remount /system && "
+                    f"if [ ! -f /system/bin/install-recovery.sh ] || "
+                    f"grep -q PANEL_DIR /system/bin/install-recovery.sh 2>/dev/null; then "
+                    f"cp {REMOTE_DIR}/boot_hook.sh /system/bin/install-recovery.sh && "
+                    f"chmod 755 /system/bin/install-recovery.sh; fi && "
+                    f"mount -o ro,remount /system'"
+                )
+                output, code = await self.adb.shell(
+                    ip, install_cmd, port=port, timeout=20
+                )
+                if code == 0 and "not found" not in output.lower():
+                    results.append("boot_hook")
+                else:
+                    errors.append(f"boot hook não instalado: {output.strip()}")
+            except Exception as e:
+                errors.append(f"boot hook: {e}")
 
         # 4. Verifica
         output, _ = await self.adb.shell(

@@ -84,11 +84,11 @@ start() {
     # Dispara em nova sessão (setsid) para sobreviver ao fechamento do adb shell.
     # Re-invoca o próprio script com `_loop` (a função vive dentro do script).
     if command -v setsid >/dev/null 2>&1; then
-        setsid sh "$0" _loop >> "$LOG" 2>&1 &
+        setsid sh "$0" _loop >> "$LOG" 2>&1 < /dev/null &
     elif command -v nohup >/dev/null 2>&1; then
-        nohup sh "$0" _loop >> "$LOG" 2>&1 &
+        nohup sh "$0" _loop >> "$LOG" 2>&1 < /dev/null &
     else
-        sh "$0" _loop >> "$LOG" 2>&1 &
+        sh "$0" _loop >> "$LOG" 2>&1 < /dev/null &
     fi
     echo $! > "$PID_FILE"
     echo "heartbeat: iniciado (PID $(cat "$PID_FILE")) para $DEVICE_ID"
