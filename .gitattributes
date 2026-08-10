@@ -1,0 +1,7 @@
+# Scripts Android são executados pelo `sh` do TV box — exigem LF.
+# core.autocrlf=true (Windows) quebraria o sh com CRLF; force eol=lf.
+scripts/android/*.sh text eol=lf
+
+# Configs versionados do painel também em LF (evita divergência Windows/Linux)
+config/*.example text eol=lf
+*.yml text eol=lf
