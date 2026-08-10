@@ -110,31 +110,44 @@ class ProvisionService:
         except Exception as e:
             errors.append(f"heartbeat: {e}")
 
-        # 3c. Boot hook (item 4 do HANDOFF): com root, instala boot_hook.sh como
-        #     /system/bin/install-recovery.sh — o init.rc executa esse arquivo no
-        #     boot (service flash_recovery, class main/oneshot) religando
-        #     heartbeat+netwatch sem depender do painel. Sem root, pula (o
-        #     guardião do watchdog cobre a ressuscitação pós-reboot).
+        # 3c. Boot hook (item 4 do HANDOFF): religa heartbeat+netwatch no boot
+        #     do box, sem depender do painel. Prefere Magisk (service.d — não
+        #     mexe em /system); fallback: /system/bin/install-recovery.sh (o
+        #     init.rc executa no boot, class main/oneshot) — mas só se o
+        #     firmware permitir remount (system-as-root/dm-verity bloqueia).
         if getattr(device, "root", False):
             try:
-                # Não sobrescreve um install-recovery.sh REAL do firmware (OTA):
-                # só instala se o arquivo não existir ou já for o nosso
-                # (contém a marca PANEL_DIR do boot_hook).
-                install_cmd = (
-                    f"su -c 'mount -o rw,remount /system && "
-                    f"if [ ! -f /system/bin/install-recovery.sh ] || "
-                    f"grep -q PANEL_DIR /system/bin/install-recovery.sh 2>/dev/null; then "
-                    f"cp {REMOTE_DIR}/boot_hook.sh /system/bin/install-recovery.sh && "
-                    f"chmod 755 /system/bin/install-recovery.sh; fi && "
-                    f"mount -o ro,remount /system'"
+                # Detecta Magisk e instala em /data/adb/service.d/
+                out_m, code_m = await self.adb.shell(
+                    ip, "su -c 'magisk -v'", port=port, timeout=15
                 )
-                output, code = await self.adb.shell(
-                    ip, install_cmd, port=port, timeout=20
-                )
-                if code == 0 and "not found" not in output.lower():
-                    results.append("boot_hook")
+                if code_m == 0 and "MAGISK" in out_m.upper():
+                    magisk_cmd = (
+                        f"su -c 'cp {REMOTE_DIR}/boot_hook.sh "
+                        f"/data/adb/service.d/99panel.sh && "
+                        f"chmod 755 /data/adb/service.d/99panel.sh'"
+                    )
+                    output, code = await self.adb.shell(ip, magisk_cmd, port=port, timeout=15)
+                    if code == 0 and "not found" not in output.lower():
+                        results.append("boot_hook_magisk")
+                    else:
+                        errors.append(f"boot hook magisk: {output.strip()}")
                 else:
-                    errors.append(f"boot hook não instalado: {output.strip()}")
+                    # Sem Magisk: tenta install-recovery.sh (não sobrescreve
+                    # script real de OTA do firmware).
+                    install_cmd = (
+                        f"su -c 'mount -o rw,remount /system && "
+                        f"if [ ! -f /system/bin/install-recovery.sh ] || "
+                        f"grep -q PANEL_DIR /system/bin/install-recovery.sh 2>/dev/null; then "
+                        f"cp {REMOTE_DIR}/boot_hook.sh /system/bin/install-recovery.sh && "
+                        f"chmod 755 /system/bin/install-recovery.sh; fi && "
+                        f"mount -o ro,remount /system'"
+                    )
+                    output, code = await self.adb.shell(ip, install_cmd, port=port, timeout=20)
+                    if code == 0 and "not found" not in output.lower():
+                        results.append("boot_hook")
+                    else:
+                        errors.append(f"boot hook não instalado: {output.strip()}")
             except Exception as e:
                 errors.append(f"boot hook: {e}")
 

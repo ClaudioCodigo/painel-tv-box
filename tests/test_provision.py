@@ -131,6 +131,41 @@ class TestBootHook:
         assert "boot_hook" in result["scripts_pushed"]
 
     @pytest.mark.asyncio
+    async def test_installs_boot_hook_via_magisk(self, monkeypatch, tmp_path):
+        """Magisk presente → instala em /data/adb/service.d/99panel.sh (sem tocar /system)."""
+        import app.main as main_module
+
+        monkeypatch.setattr(main_module, "config", make_config())
+        monkeypatch.setattr("app.services.provision.SCRIPTS_DIR", tmp_path)
+
+        for name in MANIFEST:
+            (tmp_path / name).write_text("#!/system/bin/sh\necho ok\n", encoding="utf-8")
+
+        class FakeADB:
+            def __init__(self):
+                self.shell = AsyncMock(side_effect=lambda *a, **k: ("30.7:MAGISK:R", 0))
+
+            async def push(self, ip, local, remote, port=5555, timeout=30):
+                return True
+
+        adb = FakeADB()
+        prov = ProvisionService(adb_manager=adb)
+        device = DeviceConfig(id="qa", ip="10.0.0.5", adb_port=5555, root=True)
+        result = await prov.provision(device)
+
+        service_calls = [c.args[1] for c in adb.shell.await_args_list
+                         if "service.d" in c.args[1]]
+        assert len(service_calls) == 1, "deve instalar via service.d do Magisk"
+        cmd = service_calls[0]
+        assert "99panel.sh" in cmd
+        assert "boot_hook.sh" in cmd
+        assert "chmod 755" in cmd
+        assert "boot_hook_magisk" in result["scripts_pushed"]
+        # Não deve tentar o fallback install-recovery.sh
+        assert not any("install-recovery.sh" in c.args[1]
+                       for c in adb.shell.await_args_list)
+
+    @pytest.mark.asyncio
     async def test_skips_boot_hook_without_root(self, monkeypatch, tmp_path):
         """Device sem root → não tenta instalar (guardian cobre pós-reboot)."""
         import app.main as main_module
