@@ -29,13 +29,16 @@ done
 # 2. Tempo para a rede subir (DHCP/wifi)
 sleep 10
 
-# 3. Sobe os scripts (start é idempotente: mata PID antigo e re-dispara)
+# 3. Sobe os scripts (start é idempotente: mata PID antigo e re-dispara).
+#    IMPORTANTE: roda como uid 2000 (shell) — o mesmo do adb. Se rodar como
+#    root, o painel (uid 2000) não consegue ver o processo (hidepid=2) nem
+#    sinalizá-lo (kill -0 → EPERM), reportando "PARADO" falso e duplicando.
 [ -x "$PANEL_DIR/heartbeat.sh" ] && {
-    sh "$PANEL_DIR/heartbeat.sh" start >> "$LOG" 2>&1
+    su 2000 -c "sh $PANEL_DIR/heartbeat.sh start" >> "$LOG" 2>&1
     log "heartbeat.sh start (boot hook)"
 }
 [ -x "$PANEL_DIR/netwatch.sh" ] && {
-    sh "$PANEL_DIR/netwatch.sh" start >> "$LOG" 2>&1
+    su 2000 -c "sh $PANEL_DIR/netwatch.sh start" >> "$LOG" 2>&1
     log "netwatch.sh start (boot hook)"
 }
 

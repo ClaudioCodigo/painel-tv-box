@@ -11,6 +11,18 @@ CONFIG="/data/local/tmp/panel/heartbeat.conf"
 PID_FILE="/data/local/tmp/panel/heartbeat.pid"
 LOG="/data/local/tmp/panel/heartbeat.log"
 
+# Verifica se o PID do pidfile está vivo. Usa `ps` + `grep -w` (não `kill -0`):
+# com Magisk o processo pode rodar como root e o adb shell (uid 2000) não pode
+# sinalizá-lo (kill -0 → EPERM) nem vê-lo (hidepid=2) — status falso PARADO.
+# Nota: toybox awk trata `exit` de forma não-padrão; grep -w é confiável.
+alive() {
+    [ -f "$PID_FILE" ] || return 1
+    local pid
+    pid=$(cat "$PID_FILE" 2>/dev/null)
+    [ -n "$pid" ] || return 1
+    ps -A 2>/dev/null | grep -w "$pid" >/dev/null 2>&1
+}
+
 # ── HTTP via nc (sem curl/wget) ───────────────────────────────
 # http_req METHOD URL [BODY] → imprime a resposta (headers + corpo)
 http_req() {
@@ -80,6 +92,11 @@ start() {
         echo "Configure primeiro: $0 install URL DEVICE_ID KEY [INTERVAL]"
         exit 1
     fi
+    # Já rodando? Não duplica (kill via adb shell falha em processo root/Magisk)
+    if alive; then
+        echo "heartbeat: já ativo (PID $(cat "$PID_FILE"))"
+        return 0
+    fi
     stop
     # Dispara em nova sessão (setsid) para sobreviver ao fechamento do adb shell.
     # Re-invoca o próprio script com `_loop` (a função vive dentro do script).
@@ -103,7 +120,7 @@ stop() {
 }
 
 status() {
-    if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
+    if alive; then
         . "$CONFIG" 2>/dev/null
         echo "heartbeat: ATIVO para ${DEVICE_ID:-desconhecido} (PID $(cat "$PID_FILE"))"
     else

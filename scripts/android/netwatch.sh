@@ -18,6 +18,18 @@ if [ -f "$CONFIG" ]; then
 fi
 [ -z "$PANEL_IP" ] && PANEL_IP="192.168.254.219"
 
+# Verifica se o PID do pidfile está vivo via `ps` + `grep -w` (cross-UID: o
+# processo pode rodar como root via Magisk e o adb shell ser uid 2000 — kill -0
+# daria EPERM e hidepid=2 esconderia o processo). toybox awk trata exit de forma
+# não-padrão; grep -w é confiável. Definida ANTES de start()/status().
+alive() {
+    [ -f "$PID_FILE" ] || return 1
+    local pid
+    pid=$(cat "$PID_FILE" 2>/dev/null)
+    [ -n "$pid" ] || return 1
+    ps -A 2>/dev/null | grep -w "$pid" >/dev/null 2>&1
+}
+
 check_net() {
     # TCP na porta do painel (mais confiavel que ping - Windows pode bloquear ICMP)
     if command -v nc >/dev/null 2>&1; then
@@ -61,6 +73,11 @@ _loop() {
 }
 
 start() {
+    # Já rodando? Não duplica (kill via adb shell falha em processo root/Magisk)
+    if alive; then
+        echo "netwatch: já ativo (PID $(cat "$PID_FILE"))"
+        return 0
+    fi
     stop
     if command -v setsid >/dev/null 2>&1; then
         setsid sh "$0" _loop >> "$LOG" 2>&1 < /dev/null &
@@ -82,7 +99,7 @@ stop() {
 }
 
 status() {
-    if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
+    if alive; then
         echo "netwatch: ATIVO (PID $(cat "$PID_FILE"))"
     else
         echo "netwatch: PARADO"
