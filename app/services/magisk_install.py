@@ -137,7 +137,14 @@ class MagiskInstaller:
                 if flash_ok:
                     steps.append("flash_done")
                 else:
-                    errors.append("flash não confirmou em {FLASH_TIMEOUT_S}s")
+                    # Pode ter concluído mesmo sem dump legível (uiautomator
+                    # falha em algumas ROMs após flash). Confere o daemon.
+                    out = await self._shell(ip, port, "magisk -v", timeout=10)
+                    if "MAGISK" in out.upper():
+                        flash_ok = True
+                        steps.append("flash_done_implicit")
+                    else:
+                        errors.append(f"flash não confirmou em {FLASH_TIMEOUT_S}s (magisk -v: {out.strip() or '(vazio)'})")
 
         # ── 4. Reboot (necessário para ativar o Magisk) ─────────────
         if reboot and not errors:
