@@ -339,12 +339,16 @@ const DEVICE_PAGE = (() => {
                 const form = new FormData();
                 form.append('file', f);
                 const res = await fetch(`/api/devices/${deviceId}/install-apk`, { method: 'POST', body: form });
-                const data = await res.json();
-                if (data.success) {
+                let data = {};
+                try { data = await res.json(); } catch (e) { /* corpo não-JSON */ }
+                if (!res.ok) {
+                    // Erro HTTP (ex.: push falhou, device offline) — mostra o detail real
+                    UI.createToast(data.detail || `Falha na instalação (HTTP ${res.status})`, 'error');
+                } else if (data.success) {
                     UI.createToast(`${f.name} instalado`, 'success');
                     await loadApps();
                 } else {
-                    UI.createToast(`${data.error || 'Falha na instalação'}`, 'error');
+                    UI.createToast(`${data.error || data.output || 'Falha na instalação'}`, 'error');
                 }
             } catch (e) {
                 UI.createToast(`${e.message}`, 'error');

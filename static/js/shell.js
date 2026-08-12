@@ -264,12 +264,15 @@ const SHELL_PAGE = (() => {
                 form.append('file', f);
                 try {
                     const resp = await fetch(`/api/devices/${dev.value}/install-apk`, { method: 'POST', body: form });
-                    const data = await resp.json();
-                    if (data.success) {
+                    let data = {};
+                    try { data = await resp.json(); } catch (e) { /* corpo não-JSON */ }
+                    if (!resp.ok) {
+                        out.innerHTML += `<div class="shell-result"><span class="shell-line term-err">${esc(data.detail || `Falha na instalação (HTTP ${resp.status})`)}</span></div>`;
+                    } else if (data.success) {
                         out.innerHTML += `<div class="shell-result"><span class="shell-line term-ok">${esc(f.name)} instalado com sucesso</span></div>`;
                         showInstallApk(); // recarrega lista
                     } else {
-                        out.innerHTML += `<div class="shell-result"><span class="shell-line term-err">${esc(data.error || 'Falha na instalação')}</span></div>`;
+                        out.innerHTML += `<div class="shell-result"><span class="shell-line term-err">${esc(data.error || data.output || 'Falha na instalação')}</span></div>`;
                     }
                 } catch (err) {
                     out.innerHTML += `<div class="shell-result"><span class="shell-line term-err">${esc(err.message)}</span></div>`;
