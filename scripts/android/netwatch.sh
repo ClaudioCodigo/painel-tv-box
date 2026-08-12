@@ -1,14 +1,15 @@
 #!/system/bin/sh
 # netwatch.sh - Auto-recupera a rede do TV box quando cai (loop independente do painel).
 # Usage: netwatch.sh {start|stop|status}
-# Comportamento: pinga o IP do painel (lido do heartbeat.conf). Se falhar:
+# Comportamento: testa TCP na porta 8080 do painel (lido do heartbeat.conf).
 #   2 falhas  -> reinicia wifi
 #   4 falhas  -> reinicia eth
-#   6+ falhas -> reboot do box (cooldown de 30 min entre reboots)
+#   6+ falhas -> reboot do box (cooldown persistente de 30 min entre reboots)
 
 CONFIG="/data/local/tmp/panel/heartbeat.conf"
 PID_FILE="/data/local/tmp/panel/netwatch.pid"
 LOG="/data/local/tmp/panel/netwatch.log"
+LAST_REBOOT_FILE="/data/local/tmp/panel/netwatch.last_reboot"
 CHECK_EVERY=30
 REBOOT_COOLDOWN=1800
 
@@ -18,17 +19,11 @@ if [ -f "$CONFIG" ]; then
 fi
 [ -z "$PANEL_IP" ] && PANEL_IP="192.168.254.219"
 
-# Verifica se o PID do pidfile está vivo via `ps` + `grep -w` (cross-UID: o
-# processo pode rodar como root via Magisk e o adb shell ser uid 2000 — kill -0
-# daria EPERM e hidepid=2 esconderia o processo). toybox awk trata exit de forma
-# não-padrão; grep -w é confiável. Definida ANTES de start()/status().
-alive() {
-    [ -f "$PID_FILE" ] || return 1
-    local pid
-    pid=$(cat "$PID_FILE" 2>/dev/null)
-    [ -n "$pid" ] || return 1
-    ps -A 2>/dev/null | grep -w "$pid" >/dev/null 2>&1
-}
+# su preferido (Magisk /sbin/su ignora SuperSU conflitante)
+SU_PREFIX="/sbin/su -c"
+if [ ! -x /sbin/su ]; then
+    SU_PREFIX="su -c"
+fi
 
 check_net() {
     # TCP na porta do painel (mais confiavel que ping - Windows pode bloquear ICMP)
@@ -40,8 +35,27 @@ check_net() {
     return 1
 }
 
+_last_reboot() {
+    [ -f "$LAST_REBOOT_FILE" ] && cat "$LAST_REBOOT_FILE" 2>/dev/null || echo 0
+}
+
+_set_last_reboot() {
+    echo "$(date +%s)" > "$LAST_REBOOT_FILE" 2>/dev/null
+}
+
+_do_reboot() {
+    # reboot com root correto (Magisk /sbin/su)
+    if [ -x /sbin/su ]; then
+        /sbin/su -c reboot >/dev/null 2>&1
+    else
+        su -c reboot >/dev/null 2>&1
+    fi
+    # fallback: reboot direto (se rodando como root)
+    reboot >/dev/null 2>&1
+}
+
 _loop() {
-    local fails=0 last_reboot=0
+    local fails=0
     while true; do
         if check_net; then
             if [ "$fails" -gt 0 ]; then
@@ -59,17 +73,28 @@ _loop() {
                 sh /data/local/tmp/panel/restart_eth.sh >/dev/null 2>&1
             elif [ "$fails" -ge 6 ]; then
                 now=$(date +%s)
+                last_reboot=$(_last_reboot)
                 if [ $((now - last_reboot)) -ge "$REBOOT_COOLDOWN" ]; then
                     echo "$(date +%s) REBOOT (rede indisponivel)" >> "$LOG"
-                    last_reboot=$now
+                    _set_last_reboot
                     sleep 2
-                    reboot >/dev/null 2>&1 || su -c reboot >/dev/null 2>&1
+                    _do_reboot
                     exit 0
+                else
+                    echo "$(date +%s) REBOOT_SKIP (cooldown, ultimo=$last_reboot)" >> "$LOG"
                 fi
             fi
         fi
         sleep "$CHECK_EVERY"
     done
+}
+
+alive() {
+    [ -f "$PID_FILE" ] || return 1
+    local pid
+    pid=$(cat "$PID_FILE" 2>/dev/null)
+    [ -n "$pid" ] || return 1
+    ps -A 2>/dev/null | grep -w "$pid" >/dev/null 2>&1
 }
 
 start() {
