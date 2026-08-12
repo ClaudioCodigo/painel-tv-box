@@ -69,6 +69,12 @@ None yet.
 - [Phase 1]: Caminhos com espaço no NSSM — `C:\PanelTVBox` sem espaços + `AppParameters` (PITFALLS #1)
 - [Phase 1]: `AppEnvironment` substituiria o ambiente do sistema — usar `AppEnvironmentExtra` (PITFALLS #3)
 
+## Quick Tasks Completed
+
+| Date | Task | Commit | Status |
+|------|------|--------|--------|
+| 2026-08-12 | Mitigar rede que não sobe no boot em TV boxes Allwinner (netwatch/restart_eth) | `a4f5a05` | complete |
+
 ## Deferred Items
 
 Items acknowledged and carried forward from previous milestone close:
