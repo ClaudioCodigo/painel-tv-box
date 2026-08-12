@@ -2,16 +2,19 @@
 # netwatch.sh - Auto-recupera a rede do TV box quando cai (loop independente do painel).
 # Usage: netwatch.sh {start|stop|status}
 # Comportamento: testa TCP na porta 8080 do painel (lido do heartbeat.conf).
-#   2 falhas  -> reinicia wifi
-#   4 falhas  -> reinicia eth
-#   6+ falhas -> reboot do box (cooldown persistente de 30 min entre reboots)
+#   2 falhas          -> reinicia wifi (apenas se wlan0 existir com carrier)
+#   4 falhas          -> reinicia eth (toggle + rebind do driver — link fantasma)
+#   6+ falhas         -> reboot do box (último recurso), limitado por
+#                        COOLDOWN_CHECKS (contador PERSISTENTE, imune ao relógio:
+#                        o RTC deriva quando sem NTP e quebrava o cooldown por data)
+#   a cada 10 falhas  -> re-tenta restart_eth durante o cooldown
 
 CONFIG="/data/local/tmp/panel/heartbeat.conf"
 PID_FILE="/data/local/tmp/panel/netwatch.pid"
 LOG="/data/local/tmp/panel/netwatch.log"
-LAST_REBOOT_FILE="/data/local/tmp/panel/netwatch.last_reboot"
+CHECKS_FILE="/data/local/tmp/panel/netwatch.reboot_checks"
 CHECK_EVERY=30
-REBOOT_COOLDOWN=1800
+COOLDOWN_CHECKS=60   # 60 checagens x 30s = 30 min entre reboots (persistente)
 
 PANEL_IP=""
 if [ -f "$CONFIG" ]; then
@@ -35,22 +38,34 @@ check_net() {
     return 1
 }
 
-_last_reboot() {
-    [ -f "$LAST_REBOOT_FILE" ] && cat "$LAST_REBOOT_FILE" 2>/dev/null || echo 0
+# wlan0 em uso? (box só-Ethernet pula o restart_wifi — inútil e atrasa a cascata)
+_wifi_up() {
+    [ -e /sys/class/net/wlan0 ] || return 1
+    [ "$(cat /sys/class/net/wlan0/carrier 2>/dev/null)" = "1" ]
 }
 
-_set_last_reboot() {
-    echo "$(date +%s)" > "$LAST_REBOOT_FILE" 2>/dev/null
+# Cooldown por contador persistente: quantas checagens faltam até poder rebootar.
+# Imune ao RTC do box (que deriva sem NTP e quebrava `now - last_reboot`).
+_checks_left() {
+    [ -f "$CHECKS_FILE" ] && cat "$CHECKS_FILE" 2>/dev/null || echo 0
+}
+
+_set_checks() {
+    echo "$1" > "$CHECKS_FILE" 2>/dev/null
 }
 
 _do_reboot() {
-    # reboot com root correto (Magisk /sbin/su)
+    # Reboot de verdade: `su -c reboot` falha silenciosamente em alguns
+    # firmwares/Magisk; `setprop sys.powerctl reboot` é o mecanismo que o
+    # Android respeita. Fallbacks em sequência.
     if [ -x /sbin/su ]; then
-        /sbin/su -c reboot >/dev/null 2>&1
+        /sbin/su -c 'setprop sys.powerctl reboot' >/dev/null 2>&1 || \
+            /sbin/su -c reboot >/dev/null 2>&1
     else
-        su -c reboot >/dev/null 2>&1
+        su -c 'setprop sys.powerctl reboot' >/dev/null 2>&1 || \
+            su -c reboot >/dev/null 2>&1
     fi
-    # fallback: reboot direto (se rodando como root)
+    # fallback final: reboot direto (se já rodando como root)
     reboot >/dev/null 2>&1
 }
 
@@ -62,26 +77,28 @@ _loop() {
                 echo "$(date +%s) NET_OK apos $fails falhas" >> "$LOG"
             fi
             fails=0
+            _set_checks "$COOLDOWN_CHECKS"
         else
             fails=$((fails + 1))
             echo "$(date +%s) NET_DOWN fail=$fails target=$PANEL_IP" >> "$LOG"
-            if [ "$fails" -eq 2 ]; then
+            if [ "$fails" -eq 2 ] && _wifi_up; then
                 echo "$(date +%s) restart_wifi" >> "$LOG"
                 sh /data/local/tmp/panel/restart_wifi.sh >/dev/null 2>&1
-            elif [ "$fails" -eq 4 ]; then
-                echo "$(date +%s) restart_eth" >> "$LOG"
+            elif [ "$fails" -eq 4 ] || { [ "$fails" -ge 10 ] && [ $((fails % 10)) -eq 0 ]; }; then
+                echo "$(date +%s) restart_eth (fail=$fails)" >> "$LOG"
                 sh /data/local/tmp/panel/restart_eth.sh >/dev/null 2>&1
             elif [ "$fails" -ge 6 ]; then
-                now=$(date +%s)
-                last_reboot=$(_last_reboot)
-                if [ $((now - last_reboot)) -ge "$REBOOT_COOLDOWN" ]; then
-                    echo "$(date +%s) REBOOT (rede indisponivel)" >> "$LOG"
-                    _set_last_reboot
+                checks=$(_checks_left)
+                if [ "$checks" -le 0 ]; then
+                    echo "$(date +%s) REBOOT (rede indisponivel apos $fails falhas)" >> "$LOG"
+                    # grava ANTES do reboot: sobrevive ao boot e evita tempestade
+                    _set_checks "$COOLDOWN_CHECKS"
                     sleep 2
                     _do_reboot
                     exit 0
                 else
-                    echo "$(date +%s) REBOOT_SKIP (cooldown, ultimo=$last_reboot)" >> "$LOG"
+                    _set_checks $((checks - 1))
+                    echo "$(date +%s) REBOOT_SKIP (cooldown: $checks checagens restantes)" >> "$LOG"
                 fi
             fi
         fi
