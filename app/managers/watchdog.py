@@ -217,7 +217,13 @@ class WatchdogManager:
                 # Guardião: ressuscita heartbeat/netwatch se parados (com cooldown)
                 await self._guardian_check(device)
 
-                await asyncio.sleep(interval)
+                # Device offline: não adianta re-verificar a cada 10s (o health
+                # check já tem cooldown ADB, mas o sleep maior economiza CPU e
+                # reduz ruído). Quando volta a responder, o próximo check pega.
+                if device.state.status == "offline":
+                    await asyncio.sleep(max(interval, 30))
+                else:
+                    await asyncio.sleep(interval)
 
             except asyncio.CancelledError:
                 break

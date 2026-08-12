@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+import time
 from datetime import datetime
 from typing import Optional
 
@@ -10,6 +11,12 @@ from app.models.device import DeviceConfig
 from app.managers.scrcpy import ScrcpyManager
 
 logger = logging.getLogger("health")
+
+# Anti-spam ADB: quando o ping falha (device fora da rede), não martela
+# `adb connect`+shell a cada ciclo do watchdog — tenta ADB no máximo 1× a
+# cada intervalo. O `adb connect` para IP inalcançável demora até o timeout
+# e congestiona o servidor ADB 5038 compartilhado com os outros boxes.
+ADB_TRY_COOLDOWN = 60  # s
 
 
 class HealthManager:
@@ -22,6 +29,8 @@ class HealthManager:
         self.heartbeat_timeout = heartbeat_timeout  # s; heartbeat fresco = device na rede
         # Cache de último status bem-sucedido por device
         self._last_good: dict[str, datetime] = {}
+        # Anti-spam ADB: último momento em que tentamos ADB para um device
+        self._last_adb_try: dict[str, float] = {}
 
     async def check(self, device: DeviceConfig) -> dict:
         """Executa verificação completa e retorna resultado com status."""
@@ -81,19 +90,31 @@ class HealthManager:
             results["adb_skipped"] = "ping"
             logger.debug("Health check pulou ADB shell para %s — ping OK (sem ADB spam)", device.id)
         else:
-            for attempt in range(2):
-                if self.adb:
-                    try:
-                        output, code = await self.adb.shell(device.ip, "echo ok", port=device.adb_port, timeout=5)
-                        if code == 0 and "ok" in output.lower():
-                            adb_ok = True
-                            break
-                    except Exception:
-                        pass
-                if not adb_ok and attempt == 0:
-                    await asyncio.sleep(2)  # espera 2s antes de retry
-            results["adb"] = adb_ok
-            results["adb_checked"] = True
+            # Ping falhou → device provavelmente fora da rede. Anti-spam:
+            # só tenta ADB de tempos em tempos (connect para IP morto é lento
+            # e congestiona o servidor ADB 5038 compartilhado).
+            now_mono = time.monotonic()
+            last_try = self._last_adb_try.get(device.id, 0)
+            if now_mono - last_try < ADB_TRY_COOLDOWN:
+                results["adb"] = False
+                results["adb_checked"] = False
+                results["adb_skipped"] = "cooldown"
+                logger.debug("Health check pulou ADB shell para %s — cooldown anti-spam", device.id)
+            else:
+                self._last_adb_try[device.id] = now_mono
+                for attempt in range(2):
+                    if self.adb:
+                        try:
+                            output, code = await self.adb.shell(device.ip, "echo ok", port=device.adb_port, timeout=5)
+                            if code == 0 and "ok" in output.lower():
+                                adb_ok = True
+                                break
+                        except Exception:
+                            pass
+                    if not adb_ok and attempt == 0:
+                        await asyncio.sleep(2)  # espera 2s antes de retry
+                results["adb"] = adb_ok
+                results["adb_checked"] = True
 
         # 3. Determina status
         if not adb_ok:

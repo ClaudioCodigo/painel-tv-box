@@ -15,6 +15,16 @@ def _get_config():
 
     return app.main.config
 
+
+def _get_watchdog():
+    """Acessa o WatchdogManager ativo (None se não iniciado)."""
+    try:
+        import app.main
+
+        return getattr(app.main.app.state, "watchdog", None)
+    except Exception:
+        return None
+
 def _sync_mediamtx(config):
     """Regenera o config do MediaMTX e reinicia o servico (aplica paths novos/removidos)."""
     try:
@@ -69,6 +79,11 @@ async def create_device(data: dict):
     except ValueError as e:
         raise HTTPException(400, str(e))
 
+    # Watchdog passa a monitorar o novo device (status/stream em tempo real)
+    watchdog = _get_watchdog()
+    if watchdog:
+        watchdog.add_device(device)
+
     # Aplica o rtsp_path do novo device no MediaMTX
     if device.rtsp_path:
         _sync_mediamtx(config)
@@ -104,6 +119,14 @@ async def update_device(device_id: str, data: dict):
 
     if updated is None:
         raise HTTPException(500, "Falha ao atualizar dispositivo")
+
+    # Se mudou IP, o watchdog precisa re-monitorar (o loop lê o config fresco
+    # a cada iteração, mas garante que a task existe)
+    watchdog = _get_watchdog()
+    if watchdog and ("ip" in data or "id" in data):
+        watchdog.remove_device(device_id)
+        watchdog.add_device(updated)
+
     # Re-provisiona scripts/conf se mudou IP ou ID do device
     if "ip" in data or "id" in data:
         import asyncio
@@ -136,6 +159,12 @@ async def delete_device(device_id: str):
     except ValueError as e:
         raise HTTPException(400, str(e))
     _sync_mediamtx(config)
+
+    # Watchdog para de monitorar o device removido
+    watchdog = _get_watchdog()
+    if watchdog:
+        watchdog.remove_device(device_id)
+
     return {"deleted": device_id}
 
 
