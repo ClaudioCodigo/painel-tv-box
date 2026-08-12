@@ -54,11 +54,24 @@ vezes sobem com "link fantasma" (eth UP + carrier=1 + IP, sem tráfego real).
 
 ## Observações / pendências
 
-- **Bug de boot não reproduzido nesta sessão** (requer reiniciar o box até o
-  link fantasma aparecer — ação do usuário). Quando replicar: o netwatch novo
-  deve recuperar em ~2-4 min (fail=4 → restart_eth com rebind) SEM reboot; se
-  persistir, cooldown de 30 min + eth retry a cada 5 min + reboot funcional.
-  Monitorar `netwatch.log` e `restart_eth.log` no box.
+- **Bug de boot REPLICADO (18:23):** o box bootou com link fantasma e o netwatch
+  NÃO recuperou — causa encontrada: o `adb push` manual das 13:44 removeu o bit
+  `+x` do netwatch.sh e o boot hook checava `[ -x ]` → netwatch nunca iniciou no
+  boot (boot_hook.log provou: só heartbeat subiu). Usuário replugou o cabo.
+  **Corrigido:** boot hook agora usa `[ -f ]` + `sh` (não depende do +x) — commit
+  `f7099d2`. O provision normal faz chmod +x; o bug era só do push manual.
+- **Evidência do dmesg (boot 18:23):** NENHUM "Link is Up" do sunxi-gmac no boot
+  (só o do replug às 308s) — o PHY não negocia no boot quando o bug ocorre.
+- **RTC em UTC preso em 2021-06-26 ~02:00** = "23:00" no fuso -03 — sintoma de
+  boot sem NTP, não causa. Logado nos diags para correlação.
+- **Sem default route mesmo com rede OK** — stack de rede do Android incompleto
+  (provável elo com o bug); o box alcança só a LAN.
+- **Logging novo (diag.sh):** snapshot completo (relógio+RTC, eth, rotas, ARP,
+  stats, dmesg, logcat) antes de restart_eth/reboot + captura de boot via boot
+  hook; NET_DOWN agora loga clock+carrier. Rotação: últimos 5.
+- **Próxima ocorrência:** boot hook inicia netwatch sempre (resiliente) →
+  fail=4 → snapshot + restart_eth (rebind ~11s, validado às 13:57) → deve
+  recuperar SEM intervenção; diag files em /data/local/tmp/panel/diag/.
 - O box .84 não tem default route (só rota /24) mesmo com rede OK — sintoma do
   stack de rede incompleto do firmware; não bloqueia o acesso ao painel (mesma
   sub-rede).
