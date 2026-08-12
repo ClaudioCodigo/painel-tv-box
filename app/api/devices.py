@@ -1,6 +1,7 @@
 """API routes para dispositivos (TV Boxes)."""
 
 import asyncio
+from datetime import datetime
 
 from fastapi import APIRouter, HTTPException
 
@@ -495,6 +496,62 @@ async def device_screenshot_get(device_id: str):
         return FileResponse(local_path, media_type="image/png")
 
     raise HTTPException(404, "Nenhum screenshot encontrado. Capture um primeiro.")
+
+
+# ── Magisk Install ──────────────────────────────
+
+
+@router.post("/{device_id}/magisk/install")
+async def device_magisk_install(device_id: str, reboot: bool = True):
+    """Instala o Magisk no device de forma automatizada (roda em background).
+
+    Navega a UI do app via ADB (uiautomator + input tap). A única interação
+    necessária no box é aceitar o prompt de root do Magisk após o reboot.
+    Retorna 202 com o job id; progresso via WebSocket (type=magisk).
+    """
+    config = _get_config()
+    device = config.get_device(device_id)
+    if not device:
+        raise HTTPException(404, "Dispositivo não encontrado")
+
+    import asyncio
+
+    from app.managers.adb import ADBManager
+    from app.services.magisk_install import MagiskInstaller
+
+    adb = ADBManager()
+    hub = getattr(_get_app(), "state", None) and getattr(_get_app().state, "ws_hub", None)
+
+    async def send_event(ev: dict):
+        if hub:
+            try:
+                await hub.broadcast(ev)
+            except Exception:
+                pass
+
+    installer = MagiskInstaller(adb_manager=adb, send_event=send_event)
+
+    job_id = f"magisk-{device_id}-{uuid.uuid4().hex[:8]}"
+
+    async def _run():
+        result = await installer.install(device, reboot=reboot)
+        await send_event({
+            "type": "magisk",
+            "device_id": device_id,
+            "step": "done",
+            "message": "Concluído" if result.get("success") else "Falhou",
+            "result": result,
+            "timestamp": datetime.now().isoformat(),
+        })
+
+    asyncio.create_task(_run())
+    return {"accepted": True, "job": job_id, "device_id": device_id, "reboot": reboot}
+
+
+def _get_app():
+    import app.main
+
+    return app.main.app
 
 
 # ── APK Install ─────────────────────────────────
