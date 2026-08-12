@@ -118,14 +118,23 @@ class ProvisionService:
         if getattr(device, "root", False):
             try:
                 # Detecta Magisk e instala em /data/adb/service.d/
+                # Usa /sbin/su (do Magisk) quando existir — boxes com SuperSU
+                # antigo (daemonsu em /system/xbin) têm um su conflitante que
+                # nega as solicitações. O /sbin/su do Magisk sempre responde.
                 out_m, code_m = await self.adb.shell(
-                    ip, "su -c 'magisk -v'", port=port, timeout=15
+                    ip, "if [ -x /sbin/su ]; then /sbin/su -c 'magisk -v'; else su -c 'magisk -v'; fi",
+                    port=port, timeout=15,
                 )
                 if code_m == 0 and "MAGISK" in out_m.upper():
                     magisk_cmd = (
-                        f"su -c 'cp {REMOTE_DIR}/boot_hook.sh "
+                        "if [ -x /sbin/su ]; then /sbin/su -c "
+                        f"'cp {REMOTE_DIR}/boot_hook.sh "
                         f"/data/adb/service.d/99panel.sh && "
-                        f"chmod 755 /data/adb/service.d/99panel.sh'"
+                        f"chmod 755 /data/adb/service.d/99panel.sh'; "
+                        "else su -c "
+                        f"'cp {REMOTE_DIR}/boot_hook.sh "
+                        f"/data/adb/service.d/99panel.sh && "
+                        f"chmod 755 /data/adb/service.d/99panel.sh'; fi"
                     )
                     output, code = await self.adb.shell(ip, magisk_cmd, port=port, timeout=15)
                     if code == 0 and "not found" not in output.lower():
@@ -136,12 +145,20 @@ class ProvisionService:
                     # Sem Magisk: tenta install-recovery.sh (não sobrescreve
                     # script real de OTA do firmware).
                     install_cmd = (
-                        f"su -c 'mount -o rw,remount /system && "
+                        "if [ -x /sbin/su ]; then /sbin/su -c "
+                        f"'mount -o rw,remount /system && "
                         f"if [ ! -f /system/bin/install-recovery.sh ] || "
                         f"grep -q PANEL_DIR /system/bin/install-recovery.sh 2>/dev/null; then "
                         f"cp {REMOTE_DIR}/boot_hook.sh /system/bin/install-recovery.sh && "
                         f"chmod 755 /system/bin/install-recovery.sh; fi && "
-                        f"mount -o ro,remount /system'"
+                        f"mount -o ro,remount /system'; "
+                        "else su -c "
+                        f"'mount -o rw,remount /system && "
+                        f"if [ ! -f /system/bin/install-recovery.sh ] || "
+                        f"grep -q PANEL_DIR /system/bin/install-recovery.sh 2>/dev/null; then "
+                        f"cp {REMOTE_DIR}/boot_hook.sh /system/bin/install-recovery.sh && "
+                        f"chmod 755 /system/bin/install-recovery.sh; fi && "
+                        f"mount -o ro,remount /system'; fi"
                     )
                     output, code = await self.adb.shell(ip, install_cmd, port=port, timeout=20)
                     if code == 0 and "not found" not in output.lower():
