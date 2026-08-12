@@ -80,12 +80,14 @@ _loop() {
             _set_checks "$COOLDOWN_CHECKS"
         else
             fails=$((fails + 1))
-            echo "$(date +%s) NET_DOWN fail=$fails target=$PANEL_IP" >> "$LOG"
+            echo "$(date +%s) NET_DOWN fail=$fails target=$PANEL_IP clock=$(date '+%d/%m %H:%M') carrier=$(cat /sys/class/net/eth0/carrier 2>/dev/null)" >> "$LOG"
             if [ "$fails" -eq 2 ] && _wifi_up; then
                 echo "$(date +%s) restart_wifi" >> "$LOG"
                 sh /data/local/tmp/panel/restart_wifi.sh >/dev/null 2>&1
             elif [ "$fails" -eq 4 ] || { [ "$fails" -ge 10 ] && [ $((fails % 10)) -eq 0 ]; }; then
                 echo "$(date +%s) restart_eth (fail=$fails)" >> "$LOG"
+                # snapshot de diagnostico ANTES da recuperacao (ver diag.sh)
+                sh /data/local/tmp/panel/diag.sh snapshot "fail=$fails" >/dev/null 2>&1
                 sh /data/local/tmp/panel/restart_eth.sh >/dev/null 2>&1
             elif [ "$fails" -ge 6 ]; then
                 checks=$(_checks_left)
@@ -93,6 +95,7 @@ _loop() {
                     echo "$(date +%s) REBOOT (rede indisponivel apos $fails falhas)" >> "$LOG"
                     # grava ANTES do reboot: sobrevive ao boot e evita tempestade
                     _set_checks "$COOLDOWN_CHECKS"
+                    sh /data/local/tmp/panel/diag.sh snapshot "pre-reboot" >/dev/null 2>&1
                     sleep 2
                     _do_reboot
                     exit 0
