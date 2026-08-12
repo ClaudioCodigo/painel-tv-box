@@ -1,8 +1,12 @@
 """MagiskInstallerService — instala o Magisk em um TV Box de forma automatizada.
 
-Navega a UI do app Magisk via `uiautomator dump` + `input tap` (ADB), sem
-interação humana além de aceitar o prompt de autorização do Magisk no box
-(primeira vez que o su é solicitado após o reboot).
+Navega a UI do app Magisk via `uiautomator dump` + `input tap` (ADB).
+
+⚠️ INTERVENÇÃO MANUAL OBRIGATÓRIA no box (não automatizável):
+  1. O prompt de autorização de root do Magisk ("conceder acesso ao shell")
+     que aparece na tela do box na 1ª vez que o su é solicitado após o reboot.
+  2. Qualquer diálogo/confirmação extra do app na tela.
+  O usuário precisa acompanhar a tela do box e aceitar.
 
 Fluxo:
   1. adb install do APK (se não instalado na versão esperada)
@@ -10,7 +14,7 @@ Fluxo:
   3. navega: permite permissão de armazenamento → "Instalar" →
      "Instalação direta (recomendada)" → aguarda flash
   4. reboot do box
-  5. aguarda boot + verifica `magisk -v`
+  5. aguarda boot + verifica `magisk -v` (após usuário aceitar o root)
 
 Uso pelo painel: POST /api/devices/{id}/magisk/install (roda em background).
 Uso standalone: scripts/magisk_install.py <ip> — mesma lógica.
@@ -161,6 +165,15 @@ class MagiskInstaller:
         magisk_ver = ""
         if not errors:
             try:
+                # IMPORTANTE: após o reboot, o Magisk pede autorização de root
+                # na TELA DO BOX (primeira vez que o su é solicitado). Sem isso,
+                # o magisk -v roda mas o su não responde. Intervenção manual
+                # necessária — o serviço aguarda o usuário aceitar.
+                await self._event(
+                    device.id,
+                    "wait_root",
+                    "Aceite o prompt de root do Magisk NA TELA DO BOX para concluir",
+                )
                 out = await self._shell(ip, port, "magisk -v", timeout=15)
                 magisk_ver = out.strip()
                 if "MAGISK" in magisk_ver.upper():
