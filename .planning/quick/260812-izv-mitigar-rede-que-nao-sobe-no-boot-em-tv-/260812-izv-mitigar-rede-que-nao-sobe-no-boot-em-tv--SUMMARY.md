@@ -47,12 +47,18 @@ vezes sobem com "link fantasma" (eth UP + carrier=1 + IP, sem tráfego real).
 - Servidor `.219`: `git pull` em `C:\PanelTVBox` → `a4f5a05` (provision
   distribuirá aos demais boxes).
 - Commit `a4f5a05` publicado no GitHub (origin main).
+- **Teste de mecanismo no .84 (13:57):** `restart_eth.sh` manual → log provou
+  o rebind executando (`rebind sunxi-gmac/gmac1`) e conectividade real de volta
+  em ~11s (`OK, rede voltou apos toggle+rebind`, nc RC=0), VLC continuou ativo.
+  O rebind — a peça que nunca rodava — funciona neste hardware.
 
 ## Observações / pendências
 
-- **Teste controlado não realizado** (box estava transmitindo): validar a
-  recuperação derrubando a eth do box e observando o netwatch recuperar — fazer
-  na próxima queda natural ou com aprovação do usuário.
+- **Bug de boot não reproduzido nesta sessão** (requer reiniciar o box até o
+  link fantasma aparecer — ação do usuário). Quando replicar: o netwatch novo
+  deve recuperar em ~2-4 min (fail=4 → restart_eth com rebind) SEM reboot; se
+  persistir, cooldown de 30 min + eth retry a cada 5 min + reboot funcional.
+  Monitorar `netwatch.log` e `restart_eth.log` no box.
 - O box .84 não tem default route (só rota /24) mesmo com rede OK — sintoma do
   stack de rede incompleto do firmware; não bloqueia o acesso ao painel (mesma
   sub-rede).
