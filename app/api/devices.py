@@ -50,6 +50,27 @@ async def list_devices():
     return [d.model_dump() for d in config.devices]
 
 
+@router.post("/provision-all")
+async def provision_all():
+    """(Re-)instala scripts Android em TODOS os dispositivos (replicar updates)."""
+    config = _get_config()
+    from app.managers.adb import ADBManager
+    from app.services.provision import ProvisionService
+
+    provision = ProvisionService(adb_manager=ADBManager())
+    results = {}
+    ok = 0
+    for dev in config.devices:
+        try:
+            r = await provision.provision(dev)
+        except Exception as e:  # noqa: BLE001
+            r = {"success": False, "error": str(e)}
+        results[dev.id] = r
+        if r.get("success"):
+            ok += 1
+    return {"total": len(config.devices), "ok": ok, "results": results}
+
+
 @router.get("/{device_id}")
 async def get_device(device_id: str):
     config = _get_config()

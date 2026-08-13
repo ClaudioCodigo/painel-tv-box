@@ -31,6 +31,7 @@ const DEVICES = (() => {
                 <div class="section-title">
                     ${UI.icon('tv')} Gerenciar Dispositivos
                     <button class="btn btn-primary btn-sm" onclick="DEVICES.showAddDialog()">${UI.icon('plus')} Novo TV Box</button>
+                    <button class="btn btn-secondary btn-sm" id="provision-all-btn" onclick="DEVICES.provisionAll()">${UI.icon('upload')} Replicar scripts</button>
                 </div>
                 <div class="dcard-toolbar" id="devices-toolbar">
                     <div class="dcard-toolbar-counters" id="devices-counters"></div>
@@ -185,6 +186,36 @@ const DEVICES = (() => {
         sel.innerHTML = opts.join('');
     }
 
+    async function provisionAll() {
+        const btn = document.getElementById('provision-all-btn');
+        if (!btn) return;
+        const original = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = `${UI.icon('refresh')} Replicando...`;
+        UI.createToast('Replicando scripts para todos os TV Boxes...', 'info');
+        try {
+            const res = await API.post('/devices/provision-all');
+            const total = res?.total ?? 0;
+            const ok = res?.ok ?? 0;
+            const failed = Object.entries(res?.results || {})
+                .filter(([, r]) => !r?.success)
+                .map(([id]) => id);
+            if (ok === total && total > 0) {
+                UI.createToast(`Scripts replicados em ${ok} TV Boxe(s).`, 'success');
+            } else if (ok > 0) {
+                UI.createToast(`Replicado em ${ok}/${total} (falhou: ${failed.join(', ') || '—'})`, 'warning', 6000);
+            } else {
+                UI.createToast('Falha ao replicar scripts — verifique o log.', 'error', 6000);
+            }
+            loadDevices();
+        } catch (e) {
+            UI.createToast('Erro ao replicar scripts.', 'error');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = original;
+        }
+    }
+
     function showAddDialog() {
         UI.showModal(
             'Novo TV Box',
@@ -280,5 +311,5 @@ const DEVICES = (() => {
         }
     }
 
-    return { render, destroy, showAddDialog, renameDialog, groupDialog, remove };
+    return { render, destroy, showAddDialog, renameDialog, groupDialog, remove, provisionAll };
 })();
