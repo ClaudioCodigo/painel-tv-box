@@ -48,6 +48,12 @@ async def pop_pending(device_id: str) -> list[dict]:
     return pending
 
 
+async def pending(device_id: str) -> bool:
+    """True se ainda há comandos pendentes na fila do device (não executados)."""
+    async with _lock_for(device_id):
+        return bool(_QUEUE.get(device_id))
+
+
 async def ack(device_id: str, cmd_id: str, success: bool, output: str = "") -> bool:
     """Registra o resultado de um comando; retorna False se id desconhecido."""
     # Confirma que o id já foi enviado ao device (removido da fila)

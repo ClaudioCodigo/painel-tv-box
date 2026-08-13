@@ -141,6 +141,12 @@ class RecoveryService:
                 return {"success": False, "error": "player não encontrado em players.yml"}
             from app.services import command_queue as cq
 
+            # Evita enfileirar start_stream duplicado: o comando pendente será
+            # executado pelo device no próximo poll do heartbeat (~20s). Se
+            # enfileirar de novo, o am force-stop do novo comando mata o VLC
+            # que acabou de subir → loop de restart (observado 13/08).
+            if await cq.pending(device.id):
+                return {"success": True, "method": "heartbeat_queue", "already_queued": True}
             item = await cq.enqueue(device.id, "start_stream", cmd)
             return {"success": True, "method": "heartbeat_queue", "queued": item["id"]}
 
