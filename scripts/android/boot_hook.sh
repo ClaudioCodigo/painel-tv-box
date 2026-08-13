@@ -35,12 +35,15 @@ sleep 10
 #    sinalizá-lo (kill -0 → EPERM), reportando "PARADO" falso e duplicando.
 #    Usa [ -f ] + `sh` (não [ -x ]): adb push pode perder o bit +x e o script
 #    deve continuar subindo mesmo assim.
+#    CRÍTICO: `su 2000 -c` DROPA todos os grupos suplementares (sem `inet`
+#    3003 o Android bloqueia sockets → netwatch/heartbeat falham falsamente).
+#    Usar `-g 2000 -G 3003` para restaurar o grupo inet (Magisk su).
 [ -f "$PANEL_DIR/heartbeat.sh" ] && {
-    su 2000 -c "sh $PANEL_DIR/heartbeat.sh start" >> "$LOG" 2>&1
+    su 2000 -g 2000 -G 3003 -c "sh $PANEL_DIR/heartbeat.sh start" >> "$LOG" 2>&1
     log "heartbeat.sh start (boot hook)"
 }
 [ -f "$PANEL_DIR/netwatch.sh" ] && {
-    su 2000 -c "sh $PANEL_DIR/netwatch.sh start" >> "$LOG" 2>&1
+    su 2000 -g 2000 -G 3003 -c "sh $PANEL_DIR/netwatch.sh start" >> "$LOG" 2>&1
     log "netwatch.sh start (boot hook)"
 }
 
