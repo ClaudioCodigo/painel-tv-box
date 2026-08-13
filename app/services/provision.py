@@ -25,6 +25,7 @@ MANIFEST = [
     "update.sh",
     "netwatch.sh",
     "heartbeat.sh",  # batida HTTP device→servidor (docs/09)
+    "diag.sh",  # diagnóstico do link fantasma (snapshot + captura de boot)
     "boot_hook.sh",  # religa heartbeat/netwatch no boot (só instala com root)
 ]
 
