@@ -42,8 +42,13 @@ mkdir -p "$DIAG_DIR" 2>/dev/null
 
 # Rotação: mantém apenas os 5 arquivos mais recentes (ordena por NOME —
 # sequência crescente, não por mtime que quebra com o relógio resetado).
+# toybox head não aceita `-n -5`, então calcula o excesso e deleta os primeiros.
 _rotate() {
-    ls -1 "$DIAG_DIR" 2>/dev/null | sort | head -n -5 | while read -r f; do
+    local n excess
+    n=$(ls -1 "$DIAG_DIR" 2>/dev/null | wc -l)
+    [ "$n" -le 5 ] && return 0
+    excess=$((n - 5))
+    ls -1 "$DIAG_DIR" 2>/dev/null | sort | head -n "$excess" | while read -r f; do
         rm -f "$DIAG_DIR/$f" 2>/dev/null
     done
 }
