@@ -109,12 +109,15 @@ const SETTINGS = (() => {
                 API.get('/devices').catch(() => []),
                 API.get('/system/config').catch(() => null),
             ]);
-            const serverIp = (cfg && cfg.system && cfg.system.host && cfg.system.host.ip) || ''
+            const serverIp = (cfg && cfg.system && cfg.system.host && cfg.system.host.ip) || '';
             const ipInput = document.getElementById('server-ip');
             if (ipInput && serverIp) ipInput.value = serverIp;
 
             const uptime = fmtUptime(metrics.uptime_seconds || 0);
             const devCount = Array.isArray(devices) ? devices.length : 0;
+            // Exemplo de path de stream (usa o rtsp_path do 1º device, se houver)
+            const firstPath = (Array.isArray(devices) && devices[0] && devices[0].rtsp_path) || '';
+            const streamPath = firstPath ? `/${firstPath}` : '';
 
             el.innerHTML = `
                 <div class="info-row"><span class="info-key">Versão</span><span class="info-val">${UI.escapeHtml(health.version)}</span></div>
@@ -127,11 +130,13 @@ const SETTINGS = (() => {
                 <div class="info-row"><span class="info-key">Disco</span><span class="info-val">${metrics.disk_used_gb}/${metrics.disk_total_gb} GB (${metrics.disk_percent}%)</span></div>
                 <div class="info-row"><span class="info-key">IP do servidor</span><span class="info-val mono">${UI.escapeHtml(serverIp)}</span></div>
                 <div class="info-row"><span class="info-key">Painel</span><span class="info-val mono">http://${UI.escapeHtml(serverIp)}:8080</span></div>
-                <div class="info-row"><span class="info-key">RTSP</span><span class="info-val mono">rtsp://${UI.escapeHtml(serverIp)}:8554/TV-ADM-1</span></div>
-                <div class="info-row"><span class="info-key">RTMP</span><span class="info-val mono">rtmp://${UI.escapeHtml(serverIp)}:1935/TV-ADM-1</span></div>
+                <div class="info-row"><span class="info-key">RTSP</span><span class="info-val mono">rtsp://${UI.escapeHtml(serverIp)}:8554${streamPath}</span></div>
+                <div class="info-row"><span class="info-key">RTMP</span><span class="info-val mono">rtmp://${UI.escapeHtml(serverIp)}:1935${streamPath}</span></div>
             `;
+            el.classList.remove('loading');
         } catch (e) {
             el.innerHTML = `<span class="text-danger">Erro: ${UI.escapeHtml(e.message)}</span>`;
+            el.classList.remove('loading');
         }
     }
 
