@@ -19,6 +19,18 @@ PANEL_DIR="/data/local/tmp/panel"
 DIAG_DIR="$PANEL_DIR/diag"
 CONFIG="$PANEL_DIR/heartbeat.conf"
 LOG="$PANEL_DIR/diag.log"
+SEQ_FILE="$PANEL_DIR/diag.seq"
+
+# Sequência crescente para nomes de arquivo — imune ao relógio do box (que
+# RESETA para 2021/23:00 no boot sem NTP; `ls -1t` por mtime apagava o arquivo
+# recém-criado por ele parecer o mais antigo).
+_next_seq() {
+    local n=0
+    [ -f "$SEQ_FILE" ] && n=$(cat "$SEQ_FILE" 2>/dev/null)
+    n=$((n + 1))
+    echo "$n" > "$SEQ_FILE" 2>/dev/null
+    printf '%05d' "$n"
+}
 
 PANEL_IP=""
 if [ -f "$CONFIG" ]; then
@@ -28,9 +40,10 @@ fi
 
 mkdir -p "$DIAG_DIR" 2>/dev/null
 
-# Rotação: mantém apenas os 5 arquivos mais recentes do diretório
+# Rotação: mantém apenas os 5 arquivos mais recentes (ordena por NOME —
+# sequência crescente, não por mtime que quebra com o relógio resetado).
 _rotate() {
-    ls -1t "$DIAG_DIR" 2>/dev/null | tail -n +6 | while read -r f; do
+    ls -1 "$DIAG_DIR" 2>/dev/null | sort | head -n -5 | while read -r f; do
         rm -f "$DIAG_DIR/$f" 2>/dev/null
     done
 }
@@ -39,9 +52,9 @@ _rotate() {
 # detecta falha e antes/depois do restart_eth.
 snapshot() {
     local reason="${1:-manual}"
-    local ts
-    ts=$(date +%s 2>/dev/null)
-    local out="$DIAG_DIR/snap_${ts}_${reason}.txt"
+    local seq
+    seq=$(_next_seq)
+    local out="$DIAG_DIR/${seq}_snap_${reason}.txt"
     {
         echo "===== SNAPSHOT $reason ====="
         echo "DATA_SISTEMA: $(date 2>/dev/null)  (epoch=$ts)"
@@ -77,7 +90,9 @@ snapshot() {
 # Captura do boot: dmesg + logcat do framework (chamado pelo boot hook após o
 # boot completar — é quando o "link fantasma" aparece).
 boot() {
-    local out="$DIAG_DIR/boot_$(date +%s).txt"
+    local seq
+    seq=$(_next_seq)
+    local out="$DIAG_DIR/${seq}_boot.txt"
     {
         echo "===== BOOT DIAG ====="
         echo "DATA_SISTEMA: $(date 2>/dev/null)"
