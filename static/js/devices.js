@@ -30,8 +30,10 @@ const DEVICES = (() => {
             <div class="devices-page">
                 <div class="section-title">
                     ${UI.icon('tv')} Gerenciar Dispositivos
-                    <button class="btn btn-primary btn-sm" onclick="DEVICES.showAddDialog()">${UI.icon('plus')} Novo TV Box</button>
-                    <button class="btn btn-secondary btn-sm" id="provision-all-btn" onclick="DEVICES.provisionAll()">${UI.icon('upload')} Replicar scripts</button>
+                    <div class="section-title-actions">
+                        <button class="btn btn-primary btn-sm" onclick="DEVICES.showAddDialog()">${UI.icon('plus')} Novo TV Box</button>
+                        <button class="btn btn-secondary btn-sm" id="provision-all-btn" onclick="DEVICES.provisionAll()">${UI.icon('upload')} Replicar scripts</button>
+                    </div>
                 </div>
                 <div class="dcard-toolbar" id="devices-toolbar">
                     <div class="dcard-toolbar-counters" id="devices-counters"></div>
