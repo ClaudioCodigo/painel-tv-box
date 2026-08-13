@@ -71,6 +71,14 @@ vezes sobem com "link fantasma" (eth UP + carrier=1 + IP, sem tráfego real).
   com o boot hook corrigido, o netwatch agora roda de verdade e vai recuperar.
 - **Logging (diag.sh):** snapshots + captura de boot funcionando; a próxima
   ocorrência real ficará documentada em /data/local/tmp/panel/diag/.
+- **Boot validado (13/08 ~08:05):** reinício do .84 → boot hook subiu
+  heartbeat+netwatch via `su -g -G` e o netwatch PASSOU nas checagens
+  (`CHECKS=60`, zero NET_DOWN) — o caminho do boot corrigido funciona de ponta
+  a ponta. (VLC não sobe sozinho após reboot — o painel reinicia o stream.)
+- **diag.sh: rotação por sequência** (`diag.seq`) — `ls -1t` por mtime apagava o
+  arquivo recém-criado (o relógio do box reseta para 2021 no boot e o arquivo
+  novo parecia o mais antigo); toybox head sem `-n` negativo — commits `adf5f32`
+  e `45f9f43`.
 - O box .84 não tem default route (só rota /24) mesmo com rede OK — sintoma do
   stack de rede incompleto do firmware; não bloqueia o acesso ao painel (mesma
   sub-rede).
