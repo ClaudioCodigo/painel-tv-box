@@ -118,22 +118,19 @@ class RecoveryService:
     async def _reopen_stream(self, device: DeviceConfig) -> dict:
         """Reabre a stream SEM derrubar o scrcpy (regra ADB×scrcpy):
 
-        - scrcpy ativo OU heartbeat fresco → enfileira via canal de comandos
-          (o device executa localmente; zero ADB painel→device);
-        - senão → ADB direto (fallback).
+        - scrcpy ativo → enfileira via canal de comandos (o device executa
+          localmente; zero ADB painel→device — ADB derrubaria o mirror);
+        - senão → ADB direto (síncrono e confiável — o caminho histórico;
+          o canal de comandos tem latência de ~20s e sem verificação, o que
+          causava o loop de force-stop quando o heartbeat ficava fresco).
         """
         from datetime import datetime
 
         from app.managers.scrcpy import ScrcpyManager
 
-        hb_timeout = (self.cfg.heartbeat_timeout if self.cfg else 60) or 60
-        heartbeat_fresh = bool(
-            device.state.last_heartbeat
-            and (datetime.now() - device.state.last_heartbeat).total_seconds() < hb_timeout
-        )
         target = f"{device.ip}:{device.adb_port}"
 
-        if ScrcpyManager.is_device_active(target) or heartbeat_fresh:
+        if ScrcpyManager.is_device_active(target):
             if not self.player:
                 return {"success": False, "error": "player config ausente"}
             cmd = self.player.build_start_cmd(device)

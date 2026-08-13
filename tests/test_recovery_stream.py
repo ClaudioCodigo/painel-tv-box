@@ -78,17 +78,46 @@ class TestRecoveryStreamOnly:
 
 class TestReopenStreamAdbSafe:
     @pytest.mark.asyncio
-    async def test_heartbeat_fresh_enqueues_command_no_adb(self):
+    async def test_heartbeat_fresh_uses_adb_when_no_scrcpy(self, monkeypatch):
+        """Heartbeat fresco SEM scrcpy → ADB direto (caminho confiável histórico).
+
+        Regressão 13/08: quando o heartbeat passou a funcionar (grupo inet),
+        a recuperação migrou para o canal de comandos (latência ~20s + sem
+        verificação) e as streams não subiam — voltar ao ADB é o comportamento
+        esperado; o canal de comandos fica só para o caso scrcpy ativo.
+        """
+        from app.managers.scrcpy import ScrcpyManager
+
+        monkeypatch.setattr(ScrcpyManager, "is_device_active", lambda target: False)
+
+        adb = AsyncMock()
+        adb.shell = AsyncMock(return_value=("", 0))
+        player = AsyncMock()
+        player.start_stream = AsyncMock(return_value={"success": True, "method": "script"})
+
+        dev = make_device()
+        dev.state.last_heartbeat = datetime.now()  # fresco
+
+        svc = RecoveryService(adb_manager=adb, player_manager=player, watchdog_config=make_cfg())
+        result = await svc._reopen_stream(dev)
+
+        assert result.get("success") is True
+        player.start_stream.assert_awaited()  # ADB direto, não enfileira
+
+    @pytest.mark.asyncio
+    async def test_scrcpy_active_enqueues_command_no_adb(self, monkeypatch):
+        """scrcpy ativo → canal de comandos (zero ADB — não derruba o mirror)."""
+        from app.managers.scrcpy import ScrcpyManager
         from app.services import command_queue as cq
+
+        monkeypatch.setattr(ScrcpyManager, "is_device_active", lambda target: True)
 
         adb = AsyncMock()
         adb.shell = AsyncMock(return_value=("", 0))
         player = AsyncMock()
         player.build_start_cmd = MagicMock(return_value="am start -a android.intent.action.VIEW -d 'rtsp://x'")
 
-        dev = make_device()
-        dev.state.last_heartbeat = datetime.now()  # fresco
-
+        dev = make_device()  # sem heartbeat — scrcpy ativo basta para enfileirar
         svc = RecoveryService(adb_manager=adb, player_manager=player, watchdog_config=make_cfg())
         result = await svc._reopen_stream(dev)
 
@@ -98,6 +127,29 @@ class TestReopenStreamAdbSafe:
         pending = await cq.pop_pending("qa")
         assert len(pending) == 1
         assert pending[0]["action"] == "start_stream"
+
+    @pytest.mark.asyncio
+    async def test_scrcpy_active_no_duplicate_enqueue(self, monkeypatch):
+        """Já há start_stream pendente → não enfileira outro (evita force-stop loop)."""
+        from app.managers.scrcpy import ScrcpyManager
+        from app.services import command_queue as cq
+
+        monkeypatch.setattr(ScrcpyManager, "is_device_active", lambda target: True)
+
+        adb = AsyncMock()
+        adb.shell = AsyncMock(return_value=("", 0))
+        player = AsyncMock()
+        player.build_start_cmd = MagicMock(return_value="am start -a android.intent.action.VIEW -d 'rtsp://x'")
+
+        dev = make_device()
+        svc = RecoveryService(adb_manager=adb, player_manager=player, watchdog_config=make_cfg())
+
+        first = await svc._reopen_stream(dev)
+        assert first.get("queued")
+        second = await svc._reopen_stream(dev)
+        assert second.get("already_queued") is True
+        pending = await cq.pop_pending("qa")
+        assert len(pending) == 1  # continua só 1 pendente
 
     @pytest.mark.asyncio
     async def test_no_heartbeat_falls_back_to_adb(self):
