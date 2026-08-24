@@ -112,7 +112,9 @@ const SHELL_PAGE = (() => {
 
     async function runViaWS(deviceId, command, outEl) {
         const loading = outEl.querySelector('.shell-loading');
-        const wsUrl = `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws/shell/${deviceId}`;
+        const token = (typeof AUTH !== 'undefined') ? AUTH.getToken() : '';
+        const q = token ? `?token=${encodeURIComponent(token)}` : '';
+        const wsUrl = `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws/shell/${deviceId}${q}`;
         let connected = false;
 
         try {
@@ -260,15 +262,9 @@ const SHELL_PAGE = (() => {
                 if (!f || !f.name.endsWith('.apk')) return;
                 out.innerHTML += `<div class="shell-prompt">📤 Enviando ${esc(f.name)}...</div>`;
                 out.scrollTop = out.scrollHeight;
-                const form = new FormData();
-                form.append('file', f);
                 try {
-                    const resp = await fetch(`/api/devices/${dev.value}/install-apk`, { method: 'POST', body: form });
-                    let data = {};
-                    try { data = await resp.json(); } catch (e) { /* corpo não-JSON */ }
-                    if (!resp.ok) {
-                        out.innerHTML += `<div class="shell-result"><span class="shell-line term-err">${esc(data.detail || `Falha na instalação (HTTP ${resp.status})`)}</span></div>`;
-                    } else if (data.success) {
+                    const data = await API.upload(`/devices/${dev.value}/install-apk`, f, 'file');
+                    if (data.success) {
                         out.innerHTML += `<div class="shell-result"><span class="shell-line term-ok">${esc(f.name)} instalado com sucesso</span></div>`;
                         showInstallApk(); // recarrega lista
                     } else {

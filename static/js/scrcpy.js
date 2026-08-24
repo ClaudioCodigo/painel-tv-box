@@ -67,30 +67,41 @@ const SCRCPY = (() => {
  <div class="settings-card" id="scrcpy-status-card"><div class="loading">Carregando...</div></div>
 
  <div class="settings-card full">
-  <h3 style="margin-bottom:8px">🖥️ Mirroring</h3>
-  <div class="form-group">
-   <label class="form-label">Dispositivo</label>
+  <h3 style="margin-bottom:8px">🖥️ scrcpy no seu computador (Recomendado)</h3>
+  <p class="text-muted text-sm">
+    Baixe o scrcpy pronto para usar no <strong>seu computador</strong>.
+    O espelhamento roda direto entre a sua máquina e o TV Box — sem passar pelo servidor.
+  </p>
+  <div class="form-group" style="margin-top:12px">
+   <label class="form-label">Selecione o TV Box</label>
    <select id="scrcpy-device" class="form-input">
      ${deviceOptions || '<option value="">Nenhum dispositivo</option>'}
    </select>
   </div>
 
-  <details style="margin-top:8px">
-   <summary style="cursor:pointer;font-weight:600;color:var(--text-primary)">Opções avançadas</summary>
-   ${cb}
-   <div class="form-group" style="margin-top:8px">
-    <label class="form-label">Args extras (custom)</label>
-    <input type="text" id="scrcpy-args" class="form-input" placeholder="--max-size=1024 --no-audio" value="--max-size=1024">
-   </div>
-  </details>
+  <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
+   <button class="btn btn-primary" onclick="SCRCPY.downloadBundle()">${UI.icon('download')} Baixar scrcpy + Launcher (.zip)</button>
+   <button class="btn btn-secondary" onclick="SCRCPY.downloadLauncher()">${UI.icon('download')} Apenas Launcher (.bat)</button>
+  </div>
 
+  <div style="margin-top:14px;padding:12px;background:var(--bg-secondary,#1e293b);border-radius:6px;font-size:12px;color:var(--text-muted)">
+    <strong style="color:var(--text-primary)">💡 Como usar:</strong>
+    <ol style="margin:6px 0 0 18px;padding:0;line-height:1.6">
+      <li>Baixe e extraia o arquivo ZIP em qualquer pasta do seu PC.</li>
+      <li>Dê um duplo clique no arquivo <code>iniciar-*.bat</code>.</li>
+      <li>A tela do TV Box abrirá na sua máquina com suporte a mouse e teclado.</li>
+    </ol>
+  </div>
+ </div>
+
+ <div class="settings-card full">
+  <h3 style="margin-bottom:8px">📡 Streaming Server (sem tela)</h3>
+  <p class="text-muted text-sm">Captura a tela direto no servidor via <code>screenrecord → ffmpeg → RTSP</code> — útil para monitoramento remoto.</p>
   <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
-   <button class="btn btn-primary" onclick="SCRCPY.startMirroring()">${UI.icon('play')} Iniciar Mirror</button>
-   <button class="btn btn-success" onclick="SCRCPY.startStreaming()">${UI.icon('monitor')} Streaming (sem tela)</button>
+   <button class="btn btn-success" onclick="SCRCPY.startStreaming()">${UI.icon('monitor')} Iniciar Streaming</button>
    <button class="btn btn-danger" onclick="SCRCPY.stopMirroring()">${UI.icon('stop')} Parar</button>
    <span class="live-badge" id="scrcpy-session"><span class="live-dot"></span> Parado</span>
   </div>
-  <p class="text-muted text-sm" style="margin-top:8px">Em servidor sem tela (headless), o Mirror não abre — use o <strong>Streaming</strong> (screenrecord→ffmpeg→RTSP).</p>
   <div id="scrcpy-stream-url" style="margin-top:8px"></div>
  </div>
 
@@ -182,19 +193,39 @@ const SCRCPY = (() => {
             : '<span class="status-mini-dot" style="opacity:0.4"></span> Parado';
     }
 
-    async function startMirroring() {
+    async function downloadBundle() {
         const deviceId = document.getElementById('scrcpy-device')?.value;
         if (!deviceId) {
             UI.createToast('Selecione um dispositivo primeiro', 'warning');
             return;
         }
-        const allArgs = buildArgs();
-        UI.createToast(`Iniciando mirror ${deviceId}...`,'info');
-        try {
-            const res = await API.post(`/scrcpy/start/${deviceId}`, { extra_args: allArgs });
-            if (res.success) { UI.createToast(`scrcpy rodando (PID ${res.pid})`,'success'); setSession('mirroring'); }
-            else UI.createToast(`❌ ${res.error}`,'error');
-        } catch(e) { UI.createToast(`❌ ${e.message}`,'error'); }
+        UI.createToast('Gerando pacote scrcpy + launcher...', 'info');
+        const url = API.authUrl(`/scrcpy/client/bundle/${encodeURIComponent(deviceId)}`);
+        const a = document.createElement('a');
+        a.href = `/api${url}`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    }
+
+    async function downloadLauncher() {
+        const deviceId = document.getElementById('scrcpy-device')?.value;
+        if (!deviceId) {
+            UI.createToast('Selecione um dispositivo primeiro', 'warning');
+            return;
+        }
+        UI.createToast('Baixando launcher...', 'info');
+        const url = API.authUrl(`/scrcpy/client/launcher/${encodeURIComponent(deviceId)}`);
+        const a = document.createElement('a');
+        a.href = `/api${url}`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    }
+
+    async function startMirroring() {
+        // Legado / compatibilidade interna
+        return downloadBundle();
     }
 
     async function stopMirroring() {
@@ -295,5 +326,5 @@ const SCRCPY = (() => {
         });
     }
 
-    return { render, startMirroring, startStreaming, stopMirroring, startLive, stopLive, checkUpdates, installLatest, activateVersion, deleteVersion };
+    return { render, downloadBundle, downloadLauncher, startMirroring, startStreaming, stopMirroring, startLive, stopLive, checkUpdates, installLatest, activateVersion, deleteVersion };
 })();

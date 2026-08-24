@@ -50,6 +50,13 @@ async def startup(fastapi_app):
     fastapi_app.state.metrics_history = metrics_hist
     logger.info("MetricsHistory inicializado")
 
+    # Inicializa UpdateManager
+    from app.managers.update import UpdateManager
+
+    update_mgr = UpdateManager()
+    fastapi_app.state.update_manager = update_mgr
+    logger.info("UpdateManager inicializado")
+
     # Inicializa Watchdog se config completa
     if cm.wizard_completed and cm.devices:
         from app.managers.adb import ADBManager

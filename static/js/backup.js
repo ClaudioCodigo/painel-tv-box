@@ -83,8 +83,16 @@ const BACKUP = (() => {
     async function doExport() {
         try {
             // Endpoint é POST — precisa de fetch, não window.open
-            const res = await fetch('/api/backup/export', { method: 'POST' });
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const token = (typeof AUTH !== 'undefined') ? AUTH.getToken() : '';
+            const headers = {};
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+            const res = await fetch('/api/backup/export', { method: 'POST', headers });
+            if (!res.ok) {
+                if (res.status === 401 && typeof AUTH !== 'undefined') {
+                    AUTH.requireLogin();
+                }
+                throw new Error(`HTTP ${res.status}`);
+            }
 
             const cd = res.headers.get('Content-Disposition') || '';
             const m = cd.match(/filename="?([^";]+)"?/);

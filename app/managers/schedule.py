@@ -82,6 +82,12 @@ class ScheduleManager:
         while self._running:
             try:
                 now = datetime.now()
+                # Limpa entradas antigas para evitar acumular chaves em memória
+                current_min = now.strftime("%Y-%m-%d %H:%M")
+                self._last_triggered = {
+                    k: v for k, v in self._last_triggered.items()
+                    if v == current_min
+                }
                 await self._check_devices(now)
                 await self._check_groups(now)
             except Exception as e:
@@ -92,19 +98,19 @@ class ScheduleManager:
         """Verifica schedules de dispositivos."""
         if not self.config or not self.config.devices:
             return
-        today = now.strftime("%Y-%m-%d")
+        current_min = now.strftime("%Y-%m-%d %H:%M")
 
         for device in self.config.devices:
             for sched in device.schedule:
                 sched_id = f"device_{device.id}_{sched.action}_{sched.cron}"
-                if self._last_triggered.get(sched_id) == today:
+                if self._last_triggered.get(sched_id) == current_min:
                     continue
 
                 try:
                     parser = CronParser(sched.cron)
                     if parser.matches(now):
                         await self._execute_action(device.id, sched.action)
-                        self._last_triggered[sched_id] = today
+                        self._last_triggered[sched_id] = current_min
                         logger.info("Schedule triggered: %s -> %s", device.id, sched.action)
                 except Exception as e:
                     logger.warning("Schedule parse error for %s: %s", device.id, e)
@@ -113,12 +119,12 @@ class ScheduleManager:
         """Verifica schedules de grupos."""
         if not self.config or not self.config.groups:
             return
-        today = now.strftime("%Y-%m-%d")
+        current_min = now.strftime("%Y-%m-%d %H:%M")
 
         for group in self.config.groups:
             for sched in group.schedule:
                 sched_id = f"group_{group.id}_{sched.action}_{sched.cron}"
-                if self._last_triggered.get(sched_id) == today:
+                if self._last_triggered.get(sched_id) == current_min:
                     continue
 
                 try:
@@ -127,7 +133,7 @@ class ScheduleManager:
                         devices = [d for d in self.config.devices if d.group == group.id]
                         for device in devices:
                             await self._execute_action(device.id, sched.action)
-                        self._last_triggered[sched_id] = today
+                        self._last_triggered[sched_id] = current_min
                         logger.info("Group schedule triggered: %s (%d devices) -> %s", group.id, len(devices), sched.action)
                 except Exception as e:
                     logger.warning("Schedule parse error for group %s: %s", group.id, e)

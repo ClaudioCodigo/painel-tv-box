@@ -111,6 +111,23 @@ class ScrcpyManager:
             })
         return sorted(result, key=lambda x: x["version"], reverse=True)
 
+    def get_active_dir(self) -> Optional[Path]:
+        """Retorna o diretório da versão ativa do scrcpy (com binários)."""
+        current = self.get_current_version()
+        if current:
+            ver_dir = VERSIONS_DIR / current
+            if ver_dir.is_dir() and (ver_dir / self._platform_binary_name()).is_file():
+                return ver_dir
+        # Fallback: se SCRCPY_DIR raiz tiver o binário
+        if (SCRCPY_DIR / self._platform_binary_name()).is_file():
+            return SCRCPY_DIR
+        # Fallback: primeira versão instalada que tiver o binário
+        for ver_info in self.get_installed_versions():
+            v_dir = VERSIONS_DIR / ver_info["version"]
+            if v_dir.is_dir() and (v_dir / self._platform_binary_name()).is_file():
+                return v_dir
+        return None
+
     @classmethod
     def _record_event(cls, event: str, **data):
         payload = {

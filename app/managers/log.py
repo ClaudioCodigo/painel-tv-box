@@ -6,13 +6,18 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+from app.utils.system import get_data_dir
+
 LOG_FORMAT = "[%(asctime)s] [%(levelname)s] [%(name)s] [%(device)s] %(message)s"
 DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 LOG_SOURCES = ["system", "adb", "mediamtx", "watchdog", "user", "api"]
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-LOG_DIR = PROJECT_ROOT / "logs"
+try:
+    LOG_DIR = get_data_dir() / "logs"
+except Exception:
+    PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+    LOG_DIR = PROJECT_ROOT / "logs"
 
 
 class DeviceFilter(logging.Filter):
@@ -168,8 +173,15 @@ class LogManager:
         result = []
         for src in LOG_SOURCES:
             path = self.log_dir / f"{src}.log"
-            count = sum(1 for _ in open(path, encoding="utf-8")) if path.is_file() else 0
-            size = path.stat().st_size if path.is_file() else 0
+            count = 0
+            size = 0
+            if path.is_file():
+                size = path.stat().st_size
+                try:
+                    with open(path, encoding="utf-8") as f:
+                        count = sum(1 for _ in f)
+                except Exception:
+                    count = 0
             result.append({"name": src, "lines": count, "size_bytes": size})
         return result
 

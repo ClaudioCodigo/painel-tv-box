@@ -27,6 +27,10 @@ const SETTINGS = (() => {
                             <input type="text" id="sec-admin-user" class="form-input" placeholder="admin" autocomplete="username">
                         </div>
                         <div class="form-group">
+                            <label>Senha atual (se alterando)</label>
+                            <input type="password" id="sec-admin-current-pass" class="form-input" placeholder="••••••••" autocomplete="current-password">
+                        </div>
+                        <div class="form-group">
                             <label>Nova senha (mín. 8 caracteres)</label>
                             <input type="password" id="sec-admin-pass" class="form-input" placeholder="••••••••" autocomplete="new-password">
                         </div>
@@ -77,6 +81,7 @@ const SETTINGS = (() => {
         const status = document.getElementById('sec-admin-status');
         const user = document.getElementById('sec-admin-user');
         const pass = document.getElementById('sec-admin-pass');
+        const currPass = document.getElementById('sec-admin-current-pass');
         const uname = user ? user.value.trim() : '';
         if (!/^[A-Za-z0-9._@-]{2,64}$/.test(uname)) {
             if (status) status.innerHTML = '<span class="text-danger">Usuário inválido — use 2-64 caracteres: letras, números, . _ @ - (sem espaços)</span>';
@@ -84,10 +89,15 @@ const SETTINGS = (() => {
         }
         if (!pass || pass.value.length < 8) { if (status) status.innerHTML = '<span class="text-danger">Senha precisa ter pelo menos 8 caracteres</span>'; return; }
         try {
-            const res = await API.post('/auth/set-admin', { username: uname, password: pass.value });
+            const payload = { username: uname, password: pass.value };
+            if (currPass && currPass.value) {
+                payload.current_password = currPass.value;
+            }
+            const res = await API.post('/auth/set-admin', payload);
             if (res && res.success) {
                 if (status) status.innerHTML = '<span class="text-success">✅ Administrador salvo. Use usuário/senha no login da próxima vez.</span>';
                 pass.value = '';
+                if (currPass) currPass.value = '';
                 // se criou agora, já autentica a sessão atual
                 if (res.token && typeof AUTH !== 'undefined') AUTH.setToken(res.token);
             } else {
@@ -198,17 +208,27 @@ const SETTINGS = (() => {
     async function checkUpdate() {
         const status = document.getElementById('update-status');
         const btn = document.getElementById('btn-apply');
-        if (status) status.innerHTML = '<span class="settings-loading">Verificando...</span>';
+        if (status) status.innerHTML = '<span class="settings-loading">Verificando atualizações no git...</span>';
 
         try {
             const res = await API.post('/update/check');
             if (res.has_update) {
-                if (status) status.innerHTML = `<span class="text-warning">📦 Atualização disponível: ${UI.escapeHtml(res.current)} → ${UI.escapeHtml(res.remote)}</span>`;
+                let clHtml = '';
+                if (Array.isArray(res.changelog) && res.changelog.length > 0) {
+                    const items = res.changelog.map(c => `<li>${UI.escapeHtml(c)}</li>`).join('');
+                    clHtml = `<div style="margin-top:8px;padding:8px;background:var(--bg-secondary,#1e293b);border-radius:6px;max-height:140px;overflow-y:auto">
+                        <strong style="font-size:12px;color:var(--text-muted)">Commits a aplicar:</strong>
+                        <ul style="margin:4px 0 0 16px;padding:0;font-family:monospace;font-size:11px">${items}</ul>
+                    </div>`;
+                }
+                if (status) {
+                    status.innerHTML = `<span class="text-warning">📦 Atualização disponível: <strong>${UI.escapeHtml(res.current)}</strong> → <strong>${UI.escapeHtml(res.remote)}</strong></span>${clHtml}`;
+                }
                 if (btn) btn.disabled = false;
             } else if (res.error) {
                 if (status) status.innerHTML = `<span class="text-muted">${UI.escapeHtml(res.error)}</span>`;
             } else {
-                if (status) status.innerHTML = `<span class="text-success">✅ Versão atual: ${UI.escapeHtml(res.current)}</span>`;
+                if (status) status.innerHTML = `<span class="text-success">✅ Painel atualizado (versão: ${UI.escapeHtml(res.current)})</span>`;
                 if (btn) btn.disabled = true;
             }
         } catch (e) {
@@ -222,19 +242,41 @@ const SETTINGS = (() => {
 
         UI.showModal(
             'Aplicar Atualização',
-            `<p>Tem certeza? O painel será reiniciado após a atualização.</p>`,
+            `<p>O painel fará <strong>backup automático das configurações</strong>, aplicará as mudanças via <code>git pull</code> e reiniciará o serviço.</p><p>Deseja continuar?</p>`,
             async () => {
-                if (status) status.innerHTML = '<span class="settings-loading">Aplicando atualização...</span>';
+                if (status) status.innerHTML = '<span class="settings-loading">Baixando e validando atualização...</span>';
                 if (btn) btn.disabled = true;
 
                 try {
                     const res = await API.post('/update/apply');
                     if (res.success) {
-                        if (status) status.innerHTML = `<span class="text-success">✅ Atualização aplicada! ${UI.escapeHtml(res.migration || '')}</span>`;
-                        UI.createToast('🔄 Reiniciando painel...', 'info', 5000);
-                        setTimeout(() => location.reload(), 2000);
+                        const restartMsg = res.restart || 'Reiniciando painel...';
+                        if (status) {
+                            status.innerHTML = `<span class="text-success">✅ Atualização aplicada! Backup: <code>${UI.escapeHtml(res.backup || '')}</code></span><br><span class="text-muted text-sm">${UI.escapeHtml(restartMsg)}</span>`;
+                        }
+                        UI.createToast('🔄 Reiniciando painel...', 'info', 10000);
+                        
+                        // Polling de reconexão
+                        let attempts = 0;
+                        const checkInterval = setInterval(async () => {
+                            attempts++;
+                            try {
+                                const h = await fetch('/api/system/health');
+                                if (h.ok) {
+                                    clearInterval(checkInterval);
+                                    UI.createToast('✅ Painel online!', 'success');
+                                    setTimeout(() => window.location.reload(), 1000);
+                                }
+                            } catch (e) {
+                                if (attempts > 30) {
+                                    clearInterval(checkInterval);
+                                    if (status) status.innerHTML += '<br><span class="text-warning">Recarregue a página manualmente.</span>';
+                                }
+                            }
+                        }, 2000);
+
                     } else {
-                        if (status) status.innerHTML = `<span class="text-danger">❌ ${res.error || 'Falha'}</span>`;
+                        if (status) status.innerHTML = `<span class="text-danger">❌ ${UI.escapeHtml(res.error || 'Falha')} ${res.rolled_back ? '(Rollback executado)' : ''}</span>`;
                         if (btn) btn.disabled = false;
                     }
                 } catch (e) {

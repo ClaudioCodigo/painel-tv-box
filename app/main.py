@@ -19,6 +19,7 @@ from app.api.backup import router as backup_router
 from app.api.update import router as update_router
 from app.api.groups import router as groups_router
 from app.api.scrcpy import router as scrcpy_router
+from app.api.client_bundle import router as client_bundle_router
 from app.api.auth import router as auth_router
 from app.api.heartbeat import router as heartbeat_router
 
@@ -62,6 +63,7 @@ app.include_router(backup_router, dependencies=[Depends(require_auth)])
 app.include_router(update_router, dependencies=[Depends(require_auth)])
 app.include_router(groups_router, dependencies=[Depends(require_auth)])
 app.include_router(scrcpy_router, dependencies=[Depends(require_auth)])
+app.include_router(client_bundle_router, dependencies=[Depends(require_auth)])
 
 
 # --- API health check ---
@@ -158,10 +160,12 @@ async def websocket_shell(ws: WebSocket, device_id: str):
             # Executa ADB shell com streaming de output
             target = f"{device.ip}:{device.adb_port}"
             await adb.connect(device.ip, device.adb_port)
+            import os
             proc = await asyncio.create_subprocess_exec(
                 adb.binary, "-s", target, "shell", command,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                env={**os.environ, "ADB_SERVER_PORT": str(adb.server_port)},
             )
 
             # Stream stdout em tempo real

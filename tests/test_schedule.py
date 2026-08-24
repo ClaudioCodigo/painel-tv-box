@@ -62,3 +62,41 @@ class TestCronParser:
         assert c.matches(datetime(2026, 7, 27, 10, 0))
         # 2026-07-22 is a Wednesday (weekday=2)
         assert not c.matches(datetime(2026, 7, 22, 10, 0))
+
+
+class TestScheduleManager:
+    """Testes para o ScheduleManager."""
+
+    @pytest.mark.asyncio
+    async def test_intraday_multiple_executions(self):
+        from unittest.mock import AsyncMock, MagicMock
+        from app.managers.schedule import ScheduleManager
+        from app.models.device import DeviceConfig, DeviceSchedule
+
+        mock_config = MagicMock()
+        dev = DeviceConfig(
+            id="dev1",
+            ip="192.168.1.50",
+            schedule=[DeviceSchedule(cron="0 8,18 * * *", action="reboot")],
+        )
+        mock_config.devices = [dev]
+        mock_config.get_device.return_value = dev
+
+        mock_adb = MagicMock()
+        mock_adb.reboot = AsyncMock()
+
+        sm = ScheduleManager(config_manager=mock_config, adb_manager=mock_adb)
+
+        # 1st trigger: 8:00 AM
+        dt1 = datetime(2026, 8, 24, 8, 0)
+        await sm._check_devices(dt1)
+        assert mock_adb.reboot.call_count == 1
+
+        # Same minute: should NOT trigger again
+        await sm._check_devices(dt1)
+        assert mock_adb.reboot.call_count == 1
+
+        # 2nd trigger: 18:00 (same day, different hour) -> MUST trigger!
+        dt2 = datetime(2026, 8, 24, 18, 0)
+        await sm._check_devices(dt2)
+        assert mock_adb.reboot.call_count == 2

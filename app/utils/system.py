@@ -153,7 +153,8 @@ def get_metrics() -> dict:
     # interval=None → retorna a amostra desde a última chamada SEM bloquear o event loop
     cpu = psutil.cpu_percent(interval=None)
     ram = psutil.virtual_memory()
-    disk = psutil.disk_usage("/")
+    drive_root = Path.cwd().anchor or "C:\\"
+    disk = psutil.disk_usage(drive_root)
 
     return {
         "cpu_percent": cpu,
@@ -165,3 +166,20 @@ def get_metrics() -> dict:
         "disk_total_gb": round(disk.total / (1024**3), 1),
         "uptime_seconds": int(time.time() - psutil.boot_time()),
     }
+
+
+def find_nssm() -> str | None:
+    """Resolve o executável nssm.exe: repo/bin → C:\\PanelTVBox\\bin → PATH.
+
+    Retorna o caminho absoluto ou None se não encontrado.
+    """
+    import shutil
+
+    candidates = [
+        Path(__file__).resolve().parent.parent.parent / "bin" / "nssm.exe",
+        Path(r"C:\PanelTVBox\bin\nssm.exe"),
+    ]
+    for p in candidates:
+        if p.is_file():
+            return str(p)
+    return shutil.which("nssm")

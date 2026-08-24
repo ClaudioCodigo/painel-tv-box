@@ -35,6 +35,17 @@ SESSION_SECRET_FILE = CONFIG_DIR / ".session_secret"
 SESSION_TTL = 12 * 3600  # 12h
 PBKDF2_ITERATIONS = 200_000
 
+# Rate limiting & Lockout
+RATE_LIMIT_WINDOW = 300       # 5 minutos
+RATE_LIMIT_MAX = 5            # máx 5 tentativas por IP em 5 min
+LOCKOUT_DURATION = 900        # 15 minutos de bloqueio
+LOCKOUT_THRESHOLD = 5         # 5 falhas consecutivas bloqueiam usuário
+
+_login_attempts: dict[str, list[float]] = {}   # ip -> timestamps
+_user_failures: dict[str, list[float]] = {}    # user -> timestamps de falhas
+_revoked_jtis: set[str] = set()                # JTIs de tokens revogados
+_revoked_before: float = 0.0                       # revogação em massa
+
 # Username: allowlist estrita — letras/dígitos e . _ @ - (SEM espaços,
 # sem controle, sem separadores de caminho, sem aspas/colchetes).
 USERNAME_RE = re.compile(r"^[A-Za-z0-9._@-]{2,64}$")
@@ -43,6 +54,84 @@ PASSWORD_CTRL_RE = re.compile(r"[\x00-\x1f\x7f]")
 
 _token_cache: str = ""
 _secret_cache: str = ""
+
+
+def check_rate_limit(client_ip: str) -> bool:
+    """Verifica rate limiting por IP na janela deslizante. Retorna False se exceder."""
+    now = time.time()
+    attempts = _login_attempts.get(client_ip, [])
+    attempts = [t for t in attempts if now - t < RATE_LIMIT_WINDOW]
+    if len(attempts) >= RATE_LIMIT_MAX:
+        _login_attempts[client_ip] = attempts
+        return False
+    attempts.append(now)
+    _login_attempts[client_ip] = attempts
+    return True
+
+
+def is_user_locked(username: str) -> bool:
+    """Verifica se o usuário está temporariamente bloqueado após muitas falhas."""
+    if not username:
+        return False
+    now = time.time()
+    uname = username.strip().lower()
+    fails = _user_failures.get(uname, [])
+    fails = [t for t in fails if now - t < LOCKOUT_DURATION]
+    _user_failures[uname] = fails
+    return len(fails) >= LOCKOUT_THRESHOLD
+
+
+def record_login_failure(username: str | None, client_ip: str):
+    """Registra falha de login para lockout de usuário e log de auditoria."""
+    now = time.time()
+    uname = (username or "").strip().lower()
+    if uname:
+        fails = _user_failures.get(uname, [])
+        fails = [t for t in fails if now - t < LOCKOUT_DURATION]
+        fails.append(now)
+        _user_failures[uname] = fails
+    logger.warning("Falha de autenticação: user='%s' ip=%s", username or "", client_ip)
+
+
+def clear_user_failures(username: str | None):
+    """Limpa contador de falhas após login bem-sucedido."""
+    uname = (username or "").strip().lower()
+    if uname:
+        _user_failures.pop(uname, None)
+
+
+def _reset_rate_limits():
+    """Auxiliar para testes: limpa rate limits e lockouts."""
+    _login_attempts.clear()
+    _user_failures.clear()
+    _revoked_jtis.clear()
+    global _revoked_before
+    _revoked_before = 0
+
+
+def revoke_token_by_raw(token: str | None) -> bool:
+    """Revoga um token de sessão pelo seu JTI."""
+    if not token or "." not in token:
+        return False
+    try:
+        body, _ = token.rsplit(".", 1)
+        payload = json.loads(_b64url_decode(body))
+        jti = payload.get("jti")
+        if jti:
+            _revoked_jtis.add(str(jti))
+            logger.info("Token de sessão revogado (jti='%s')", jti)
+            return True
+    except Exception as e:
+        logger.warning("Falha ao revogar token: %s", e)
+    return False
+
+
+def revoke_all_tokens():
+    """Invalida todas as sessões anteriores a este momento."""
+    global _revoked_before
+    _revoked_before = time.time()
+    _revoked_jtis.clear()
+    logger.warning("Todas as sessões ativas foram revogadas.")
 
 
 def validate_credentials(username: str, password: str) -> str | None:
@@ -158,7 +247,7 @@ def _b64url_decode(data: str) -> bytes:
 def create_session_token(username: str) -> str:
     payload = {
         "sub": username,
-        "iat": int(time.time()),
+        "iat": time.time(),
         "exp": int(time.time()) + SESSION_TTL,
         "jti": secrets.token_urlsafe(12),
     }
@@ -183,6 +272,12 @@ def verify_session_token(token: str | None) -> str | None:
     except Exception:
         return None
     if int(payload.get("exp", 0)) < time.time():
+        return None
+    iat = float(payload.get("iat", 0))
+    if _revoked_before and iat <= _revoked_before:
+        return None
+    jti = payload.get("jti")
+    if jti and str(jti) in _revoked_jtis:
         return None
     return str(payload.get("sub", "")) or None
 
@@ -232,7 +327,7 @@ def check_token(candidate: str | None) -> bool:
     return hmac.compare_digest(candidate.encode("utf-8"), token.encode("utf-8"))
 
 
-PUBLIC_PATHS = {"/api/system/health", "/api/auth/login", "/api/auth/status"}
+PUBLIC_PATHS = {"/api/system/health", "/api/auth/login", "/api/auth/status", "/api/auth/logout"}
 
 
 def _extract_token(request: Request) -> str | None:

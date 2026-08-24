@@ -23,6 +23,9 @@ const API = (() => {
 
     function handleUnauthorized(res) {
         if (res.status === 401 && typeof AUTH !== 'undefined') {
+            if (AUTH.isLoggedIn() && typeof UI !== 'undefined' && UI.createToast) {
+                UI.createToast('Sessão expirada — faça login novamente', 'warning');
+            }
             AUTH.requireLogin();
         }
     }

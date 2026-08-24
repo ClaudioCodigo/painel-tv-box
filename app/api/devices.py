@@ -26,22 +26,62 @@ def _get_watchdog():
     except Exception:
         return None
 
-def _sync_mediamtx(config):
-    """Regenera o config do MediaMTX e reinicia o servico (aplica paths novos/removidos)."""
+async def _sync_mediamtx(config, old_path: str | None = None, new_path: str | None = None):
+    """Regenera o config do MediaMTX e sincroniza rotas via API REST sem reiniciar o serviço."""
     try:
         config.generate_mediamtx_yml()
-        import os
-        import subprocess
-        from pathlib import Path
+        from app.managers.mediamtx import MediaMTXManager
+        mtx = MediaMTXManager(config)
 
-        if os.name == "nt":
-            nssm = Path(__file__).resolve().parent.parent.parent / "bin" / "nssm.exe"
-            subprocess.Popen([str(nssm), "restart", "mediamtx"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        else:
-            subprocess.Popen(["systemctl", "restart", "mediamtx"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        hot_ok = True
+        if old_path and old_path != new_path:
+            del_res = await mtx.delete_path(old_path)
+            if not del_res.get("success"):
+                hot_ok = False
+        if new_path and new_path != old_path:
+            add_res = await mtx.add_path(new_path)
+            if not add_res.get("success"):
+                hot_ok = False
+
+        # Se API REST falhou (ex: mediamtx ainda não subiu), fallback para restart do serviço
+        if not hot_ok and (old_path or new_path):
+            _restart_mediamtx_service()
         return True
     except Exception:
         return False
+
+
+def _restart_mediamtx_service():
+    """Fallback para reiniciar o serviço do MediaMTX via NSSM/systemctl."""
+    import os
+    import subprocess
+    from app.utils.system import find_nssm
+
+    try:
+        if os.name == "nt":
+            nssm = find_nssm()
+            if nssm:
+                subprocess.Popen([nssm, "restart", "mediamtx"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        else:
+            subprocess.Popen(["systemctl", "restart", "mediamtx"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:
+        pass
+
+
+async def _safe_sync_mediamtx(config, old_path: str | None = None, new_path: str | None = None):
+    """Invoca _sync_mediamtx lidando com mocks síncronos (ex: lambda cfg: None) ou coroutines."""
+    import inspect
+    try:
+        res = _sync_mediamtx(config, old_path=old_path, new_path=new_path)
+    except TypeError:
+        try:
+            res = _sync_mediamtx(config)
+        except Exception:
+            return False
+
+    if inspect.isawaitable(res):
+        return await res
+    return res
 
 
 @router.get("")
@@ -108,7 +148,7 @@ async def create_device(data: dict):
 
     # Aplica o rtsp_path do novo device no MediaMTX
     if device.rtsp_path:
-        _sync_mediamtx(config)
+        await _safe_sync_mediamtx(config, new_path=device.rtsp_path)
 
     # Auto-provision: tenta enviar scripts para o TV Box
     try:
@@ -166,7 +206,7 @@ async def update_device(device_id: str, data: dict):
 
     # Se o rtsp_path mudou, regenera o MediaMTX
     if updated.rtsp_path != old_path:
-        _sync_mediamtx(config)
+        await _safe_sync_mediamtx(config, old_path=old_path, new_path=updated.rtsp_path)
 
     return updated.model_dump()
 
@@ -174,13 +214,15 @@ async def update_device(device_id: str, data: dict):
 @router.delete("/{device_id}")
 async def delete_device(device_id: str):
     config = _get_config()
-    if not config.get_device(device_id):
+    device = config.get_device(device_id) if config else None
+    if not device:
         raise HTTPException(404, "Dispositivo não encontrado")
+    old_path = device.rtsp_path
     try:
         config.delete_device(device_id)
     except ValueError as e:
         raise HTTPException(400, str(e))
-    _sync_mediamtx(config)
+    await _safe_sync_mediamtx(config, old_path=old_path)
 
     # Watchdog para de monitorar o device removido
     watchdog = _get_watchdog()

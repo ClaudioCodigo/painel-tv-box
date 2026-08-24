@@ -45,12 +45,17 @@ async def restart_panel():
     """Reinicia o servico do painel (sem esperar)."""
     try:
         if os.name == "nt":
-            nssm = Path(__file__).resolve().parent.parent.parent / "bin" / "nssm.exe"
-            cmd = [str(nssm), "restart", "panel-tvbox"]
+            from app.utils.system import find_nssm
+            nssm = find_nssm()
+            if not nssm:
+                raise HTTPException(500, "nssm.exe não encontrado")
+            cmd = [nssm, "restart", "panel-tvbox"]
         else:
             cmd = ["systemctl", "restart", "panel"]
         subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         return {"success": True, "restarting": True}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(500, "Falha ao reiniciar: " + str(e))
 

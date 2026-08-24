@@ -30,7 +30,22 @@ const AUTH = (() => {
             err.code = 'admin_nao_configurado';
             throw err;
         }
-        if (!res.ok) throw new Error('Credenciais inválidas');
+        if (res.status === 429) {
+            let msg = 'Muitas tentativas — aguarde alguns minutos';
+            try {
+                const data = await res.json();
+                if (data && data.detail) msg = data.detail;
+            } catch (e) {}
+            throw new Error(msg);
+        }
+        if (!res.ok) {
+            let msg = 'Credenciais inválidas';
+            try {
+                const data = await res.json();
+                if (data && data.detail) msg = data.detail;
+            } catch (e) {}
+            throw new Error(msg);
+        }
         const data = await res.json();
         setToken(data.token);
         hideLogin();
@@ -38,7 +53,16 @@ const AUTH = (() => {
         return data;
     }
 
-    function logout() {
+    async function logout() {
+        const t = getToken();
+        if (t) {
+            try {
+                await fetch('/api/auth/logout', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + t }
+                });
+            } catch (e) {}
+        }
         clearToken();
         showLogin();
         window.dispatchEvent(new CustomEvent('auth:logged-out'));
