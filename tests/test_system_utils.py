@@ -3,7 +3,7 @@
 import os
 from pathlib import Path
 
-from app.utils.system import find_nssm, get_metrics, get_data_dir
+from app.utils.system import find_nssm, find_git, get_metrics, get_data_dir
 
 
 def test_find_nssm_fallback_which(monkeypatch):
@@ -13,6 +13,13 @@ def test_find_nssm_fallback_which(monkeypatch):
 
     found = find_nssm()
     assert found == r"C:\Windows\System32\nssm.exe"
+
+
+def test_find_git_resolution(monkeypatch):
+    """find_git resolve git via shutil.which ou caminhos padrão."""
+    monkeypatch.setattr("shutil.which", lambda cmd: r"C:\Program Files\Git\cmd\git.exe" if cmd == "git" else None)
+    found = find_git()
+    assert found == r"C:\Program Files\Git\cmd\git.exe"
 
 
 def test_get_metrics_windows_disk():

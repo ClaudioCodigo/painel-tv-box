@@ -183,3 +183,46 @@ def find_nssm() -> str | None:
         if p.is_file():
             return str(p)
     return shutil.which("nssm")
+
+
+def find_git() -> str | None:
+    """Resolve o executável git.exe: PATH → caminhos padrão de instalação do Windows.
+
+    Retorna o caminho absoluto do git.exe ou None se não encontrado.
+    """
+    import os
+    import shutil
+
+    # 1. PATH do processo
+    p = shutil.which("git")
+    if p:
+        return p
+
+    # 2. Caminhos comuns no Windows
+    candidates = [
+        Path(r"C:\Program Files\Git\cmd\git.exe"),
+        Path(r"C:\Program Files\Git\bin\git.exe"),
+        Path(r"C:\Program Files (x86)\Git\cmd\git.exe"),
+        Path(r"C:\Program Files (x86)\Git\bin\git.exe"),
+        Path(r"C:\PanelTVBox\bin\git.exe"),
+        Path(r"C:\PanelTVBox\bin\Git\cmd\git.exe"),
+    ]
+
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    if local_app_data:
+        candidates.append(Path(local_app_data) / "Programs" / "Git" / "cmd" / "git.exe")
+        candidates.append(Path(local_app_data) / "Programs" / "Git" / "bin" / "git.exe")
+
+    program_data = os.environ.get("ProgramData")
+    if program_data:
+        candidates.append(Path(program_data) / "chocolatey" / "bin" / "git.exe")
+
+    user_profile = os.environ.get("USERPROFILE")
+    if user_profile:
+        candidates.append(Path(user_profile) / "scoop" / "shims" / "git.exe")
+
+    for cand in candidates:
+        if cand.is_file():
+            return str(cand)
+
+    return None

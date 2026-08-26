@@ -280,8 +280,17 @@ function Set-NssmService {
     Info "Servico $Name registrado e iniciado."
 }
 
+# Localizar Git para incluir no PATH do servico NSSM (se presente)
+$gitExtra = ""
+if (Get-Command git -ErrorAction SilentlyContinue) {
+    $gitCmd = (Get-Command git).Source
+    $gitExtra = ";" + (Split-Path $gitCmd -Parent)
+} elseif (Test-Path "C:\Program Files\Git\cmd") {
+    $gitExtra = ";C:\Program Files\Git\cmd;C:\Program Files\Git\bin"
+}
+
 $pathExtra = @(
-    "PATH=$FfmpegBin\bin;$PlatformToolsDir",
+    "PATH=$FfmpegBin\bin;$PlatformToolsDir$gitExtra",
     "PYTHONUNBUFFERED=1",
     "PANEL_DATA_DIR=$DataDir",
     "PANEL_ADB_SERVER_PORT=5038",

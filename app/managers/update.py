@@ -37,11 +37,19 @@ class UpdateManager:
     async def _run_git(self, *args, timeout: int | None = None) -> tuple[str, str, int]:
         """Executa git com timeout. Retorna (stdout, stderr, returncode)."""
         timeout = timeout or self.GIT_TIMEOUT
-        proc = await asyncio.create_subprocess_exec(
-            "git", "-C", str(self.project_root), *args,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
+        from app.utils.system import find_git
+
+        git_bin = find_git() or "git"
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                git_bin, "-C", str(self.project_root), *args,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+        except FileNotFoundError:
+            raise FileNotFoundError(
+                "Git não encontrado no sistema. Instale o Git para Windows (https://git-scm.com) ou adicione ao PATH."
+            )
         try:
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
         except asyncio.TimeoutError:
@@ -57,6 +65,21 @@ class UpdateManager:
         """Verifica se há atualizações disponíveis via git e extrai changelog."""
         async with self._lock:
             try:
+                from app.utils.system import find_git
+
+                if not find_git():
+                    self._status = {
+                        "checked": True,
+                        "has_update": False,
+                        "current": "",
+                        "remote": "",
+                        "error": "Git não encontrado no servidor. Instale o Git para Windows (https://git-scm.com) ou adicione ao PATH.",
+                        "changelog": [],
+                        "backup_path": self._status.get("backup_path", ""),
+                        "last_applied": self._status.get("last_applied", ""),
+                    }
+                    return self._status
+
                 git_dir = self.project_root / ".git"
                 if not git_dir.is_dir():
                     self._status = {
@@ -64,7 +87,7 @@ class UpdateManager:
                         "has_update": False,
                         "current": "",
                         "remote": "",
-                        "error": "Não é um repositório git",
+                        "error": "Não é um repositório git (.git ausente)",
                         "changelog": [],
                         "backup_path": self._status.get("backup_path", ""),
                         "last_applied": self._status.get("last_applied", ""),
