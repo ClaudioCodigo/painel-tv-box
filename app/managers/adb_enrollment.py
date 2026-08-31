@@ -60,26 +60,52 @@ class EnrollmentStore:
     def _token_digest(token: str) -> str:
         return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
-    def issue_token(self, device_id: str, issued_by: str = "panel", ttl: int = ENROLLMENT_TTL) -> dict:
+    def issue_token(
+        self,
+        device_id: str,
+        issued_by: str = "panel",
+        ttl: int = ENROLLMENT_TTL,
+        purpose: str = "enroll",
+    ) -> dict:
         if not is_safe_id(device_id):
             raise ValueError("ID de dispositivo inválido")
+        if purpose not in {"enroll", "launch"}:
+            raise ValueError("Finalidade de token inválida")
         token = secrets.token_urlsafe(32)
         expires_at = time.time() + max(30, min(int(ttl), ENROLLMENT_TTL))
         self._tokens[self._token_digest(token)] = {
             "device_id": device_id,
             "issued_by": issued_by[:80],
             "expires_at": expires_at,
+            "purpose": purpose,
         }
         self._purge_tokens()
         return {"token": token, "expires_at": expires_at, "ttl_seconds": int(expires_at - time.time())}
 
-    def consume_token(self, token: str, device_id: str) -> dict:
+    def consume_token(self, token: str, device_id: str, purpose: str = "enroll") -> dict:
         """Consome antes do provisionamento: falhas exigem novo bundle/token."""
         self._purge_tokens()
         digest = self._token_digest(token or "")
         record = self._tokens.pop(digest, None)
-        if not record or record["device_id"] != device_id or record["expires_at"] < time.time():
+        if (
+            not record
+            or record["device_id"] != device_id
+            or record.get("purpose", "enroll") != purpose
+            or record["expires_at"] < time.time()
+        ):
             raise ValueError("Token de matrícula inválido ou expirado")
+        return record
+
+    def consume_launch_token(self, token: str) -> dict:
+        """Consome ticket de Start sem confiar em device informado pelo cliente."""
+        self._purge_tokens()
+        record = self._tokens.pop(self._token_digest(token or ""), None)
+        if (
+            not record
+            or record.get("purpose") != "launch"
+            or record.get("expires_at", 0) < time.time()
+        ):
+            raise ValueError("Ticket de abertura inválido ou expirado")
         return record
 
     def _purge_tokens(self):
@@ -135,6 +161,10 @@ class EnrollmentStore:
             return None
         client = self._load()["clients"].get(client_id)
         return dict(client) if client else None
+
+    def get_by_fingerprint(self, fingerprint: str) -> Optional[dict]:
+        client_id = "ws-" + fingerprint.removeprefix("SHA256:")[:16].lower()
+        return self.get_client(client_id)
 
     def remove_device(self, client_id: str, device_id: str) -> Optional[dict]:
         data = self._load()

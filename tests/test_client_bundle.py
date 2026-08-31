@@ -158,6 +158,81 @@ async def test_get_bundle_success(auth_header, setup_device, tmp_path, monkeypat
 
 
 @pytest.mark.asyncio
+async def test_station_bundle_installs_protocol_without_private_key(
+    auth_header, setup_device, tmp_path, monkeypatch,
+):
+    scrcpy_mock_dir = tmp_path / "scrcpy_mock"
+    scrcpy_mock_dir.mkdir()
+    (scrcpy_mock_dir / "scrcpy.exe").write_bytes(b"MZ_DUMMY_EXE")
+    (scrcpy_mock_dir / "adb.exe").write_bytes(b"MZ_DUMMY_ADB")
+    monkeypatch.setattr(ScrcpyManager, "get_active_dir", lambda self: scrcpy_mock_dir)
+
+    async with await _client() as c:
+        response = await c.get("/api/scrcpy/client/station-bundle", headers=auth_header)
+
+    assert response.status_code == 200
+    zf = zipfile.ZipFile(io.BytesIO(response.content))
+    assert {"PainelScrcpy.ps1", "instalar-cliente.ps1", "instalar-cliente.bat", "README.txt"} <= set(zf.namelist())
+    installer = zf.read("instalar-cliente.ps1").decode("utf-8-sig")
+    launcher = zf.read("PainelScrcpy.ps1").decode("utf-8-sig")
+    assert "HKCU:\\Software\\Classes\\paineltvbox" in installer
+    assert "$env:LOCALAPPDATA" in installer
+    assert "keygen $KeyPath" in installer
+    assert "/api/scrcpy/client/launch/resolve" in launcher
+    assert "$env:ADB_VENDOR_KEYS = $KeyPath" in launcher
+    assert "if ($Target.newly_authorized) { Start-Sleep -Seconds 3 }" in launcher
+    assert "private_key" not in installer + launcher
+
+
+@pytest.mark.asyncio
+async def test_launch_ticket_requires_session(auth_header, setup_device):
+    EnrollmentStore._tokens.clear()
+    async with await _client() as c:
+        unauthorized = await c.post("/api/scrcpy/client/launch-ticket/tv-sala")
+        authorized = await c.post(
+            "/api/scrcpy/client/launch-ticket/tv-sala", headers=auth_header,
+        )
+
+    assert unauthorized.status_code == 401
+    assert authorized.status_code == 200
+    assert authorized.json()["protocol_url"].startswith("paineltvbox://scrcpy?ticket=")
+
+
+@pytest.mark.asyncio
+async def test_launch_resolve_provisions_once_and_rejects_replay(
+    auth_header, setup_device, tmp_path, monkeypatch,
+):
+    EnrollmentStore._tokens.clear()
+    monkeypatch.setattr(enrollment_module, "get_data_dir", lambda: tmp_path)
+    install = AsyncMock(return_value={"success": True})
+    monkeypatch.setattr(ADBKeyProvisioner, "install", install)
+
+    async with await _client() as c:
+        first_ticket = await c.post(
+            "/api/scrcpy/client/launch-ticket/tv-sala", headers=auth_header,
+        )
+        token = first_ticket.json()["protocol_url"].split("ticket=", 1)[1]
+        payload = {"token": token, "client_name": "PC-Recepcao", "public_key": _public_key()}
+        resolved = await c.post("/api/scrcpy/client/launch/resolve", json=payload)
+        replay = await c.post("/api/scrcpy/client/launch/resolve", json=payload)
+
+        second_ticket = await c.post(
+            "/api/scrcpy/client/launch-ticket/tv-sala", headers=auth_header,
+        )
+        payload["token"] = second_ticket.json()["protocol_url"].split("ticket=", 1)[1]
+        resolved_again = await c.post("/api/scrcpy/client/launch/resolve", json=payload)
+
+    assert resolved.status_code == 200
+    assert resolved.json()["device_id"] == "tv-sala"
+    assert resolved.json()["ip"] == "192.168.254.150"
+    assert resolved.json()["newly_authorized"] is True
+    assert replay.status_code == 400
+    assert resolved_again.status_code == 200
+    assert resolved_again.json()["newly_authorized"] is False
+    install.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_enroll_uses_one_time_token_without_panel_session(setup_device, tmp_path, monkeypatch):
     EnrollmentStore._tokens.clear()
     monkeypatch.setattr(enrollment_module, "get_data_dir", lambda: tmp_path)

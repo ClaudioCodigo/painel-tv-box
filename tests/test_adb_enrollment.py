@@ -39,6 +39,28 @@ def test_enrollment_token_is_bound_and_single_use(tmp_path):
         store.consume_token(issued["token"], "tv-sala")
 
 
+def test_launch_ticket_has_separate_purpose_and_is_single_use(tmp_path):
+    EnrollmentStore._tokens.clear()
+    store = EnrollmentStore(tmp_path / "enrollments.json")
+    launch = store.issue_token("tv-sala", "admin", ttl=60, purpose="launch")
+
+    with pytest.raises(ValueError, match="matrícula"):
+        store.consume_token(launch["token"], "tv-sala")
+
+    launch = store.issue_token("tv-sala", "admin", ttl=60, purpose="launch")
+    assert store.consume_launch_token(launch["token"])["device_id"] == "tv-sala"
+    with pytest.raises(ValueError, match="abertura"):
+        store.consume_launch_token(launch["token"])
+
+
+def test_enrollment_token_cannot_resolve_launch(tmp_path):
+    EnrollmentStore._tokens.clear()
+    store = EnrollmentStore(tmp_path / "enrollments.json")
+    enrollment = store.issue_token("tv-sala", "admin")
+    with pytest.raises(ValueError, match="abertura"):
+        store.consume_launch_token(enrollment["token"])
+
+
 def test_register_and_remove_device_is_persistent(tmp_path):
     store = EnrollmentStore(tmp_path / "enrollments.json")
     normalized, fingerprint = normalize_adb_public_key(public_key(), "PC-01")

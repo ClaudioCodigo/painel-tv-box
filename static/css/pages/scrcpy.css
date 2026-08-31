@@ -97,3 +97,42 @@
 .scrcpy-version-item.active .scrcpy-version-name {
     color: var(--text-primary);
 }
+
+.scrcpy-enrollment-heading,
+.scrcpy-enrollment-summary,
+.scrcpy-enrollment-device {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.scrcpy-enrollment-heading {
+    margin-bottom: 12px;
+}
+
+.scrcpy-enrollment-item {
+    padding: 12px 0;
+    border-top: 1px solid var(--border-subtle);
+}
+
+.scrcpy-enrollment-item:first-child {
+    border-top: 0;
+}
+
+.scrcpy-enrollment-devices {
+    margin-top: 10px;
+    padding-left: 12px;
+}
+
+.scrcpy-enrollment-device {
+    padding: 6px 0;
+}
+
+@media (max-width: 560px) {
+    .scrcpy-enrollment-heading,
+    .scrcpy-enrollment-summary {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+}

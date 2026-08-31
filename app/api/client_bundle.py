@@ -31,6 +31,12 @@ class EnrollmentRequest(BaseModel):
     public_key: str = Field(min_length=100, max_length=4096)
 
 
+class LaunchRequest(BaseModel):
+    token: str = Field(min_length=20, max_length=200)
+    client_name: str = Field(min_length=1, max_length=80)
+    public_key: str = Field(min_length=100, max_length=4096)
+
+
 def _safe_filename(name: str) -> str:
     """Sanitiza string para uso seguro em nomes de arquivo."""
     s = re.sub(r"[^a-zA-Z0-9_\-\.]", "_", name or "device")
@@ -127,6 +133,124 @@ Start-Sleep -Seconds 4
 """
 
 
+def _generate_station_launcher(panel_url: str) -> str:
+    """Launcher instalado que resolve um ticket e abre o scrcpy local."""
+    endpoint = f"{panel_url.rstrip('/')}/api/scrcpy/client/launch/resolve"
+    return f"""param([Parameter(Mandatory=$true)][string]$ProtocolUri)
+$ErrorActionPreference = 'Stop'
+
+try {{
+    if ($ProtocolUri -notmatch '^paineltvbox://scrcpy\\?ticket=([A-Za-z0-9_-]{{20,200}})$') {{
+        throw 'Link de abertura invalido.'
+    }}
+    $Ticket = $Matches[1]
+    $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
+    $Adb = Join-Path $Root 'scrcpy\\adb.exe'
+    $Scrcpy = Join-Path $Root 'scrcpy\\scrcpy.exe'
+    $KeyPath = Join-Path $Root 'credencial\\adbkey'
+    if (-not (Test-Path $Adb) -or -not (Test-Path $Scrcpy) -or -not (Test-Path $KeyPath)) {{
+        throw 'Cliente incompleto. Execute novamente o instalador do Painel TV Box.'
+    }}
+
+    $Payload = @{{
+        token = $Ticket
+        client_name = $(if ($env:COMPUTERNAME) {{ $env:COMPUTERNAME }} else {{ 'Windows-PC' }})
+        public_key = (Get-Content -Raw -Encoding UTF8 ($KeyPath + '.pub')).Trim()
+    }} | ConvertTo-Json
+    $Target = Invoke-RestMethod -Method Post -Uri {_ps_literal(endpoint)} -ContentType 'application/json' -Body $Payload
+    if ($Target.newly_authorized) {{ Start-Sleep -Seconds 3 }}
+
+    $env:ADB_VENDOR_KEYS = $KeyPath
+    $env:ADB_SERVER_PORT = '5037'
+    & $Adb kill-server 2>$null | Out-Null
+    & $Adb connect ($Target.ip + ':' + $Target.adb_port)
+    $State = (& $Adb -s ($Target.ip + ':' + $Target.adb_port) get-state 2>$null).Trim()
+    if ($State -ne 'device') {{ throw 'O TV Box nao autorizou esta estacao.' }}
+
+    & $Scrcpy -s ($Target.ip + ':' + $Target.adb_port) --max-size=1024
+}} catch {{
+    Add-Type -AssemblyName PresentationFramework -ErrorAction SilentlyContinue
+    [System.Windows.MessageBox]::Show($_.Exception.Message, 'Painel TV Box - scrcpy', 'OK', 'Error') | Out-Null
+    exit 1
+}}
+"""
+
+
+def _generate_station_installer() -> str:
+    """Instala o cliente no perfil atual e registra paineltvbox:// em HKCU."""
+    return r"""$ErrorActionPreference = 'Stop'
+$Source = $PSScriptRoot
+$Dest = Join-Path $env:LOCALAPPDATA 'PainelTVBox\ScrcpyClient'
+$ScrcpyDest = Join-Path $Dest 'scrcpy'
+$KeyDir = Join-Path $Dest 'credencial'
+$KeyPath = Join-Path $KeyDir 'adbkey'
+
+New-Item -ItemType Directory -Force -Path $ScrcpyDest, $KeyDir | Out-Null
+Copy-Item (Join-Path $Source 'scrcpy\*') $ScrcpyDest -Recurse -Force
+Copy-Item (Join-Path $Source 'PainelScrcpy.ps1') $Dest -Force
+Copy-Item (Join-Path $Source 'README.txt') $Dest -Force
+
+$Adb = Join-Path $ScrcpyDest 'adb.exe'
+if (-not (Test-Path $KeyPath) -or -not (Test-Path ($KeyPath + '.pub'))) {
+    & $Adb keygen $KeyPath
+    if ($LASTEXITCODE -ne 0) { throw 'Falha ao gerar a chave ADB desta estacao.' }
+}
+
+$Protocol = 'HKCU:\Software\Classes\paineltvbox'
+$CommandKey = Join-Path $Protocol 'shell\open\command'
+$Launcher = Join-Path $Dest 'PainelScrcpy.ps1'
+New-Item -Path $CommandKey -Force | Out-Null
+Set-Item -Path $Protocol -Value 'URL:Painel TV Box scrcpy Protocol'
+New-ItemProperty -Path $Protocol -Name 'URL Protocol' -Value '' -PropertyType String -Force | Out-Null
+$Command = 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "' + $Launcher + '" "%1"'
+Set-Item -Path $CommandKey -Value $Command
+
+Add-Type -AssemblyName PresentationFramework -ErrorAction SilentlyContinue
+[System.Windows.MessageBox]::Show('Cliente instalado. Agora use o botao Start no painel.', 'Painel TV Box - scrcpy', 'OK', 'Information') | Out-Null
+"""
+
+
+def _generate_station_readme() -> str:
+    return """PAINEL TV BOX - CLIENTE SCRCPY
+
+1. Extraia todo o ZIP.
+2. De dois cliques em instalar-cliente.bat.
+3. Volte ao painel e pressione Start no TV Box desejado.
+
+O cliente fica em %LOCALAPPDATA%\\PainelTVBox\\ScrcpyClient.
+A chave privada permanece somente nesse computador.
+Nao ha servico ou processo residente em segundo plano.
+"""
+
+
+def _generate_station_bootstrap() -> str:
+    """Atalho de duplo clique para o instalador PowerShell."""
+    return r"""@echo off
+chcp 65001 >nul
+title Painel TV Box - Instalar cliente scrcpy
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0instalar-cliente.ps1"
+if errorlevel 1 (
+    echo.
+    echo [ERRO] Nao foi possivel instalar o cliente.
+    pause
+)
+"""
+
+
+def _add_scrcpy_files(zf: zipfile.ZipFile, scrcpy_dir: Path):
+    """Adiciona o runtime scrcpy e garante adb.exe/DLLs no ZIP."""
+    for file in scrcpy_dir.rglob("*"):
+        if file.is_file():
+            zf.write(file, f"scrcpy/{file.relative_to(scrcpy_dir)}")
+    if not (scrcpy_dir / "adb.exe").is_file():
+        adb_sys = shutil.which("adb")
+        if adb_sys:
+            adb_path = Path(adb_sys)
+            zf.write(adb_path, "scrcpy/adb.exe")
+            for dll in adb_path.parent.glob("*.dll"):
+                zf.write(dll, f"scrcpy/{dll.name}")
+
+
 def _generate_readme(name: str, ip: str, port: int) -> str:
     """Gera o arquivo de instruções README.txt."""
     return f"""===========================================================
@@ -195,22 +319,7 @@ async def get_client_bundle(request: Request, device_id: str):
     # Cria ZIP em memória
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-        # 1. Adiciona todos os arquivos do scrcpy
-        for f in scrcpy_dir.rglob("*"):
-            if f.is_file():
-                arcname = f"scrcpy/{f.relative_to(scrcpy_dir)}"
-                zf.write(f, arcname)
-
-        # 2. Garante que adb.exe está incluído se não estava dentro da pasta do scrcpy
-        has_adb = (scrcpy_dir / "adb.exe").is_file()
-        if not has_adb:
-            adb_sys = shutil.which("adb")
-            if adb_sys:
-                adb_path = Path(adb_sys)
-                zf.write(adb_path, "scrcpy/adb.exe")
-                # Copia DLLs irmãs se existirem (AdbWinApi.dll, etc.)
-                for dll in adb_path.parent.glob("*.dll"):
-                    zf.write(dll, f"scrcpy/{dll.name}")
+        _add_scrcpy_files(zf, scrcpy_dir)
 
         # 3. Adiciona matrícula, launcher e instruções na raiz do ZIP
         zf.writestr("matricular.ps1", enrollment_content.encode("utf-8-sig"))
@@ -225,6 +334,88 @@ async def get_client_bundle(request: Request, device_id: str):
         media_type="application/zip",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@router.get("/station-bundle")
+async def get_station_bundle(request: Request):
+    """Entrega o cliente que é instalado uma única vez no perfil Windows."""
+    mgr = ScrcpyManager()
+    scrcpy_dir = mgr.get_active_dir()
+    if not scrcpy_dir or not scrcpy_dir.is_dir():
+        raise HTTPException(500, "scrcpy não instalado no servidor")
+
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        _add_scrcpy_files(zf, scrcpy_dir)
+        zf.writestr("PainelScrcpy.ps1", _generate_station_launcher(str(request.base_url)).encode("utf-8-sig"))
+        zf.writestr("instalar-cliente.ps1", _generate_station_installer().encode("utf-8-sig"))
+        zf.writestr("instalar-cliente.bat", _generate_station_bootstrap().encode("utf-8"))
+        zf.writestr("README.txt", _generate_station_readme().encode("utf-8"))
+    zip_buffer.seek(0)
+    return StreamingResponse(
+        zip_buffer,
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="PainelTVBox-Scrcpy-Cliente.zip"'},
+    )
+
+
+@router.post("/launch-ticket/{device_id}")
+async def create_launch_ticket(device_id: str, request: Request):
+    """Cria ticket curto usado pelo botão Start no protocolo Windows."""
+    if not is_safe_id(device_id):
+        raise HTTPException(400, "ID de dispositivo inválido")
+    import app.main
+
+    cfg = getattr(app.main, "config", None)
+    if not cfg or not cfg.get_device(device_id):
+        raise HTTPException(404, "Dispositivo não encontrado")
+    raw_session = request.headers.get("Authorization", "")
+    username = verify_session_token(raw_session[7:].strip()) if raw_session.startswith("Bearer ") else None
+    ticket = EnrollmentStore().issue_token(
+        device_id, issued_by=username or "panel", ttl=60, purpose="launch",
+    )
+    return {
+        "protocol_url": f"paineltvbox://scrcpy?ticket={ticket['token']}",
+        "expires_at": ticket["expires_at"],
+    }
+
+
+@router.post("/launch/resolve")
+async def resolve_launch(data: LaunchRequest):
+    """Resolve o ticket e autoriza a estação no box sob demanda."""
+    try:
+        public_key, fingerprint = normalize_adb_public_key(data.public_key, data.client_name)
+        ticket = EnrollmentStore().consume_launch_token(data.token)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+    import app.main
+
+    cfg = getattr(app.main, "config", None)
+    device = cfg.get_device(ticket["device_id"]) if cfg else None
+    if not device:
+        raise HTTPException(404, "Dispositivo não encontrado")
+
+    store = EnrollmentStore()
+    client = store.get_by_fingerprint(fingerprint)
+    newly_authorized = not client or device.id not in client.get("devices", [])
+    if newly_authorized:
+        result = await ADBKeyProvisioner().install(device.ip, device.adb_port, public_key)
+        if not result.get("success"):
+            raise HTTPException(502, result.get("error", "Falha ao autorizar estação"))
+        client = store.register(
+            device.id, data.client_name, public_key, fingerprint, ticket.get("issued_by", "panel"),
+        )
+
+    return {
+        "success": True,
+        "client_id": client["id"],
+        "device_id": device.id,
+        "name": device.name or device.id,
+        "ip": device.ip,
+        "adb_port": device.adb_port,
+        "newly_authorized": newly_authorized,
+    }
 
 
 @router.post("/enroll/{device_id}")

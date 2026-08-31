@@ -3,6 +3,8 @@
  */
 const SCRCPY = (() => {
     let refreshTimer = null;
+    let deviceNames = new Map();
+    let enrollmentClients = [];
 
     const PRESET_ARGS = [
         {id:'arg-br',label:'Limitar bitrate',desc:'--video-bit-rate=2M',cmd:'--video-bit-rate=2M',grp:'rede'},
@@ -40,9 +42,10 @@ const SCRCPY = (() => {
         } catch (e) {
             // Se falhar, a lista ficará vazia
         }
+        deviceNames = new Map(devices.map(d => [d.id, d.name || d.id]));
 
         const deviceOptions = devices.map(d =>
-            `<option value="${d.id}">${d.name || d.id} (${d.ip})</option>`
+            `<option value="${UI.escapeHtml(d.id)}">${UI.escapeHtml(d.name || d.id)} (${UI.escapeHtml(d.ip || '')})</option>`
         ).join('');
 
         // 2. Construir checkboxes de args
@@ -67,10 +70,9 @@ const SCRCPY = (() => {
  <div class="settings-card" id="scrcpy-status-card"><div class="loading">Carregando...</div></div>
 
  <div class="settings-card full">
-  <h3 style="margin-bottom:8px">🖥️ scrcpy no seu computador (Recomendado)</h3>
+  <h3 style="margin-bottom:8px">🖥️ scrcpy no seu computador</h3>
   <p class="text-muted text-sm">
-    Baixe o scrcpy pronto para usar no <strong>seu computador</strong>.
-    O espelhamento roda direto entre a sua máquina e o TV Box — sem passar pelo servidor.
+    Instale o cliente uma vez. Depois, selecione um box e pressione <strong>Start</strong>.
   </p>
   <div class="form-group" style="margin-top:12px">
    <label class="form-label">Selecione o TV Box</label>
@@ -80,18 +82,26 @@ const SCRCPY = (() => {
   </div>
 
   <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
-   <button class="btn btn-primary" onclick="SCRCPY.downloadBundle()">${UI.icon('download')} Baixar scrcpy + Launcher (.zip)</button>
-   <button class="btn btn-secondary" onclick="SCRCPY.downloadLauncher()">${UI.icon('download')} Apenas Launcher (.bat)</button>
+   <button class="btn btn-primary" onclick="SCRCPY.startLocal()">${UI.icon('play')} Start</button>
+   <button class="btn btn-secondary" onclick="SCRCPY.downloadStationBundle()">${UI.icon('download')} Instalar cliente neste PC</button>
   </div>
 
   <div style="margin-top:14px;padding:12px;background:var(--bg-secondary,#1e293b);border-radius:6px;font-size:12px;color:var(--text-muted)">
     <strong style="color:var(--text-primary)">💡 Como usar:</strong>
     <ol style="margin:6px 0 0 18px;padding:0;line-height:1.6">
-      <li>Baixe e extraia o arquivo ZIP em qualquer pasta do seu PC.</li>
-      <li>Dê um duplo clique no arquivo <code>iniciar-*.bat</code>.</li>
-      <li>A tela do TV Box abrirá na sua máquina com suporte a mouse e teclado.</li>
+      <li>Uma única vez: baixe, extraia e dê dois cliques em <code>instalar-cliente.bat</code>.</li>
+      <li>Depois, escolha o TV Box e pressione <strong>Start</strong>.</li>
+      <li>O Windows poderá pedir confirmação para abrir o cliente na primeira vez.</li>
     </ol>
   </div>
+ </div>
+
+ <div class="settings-card full">
+  <div class="scrcpy-enrollment-heading">
+   <div><h3>🔑 Estações autorizadas</h3><p class="text-muted text-sm">Computadores que podem abrir o scrcpy nos TV Boxes.</p></div>
+   <button class="btn btn-secondary btn-sm" onclick="SCRCPY.loadEnrollments()">Atualizar</button>
+  </div>
+  <div id="scrcpy-enrollments"><div class="loading">Carregando...</div></div>
  </div>
 
  <div class="settings-card full">
@@ -128,7 +138,7 @@ const SCRCPY = (() => {
  <div id="scrcpy-update-info"></div>
 </div>`;
         // 4. Carregar status de versões após o HTML estar pronto
-        await loadStatus();
+        await Promise.all([loadStatus(), loadEnrollments()]);
     }
 
     async function loadStatus() {
@@ -206,6 +216,83 @@ const SCRCPY = (() => {
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
+    }
+
+    function downloadStationBundle() {
+        UI.createToast('Preparando instalador do cliente...', 'info');
+        const url = API.authUrl('/scrcpy/client/station-bundle');
+        const a = document.createElement('a');
+        a.href = `/api${url}`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    }
+
+    async function startLocal() {
+        const deviceId = document.getElementById('scrcpy-device')?.value;
+        if (!deviceId) { UI.createToast('Selecione um dispositivo primeiro', 'warning'); return; }
+        try {
+            const result = await API.post(`/scrcpy/client/launch-ticket/${encodeURIComponent(deviceId)}`);
+            UI.createToast('Abrindo o cliente scrcpy...', 'info');
+            window.location.href = result.protocol_url;
+        } catch (e) {
+            UI.createToast(e.message || 'Falha ao abrir o cliente', 'error');
+        }
+    }
+
+    async function loadEnrollments() {
+        const box = document.getElementById('scrcpy-enrollments');
+        if (!box) return;
+        try {
+            const result = await API.get('/scrcpy/client/enrollments');
+            enrollmentClients = result.clients || [];
+            if (!enrollmentClients.length) {
+                box.innerHTML = '<div class="empty-state">Nenhuma estação autorizada</div>';
+                return;
+            }
+            box.innerHTML = enrollmentClients.map(client => {
+                const devices = (client.devices || []).map(deviceId => `
+                    <div class="scrcpy-enrollment-device">
+                     <span>${UI.escapeHtml(deviceNames.get(deviceId) || deviceId)}</span>
+                     <button class="btn btn-danger btn-sm" onclick="SCRCPY.revokeEnrollment('${UI.escAttr(client.id)}','${UI.escAttr(deviceId)}')">Revogar</button>
+                    </div>`).join('');
+                const created = client.created_at ? new Date(client.created_at).toLocaleString() : '—';
+                return `<div class="scrcpy-enrollment-item">
+                  <div class="scrcpy-enrollment-summary">
+                   <div><strong>${UI.escapeHtml(client.name || client.id)}</strong><div class="text-muted text-sm mono">${UI.escapeHtml(client.fingerprint || '')}</div><div class="text-muted text-sm">Desde ${UI.escapeHtml(created)}</div></div>
+                   <button class="btn btn-danger btn-sm" onclick="SCRCPY.revokeAll('${UI.escAttr(client.id)}')">Revogar todos</button>
+                  </div>
+                  <div class="scrcpy-enrollment-devices">${devices}</div>
+                 </div>`;
+            }).join('');
+        } catch (e) {
+            box.innerHTML = `<div class="empty-state">${UI.escapeHtml(e.message || 'Falha ao carregar')}</div>`;
+        }
+    }
+
+    function revokeEnrollment(clientId, deviceId) {
+        const deviceName = deviceNames.get(deviceId) || deviceId;
+        UI.showModal('Revogar acesso', `<p>Remover esta estação de <strong>${UI.escapeHtml(deviceName)}</strong>?</p>`, async () => {
+            try {
+                await API.del(`/scrcpy/client/enrollments/${encodeURIComponent(clientId)}/${encodeURIComponent(deviceId)}`);
+                UI.createToast('Acesso revogado', 'success');
+                await loadEnrollments();
+            } catch (e) { UI.createToast(e.message || 'Falha ao revogar', 'error'); }
+        });
+    }
+
+    function revokeAll(clientId) {
+        const client = enrollmentClients.find(item => item.id === clientId);
+        if (!client) return;
+        UI.showModal('Revogar estação', `<p>Remover <strong>${UI.escapeHtml(client.name || client.id)}</strong> de todos os TV Boxes?</p>`, async () => {
+            let failures = 0;
+            for (const deviceId of client.devices || []) {
+                try { await API.del(`/scrcpy/client/enrollments/${encodeURIComponent(clientId)}/${encodeURIComponent(deviceId)}`); }
+                catch { failures += 1; }
+            }
+            UI.createToast(failures ? `${failures} revogação(ões) falharam` : 'Estação revogada de todos os boxes', failures ? 'warning' : 'success');
+            await loadEnrollments();
+        });
     }
 
     async function downloadLauncher() {
@@ -326,5 +413,5 @@ const SCRCPY = (() => {
         });
     }
 
-    return { render, downloadBundle, downloadLauncher, startMirroring, startStreaming, stopMirroring, startLive, stopLive, checkUpdates, installLatest, activateVersion, deleteVersion };
+    return { render, downloadBundle, downloadLauncher, downloadStationBundle, startLocal, loadEnrollments, revokeEnrollment, revokeAll, startMirroring, startStreaming, stopMirroring, startLive, stopLive, checkUpdates, installLatest, activateVersion, deleteVersion };
 })();

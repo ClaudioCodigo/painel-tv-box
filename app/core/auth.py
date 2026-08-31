@@ -334,6 +334,8 @@ def _is_public_path(path: str) -> bool:
     """Rotas públicas que possuem sua própria credencial de uso único."""
     if path in PUBLIC_PATHS:
         return True
+    if path == "/api/scrcpy/client/launch/resolve":
+        return True
     return bool(re.fullmatch(r"/api/scrcpy/client/enroll/[a-z0-9][a-z0-9._-]{0,63}", path))
 
 
