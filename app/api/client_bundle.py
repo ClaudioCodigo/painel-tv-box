@@ -161,6 +161,9 @@ try {{
     $Target = Invoke-RestMethod -Method Post -Uri {_ps_literal(endpoint)} -ContentType 'application/json' -Body $Payload
     $env:ADB_VENDOR_KEYS = $KeyPath
     $env:ADB_SERVER_PORT = '5037'
+    # Windows PowerShell 5.1 transforma stderr de executáveis nativos em
+    # ErrorRecord. O ADB escreve mensagens normais do daemon em stderr.
+    $ErrorActionPreference = 'Continue'
     & $Adb kill-server 2>$null | Out-Null
     $Serial = $Target.ip + ':' + $Target.adb_port
     $Connected = $false
@@ -176,11 +179,16 @@ try {{
         }}
         Start-Sleep -Seconds 2
     }}
+    $ErrorActionPreference = 'Stop'
     if (-not $Connected) {{
         throw ('Nao foi possivel autenticar o TV Box apos 8 tentativas. Ultimo retorno: ' + $LastConnect)
     }}
 
+    $ErrorActionPreference = 'Continue'
     & $Scrcpy -s $Serial --max-size=1024
+    $ScrcpyExit = $LASTEXITCODE
+    $ErrorActionPreference = 'Stop'
+    if ($ScrcpyExit -ne 0) {{ throw ('scrcpy encerrou com codigo ' + $ScrcpyExit) }}
 }} catch {{
     Add-Type -AssemblyName PresentationFramework -ErrorAction SilentlyContinue
     [System.Windows.MessageBox]::Show($_.Exception.Message, 'Painel TV Box - scrcpy', 'OK', 'Error') | Out-Null

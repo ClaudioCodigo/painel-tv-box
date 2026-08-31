@@ -183,6 +183,11 @@ async def test_station_bundle_installs_protocol_without_private_key(
     assert "for ($Attempt = 1; $Attempt -le 8; $Attempt++)" in launcher
     assert "$State -eq 'device'" in launcher
     assert "Start-Sleep -Seconds 2" in launcher
+    native_continue = launcher.index("$ErrorActionPreference = 'Continue'")
+    adb_connect = launcher.index("& $Adb connect $Serial 2>&1")
+    restore_stop = launcher.index("$ErrorActionPreference = 'Stop'", native_continue)
+    assert native_continue < adb_connect < restore_stop
+    assert "$ScrcpyExit = $LASTEXITCODE" in launcher
     assert "scrcpy/?\\?ticket=" in launcher
     assert "private_key" not in installer + launcher
 
