@@ -61,6 +61,15 @@ def test_enrollment_token_cannot_resolve_launch(tmp_path):
         store.consume_launch_token(enrollment["token"])
 
 
+def test_install_token_is_separate_and_single_use(tmp_path):
+    EnrollmentStore._tokens.clear()
+    store = EnrollmentStore(tmp_path / "enrollments.json")
+    issued = store.issue_token("station-client", purpose="install")
+    assert store.consume_install_token(issued["token"])["purpose"] == "install"
+    with pytest.raises(ValueError, match="instalação"):
+        store.consume_install_token(issued["token"])
+
+
 def test_register_and_remove_device_is_persistent(tmp_path):
     store = EnrollmentStore(tmp_path / "enrollments.json")
     normalized, fingerprint = normalize_adb_public_key(public_key(), "PC-01")

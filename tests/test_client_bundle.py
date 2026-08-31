@@ -181,7 +181,36 @@ async def test_station_bundle_installs_protocol_without_private_key(
     assert "/api/scrcpy/client/launch/resolve" in launcher
     assert "$env:ADB_VENDOR_KEYS = $KeyPath" in launcher
     assert "if ($Target.newly_authorized) { Start-Sleep -Seconds 3 }" in launcher
+    assert "scrcpy/?\\?ticket=" in launcher
     assert "private_key" not in installer + launcher
+
+
+@pytest.mark.asyncio
+async def test_online_installer_downloads_bundle_with_one_time_token(
+    auth_header, setup_device, tmp_path, monkeypatch,
+):
+    EnrollmentStore._tokens.clear()
+    monkeypatch.setattr(enrollment_module, "get_data_dir", lambda: tmp_path)
+    scrcpy_mock_dir = tmp_path / "scrcpy_mock"
+    scrcpy_mock_dir.mkdir()
+    (scrcpy_mock_dir / "scrcpy.exe").write_bytes(b"MZ_DUMMY_EXE")
+    (scrcpy_mock_dir / "adb.exe").write_bytes(b"MZ_DUMMY_ADB")
+    monkeypatch.setattr(ScrcpyManager, "get_active_dir", lambda self: scrcpy_mock_dir)
+
+    async with await _client() as c:
+        installer = await c.get("/api/scrcpy/client/installer", headers=auth_header)
+        assert installer.status_code == 200
+        assert 'filename="instalar-scrcpy.cmd"' in installer.headers["content-disposition"]
+        encoded = installer.text.split("-EncodedCommand ", 1)[1].splitlines()[0]
+        script = base64.b64decode(encoded).decode("utf-16le")
+        assert "Invoke-WebRequest" in script
+        package_url = script.split("-Uri '", 1)[1].split("'", 1)[0]
+        package = await c.get(package_url)
+        replay = await c.get(package_url)
+
+    assert package.status_code == 200
+    assert package.headers["content-type"] == "application/zip"
+    assert replay.status_code == 400
 
 
 @pytest.mark.asyncio

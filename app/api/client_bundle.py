@@ -1,5 +1,6 @@
 """API routes para geração e download do bundle scrcpy client-side."""
 
+import base64
 import io
 from pathlib import Path
 import re
@@ -140,7 +141,7 @@ def _generate_station_launcher(panel_url: str) -> str:
 $ErrorActionPreference = 'Stop'
 
 try {{
-    if ($ProtocolUri -notmatch '^paineltvbox://scrcpy\\?ticket=([A-Za-z0-9_-]{{20,200}})$') {{
+    if ($ProtocolUri -notmatch '^paineltvbox://scrcpy/?\\?ticket=([A-Za-z0-9_-]{{20,200}})$') {{
         throw 'Link de abertura invalido.'
     }}
     $Ticket = $Matches[1]
@@ -213,13 +214,25 @@ Add-Type -AssemblyName PresentationFramework -ErrorAction SilentlyContinue
 def _generate_station_readme() -> str:
     return """PAINEL TV BOX - CLIENTE SCRCPY
 
-1. Extraia todo o ZIP.
-2. De dois cliques em instalar-cliente.bat.
-3. Volte ao painel e pressione Start no TV Box desejado.
+INSTALACAO RECOMENDADA
+1. No painel, abra a pagina scrcpy.
+2. Clique em "Instalar cliente neste PC".
+3. Execute o arquivo instalar-scrcpy.cmd baixado pelo navegador.
+4. Volte ao painel, escolha o TV Box e pressione Start.
+
+Este ZIP normalmente e baixado e instalado automaticamente pelo script acima.
+Se voce recebeu o ZIP manualmente, extraia tudo e execute instalar-cliente.bat.
 
 O cliente fica em %LOCALAPPDATA%\\PainelTVBox\\ScrcpyClient.
 A chave privada permanece somente nesse computador.
 Nao ha servico ou processo residente em segundo plano.
+
+SOLUCAO DE PROBLEMAS
+- Se o navegador perguntar, permita abrir o protocolo paineltvbox://.
+- Se aparecer "Link de abertura invalido", reinstale o cliente pelo painel para
+  atualizar o launcher local.
+- A primeira abertura de cada TV Box pode levar alguns segundos enquanto a
+  chave publica desta estacao e autorizada pelo Magisk.
 """
 
 
@@ -249,6 +262,48 @@ def _add_scrcpy_files(zf: zipfile.ZipFile, scrcpy_dir: Path):
             zf.write(adb_path, "scrcpy/adb.exe")
             for dll in adb_path.parent.glob("*.dll"):
                 zf.write(dll, f"scrcpy/{dll.name}")
+
+
+def _build_station_bundle(scrcpy_dir: Path, panel_url: str) -> bytes:
+    """Monta o pacote completo consumido pelo instalador bootstrap."""
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        _add_scrcpy_files(zf, scrcpy_dir)
+        zf.writestr("PainelScrcpy.ps1", _generate_station_launcher(panel_url).encode("utf-8-sig"))
+        zf.writestr("instalar-cliente.ps1", _generate_station_installer().encode("utf-8-sig"))
+        zf.writestr("instalar-cliente.bat", _generate_station_bootstrap().encode("utf-8"))
+        zf.writestr("README.txt", _generate_station_readme().encode("utf-8"))
+    return zip_buffer.getvalue()
+
+
+def _generate_online_installer(panel_url: str, token: str) -> str:
+    """Gera .cmd pequeno que baixa e instala o cliente atual do painel."""
+    package_url = f"{panel_url.rstrip('/')}/api/scrcpy/client/station-bundle-download/{token}"
+    powershell = f"""$ErrorActionPreference = 'Stop'
+$Work = Join-Path $env:TEMP ('PainelTVBox-' + [guid]::NewGuid().ToString('N'))
+$Zip = $Work + '.zip'
+try {{
+    New-Item -ItemType Directory -Force -Path $Work | Out-Null
+    Invoke-WebRequest -UseBasicParsing -Uri {_ps_literal(package_url)} -OutFile $Zip
+    Expand-Archive -Path $Zip -DestinationPath $Work -Force
+    & (Join-Path $Work 'instalar-cliente.ps1')
+    if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) {{ throw 'O instalador retornou erro.' }}
+}} finally {{
+    Remove-Item -LiteralPath $Zip -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $Work -Recurse -Force -ErrorAction SilentlyContinue
+}}
+"""
+    encoded = base64.b64encode(powershell.encode("utf-16le")).decode("ascii")
+    return f"""@echo off
+chcp 65001 >nul
+title Painel TV Box - Instalar cliente scrcpy
+powershell.exe -NoProfile -ExecutionPolicy Bypass -EncodedCommand {encoded}
+if errorlevel 1 (
+    echo.
+    echo [ERRO] Nao foi possivel baixar ou instalar o cliente pelo painel.
+    pause
+)
+"""
 
 
 def _generate_readme(name: str, ip: str, port: int) -> str:
@@ -344,16 +399,40 @@ async def get_station_bundle(request: Request):
     if not scrcpy_dir or not scrcpy_dir.is_dir():
         raise HTTPException(500, "scrcpy não instalado no servidor")
 
-    zip_buffer = io.BytesIO()
-    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-        _add_scrcpy_files(zf, scrcpy_dir)
-        zf.writestr("PainelScrcpy.ps1", _generate_station_launcher(str(request.base_url)).encode("utf-8-sig"))
-        zf.writestr("instalar-cliente.ps1", _generate_station_installer().encode("utf-8-sig"))
-        zf.writestr("instalar-cliente.bat", _generate_station_bootstrap().encode("utf-8"))
-        zf.writestr("README.txt", _generate_station_readme().encode("utf-8"))
-    zip_buffer.seek(0)
     return StreamingResponse(
-        zip_buffer,
+        io.BytesIO(_build_station_bundle(scrcpy_dir, str(request.base_url))),
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="PainelTVBox-Scrcpy-Cliente.zip"'},
+    )
+
+
+@router.get("/installer")
+async def get_online_installer(request: Request):
+    """Entrega um .cmd que baixa o cliente atual usando token descartável."""
+    token = EnrollmentStore().issue_token(
+        "station-client", issued_by="panel", ttl=10 * 60, purpose="install",
+    )["token"]
+    content = _generate_online_installer(str(request.base_url), token)
+    return Response(
+        content=content.encode("utf-8"),
+        media_type="application/x-bat",
+        headers={"Content-Disposition": 'attachment; filename="instalar-scrcpy.cmd"'},
+    )
+
+
+@router.get("/station-bundle-download/{token}")
+async def download_station_bundle(token: str, request: Request):
+    """Entrega uma vez o pacote ao instalador gerado pelo painel."""
+    try:
+        EnrollmentStore().consume_install_token(token)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+    scrcpy_dir = ScrcpyManager().get_active_dir()
+    if not scrcpy_dir or not scrcpy_dir.is_dir():
+        raise HTTPException(500, "scrcpy não instalado no servidor")
+    return StreamingResponse(
+        io.BytesIO(_build_station_bundle(scrcpy_dir, str(request.base_url))),
         media_type="application/zip",
         headers={"Content-Disposition": 'attachment; filename="PainelTVBox-Scrcpy-Cliente.zip"'},
     )

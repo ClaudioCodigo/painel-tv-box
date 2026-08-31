@@ -336,6 +336,8 @@ def _is_public_path(path: str) -> bool:
         return True
     if path == "/api/scrcpy/client/launch/resolve":
         return True
+    if re.fullmatch(r"/api/scrcpy/client/station-bundle-download/[A-Za-z0-9_-]{20,200}", path):
+        return True
     return bool(re.fullmatch(r"/api/scrcpy/client/enroll/[a-z0-9][a-z0-9._-]{0,63}", path))
 
 

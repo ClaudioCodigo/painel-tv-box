@@ -69,7 +69,7 @@ class EnrollmentStore:
     ) -> dict:
         if not is_safe_id(device_id):
             raise ValueError("ID de dispositivo inválido")
-        if purpose not in {"enroll", "launch"}:
+        if purpose not in {"enroll", "launch", "install"}:
             raise ValueError("Finalidade de token inválida")
         token = secrets.token_urlsafe(32)
         expires_at = time.time() + max(30, min(int(ttl), ENROLLMENT_TTL))
@@ -106,6 +106,18 @@ class EnrollmentStore:
             or record.get("expires_at", 0) < time.time()
         ):
             raise ValueError("Ticket de abertura inválido ou expirado")
+        return record
+
+    def consume_install_token(self, token: str) -> dict:
+        """Consome autorização descartável para baixar o cliente da estação."""
+        self._purge_tokens()
+        record = self._tokens.pop(self._token_digest(token or ""), None)
+        if (
+            not record
+            or record.get("purpose") != "install"
+            or record.get("expires_at", 0) < time.time()
+        ):
+            raise ValueError("Token de instalação inválido ou expirado")
         return record
 
     def _purge_tokens(self):

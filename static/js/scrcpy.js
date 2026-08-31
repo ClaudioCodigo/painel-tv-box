@@ -89,7 +89,7 @@ const SCRCPY = (() => {
   <div style="margin-top:14px;padding:12px;background:var(--bg-secondary,#1e293b);border-radius:6px;font-size:12px;color:var(--text-muted)">
     <strong style="color:var(--text-primary)">💡 Como usar:</strong>
     <ol style="margin:6px 0 0 18px;padding:0;line-height:1.6">
-      <li>Uma única vez: baixe, extraia e dê dois cliques em <code>instalar-cliente.bat</code>.</li>
+      <li>Uma única vez: baixe e execute <code>instalar-scrcpy.cmd</code>.</li>
       <li>Depois, escolha o TV Box e pressione <strong>Start</strong>.</li>
       <li>O Windows poderá pedir confirmação para abrir o cliente na primeira vez.</li>
     </ol>
@@ -220,7 +220,7 @@ const SCRCPY = (() => {
 
     function downloadStationBundle() {
         UI.createToast('Preparando instalador do cliente...', 'info');
-        const url = API.authUrl('/scrcpy/client/station-bundle');
+        const url = API.authUrl('/scrcpy/client/installer');
         const a = document.createElement('a');
         a.href = `/api${url}`;
         document.body.appendChild(a);
