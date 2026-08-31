@@ -180,7 +180,9 @@ async def test_station_bundle_installs_protocol_without_private_key(
     assert "keygen $KeyPath" in installer
     assert "/api/scrcpy/client/launch/resolve" in launcher
     assert "$env:ADB_VENDOR_KEYS = $KeyPath" in launcher
-    assert "if ($Target.newly_authorized) { Start-Sleep -Seconds 3 }" in launcher
+    assert "for ($Attempt = 1; $Attempt -le 8; $Attempt++)" in launcher
+    assert "$State -eq 'device'" in launcher
+    assert "Start-Sleep -Seconds 2" in launcher
     assert "scrcpy/?\\?ticket=" in launcher
     assert "private_key" not in installer + launcher
 

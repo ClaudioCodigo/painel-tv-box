@@ -159,16 +159,28 @@ try {{
         public_key = (Get-Content -Raw -Encoding UTF8 ($KeyPath + '.pub')).Trim()
     }} | ConvertTo-Json
     $Target = Invoke-RestMethod -Method Post -Uri {_ps_literal(endpoint)} -ContentType 'application/json' -Body $Payload
-    if ($Target.newly_authorized) {{ Start-Sleep -Seconds 3 }}
-
     $env:ADB_VENDOR_KEYS = $KeyPath
     $env:ADB_SERVER_PORT = '5037'
     & $Adb kill-server 2>$null | Out-Null
-    & $Adb connect ($Target.ip + ':' + $Target.adb_port)
-    $State = (& $Adb -s ($Target.ip + ':' + $Target.adb_port) get-state 2>$null).Trim()
-    if ($State -ne 'device') {{ throw 'O TV Box nao autorizou esta estacao.' }}
+    $Serial = $Target.ip + ':' + $Target.adb_port
+    $Connected = $false
+    $LastConnect = ''
+    for ($Attempt = 1; $Attempt -le 8; $Attempt++) {{
+        Write-Host ('Conectando ao TV Box - tentativa ' + $Attempt + '/8...')
+        $LastConnect = (& $Adb connect $Serial 2>&1 | Out-String).Trim()
+        Start-Sleep -Milliseconds 750
+        $State = (& $Adb -s $Serial get-state 2>$null | Out-String).Trim()
+        if ($State -eq 'device') {{
+            $Connected = $true
+            break
+        }}
+        Start-Sleep -Seconds 2
+    }}
+    if (-not $Connected) {{
+        throw ('Nao foi possivel autenticar o TV Box apos 8 tentativas. Ultimo retorno: ' + $LastConnect)
+    }}
 
-    & $Scrcpy -s ($Target.ip + ':' + $Target.adb_port) --max-size=1024
+    & $Scrcpy -s $Serial --max-size=1024
 }} catch {{
     Add-Type -AssemblyName PresentationFramework -ErrorAction SilentlyContinue
     [System.Windows.MessageBox]::Show($_.Exception.Message, 'Painel TV Box - scrcpy', 'OK', 'Error') | Out-Null
