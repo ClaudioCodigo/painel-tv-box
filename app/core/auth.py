@@ -330,6 +330,13 @@ def check_token(candidate: str | None) -> bool:
 PUBLIC_PATHS = {"/api/system/health", "/api/auth/login", "/api/auth/status", "/api/auth/logout"}
 
 
+def _is_public_path(path: str) -> bool:
+    """Rotas públicas que possuem sua própria credencial de uso único."""
+    if path in PUBLIC_PATHS:
+        return True
+    return bool(re.fullmatch(r"/api/scrcpy/client/enroll/[a-z0-9][a-z0-9._-]{0,63}", path))
+
+
 def _extract_token(request: Request) -> str | None:
     auth = request.headers.get("Authorization", "")
     if auth.startswith("Bearer "):
@@ -339,7 +346,7 @@ def _extract_token(request: Request) -> str | None:
 
 async def require_auth(request: Request):
     """Dependency global: exige credencial válida em rotas protegidas."""
-    if request.url.path in PUBLIC_PATHS:
+    if _is_public_path(request.url.path):
         return
 
     # Se a segurança estiver desligada na config, não exige credencial.

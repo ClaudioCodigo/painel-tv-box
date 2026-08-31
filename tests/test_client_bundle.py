@@ -1,7 +1,10 @@
 """Testes para o endpoint de bundle e launcher client-side do scrcpy (Phase 3)."""
 
 import io
+import base64
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 import zipfile
 import pytest
 import httpx
@@ -10,6 +13,8 @@ from app.main import app
 from app.models.device import DeviceConfig
 import app.core.auth as auth
 from app.managers.scrcpy import ScrcpyManager
+import app.managers.adb_enrollment as enrollment_module
+from app.managers.adb_enrollment import ADBKeyProvisioner, EnrollmentStore
 
 
 @pytest.fixture
@@ -39,6 +44,9 @@ def setup_device(monkeypatch):
     )
 
     class MockConfigManager:
+        wizard_completed = True
+        system = SimpleNamespace(security=SimpleNamespace(enabled=True))
+
         def get_device(self, dev_id):
             if dev_id == "tv-sala":
                 return device
@@ -50,6 +58,10 @@ def setup_device(monkeypatch):
 
 async def _client():
     return httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test")
+
+
+def _public_key():
+    return base64.b64encode(b"K" * 524).decode("ascii") + " test@client"
 
 
 @pytest.mark.asyncio
@@ -117,6 +129,7 @@ async def test_get_bundle_success(auth_header, setup_device, tmp_path, monkeypat
         assert "scrcpy/scrcpy.exe" in names
         assert "scrcpy/scrcpy-server" in names
         assert "scrcpy/adb.exe" in names
+        assert "matricular.ps1" in names
         assert "README.txt" in names
 
         bat_files = [n for n in names if n.endswith(".bat")]
@@ -125,7 +138,75 @@ async def test_get_bundle_success(auth_header, setup_device, tmp_path, monkeypat
         bat_content = zf.read(bat_files[0]).decode("utf-8")
         assert "192.168.254.150:5555" in bat_content
         assert "scrcpy\\scrcpy.exe" in bat_content
+        assert "ADB_VENDOR_KEYS" in bat_content
+        assert "matricular.ps1" in bat_content
+
+        enroll_content = zf.read("matricular.ps1").decode("utf-8-sig")
+        assert "$KeyPath + '.pub'" in enroll_content
+        assert "adb.exe keygen" not in enroll_content  # chamado pela variável $Adb
+        assert "keygen $KeyPath" in enroll_content
+        assert "/api/scrcpy/client/enroll/tv-sala" in enroll_content
+        assert "public_key = $PublicKey" in enroll_content
+        assert "private_key" not in enroll_content
 
         readme_content = zf.read("README.txt").decode("utf-8")
         assert "192.168.254.150:5555" in readme_content
         assert "Alt + F" in readme_content
+
+
+@pytest.mark.asyncio
+async def test_enroll_uses_one_time_token_without_panel_session(setup_device, tmp_path, monkeypatch):
+    EnrollmentStore._tokens.clear()
+    monkeypatch.setattr(enrollment_module, "get_data_dir", lambda: tmp_path)
+    install = AsyncMock(return_value={"success": True})
+    monkeypatch.setattr(ADBKeyProvisioner, "install", install)
+    token = EnrollmentStore().issue_token("tv-sala", "admin")["token"]
+
+    async with await _client() as c:
+        payload = {"token": token, "client_name": "PC-Recepcao", "public_key": _public_key()}
+        response = await c.post("/api/scrcpy/client/enroll/tv-sala", json=payload)
+        replay = await c.post("/api/scrcpy/client/enroll/tv-sala", json=payload)
+
+    assert response.status_code == 200
+    assert response.json()["fingerprint"].startswith("SHA256:")
+    assert replay.status_code == 400
+    install.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_enroll_rejects_token_for_another_device(setup_device, tmp_path, monkeypatch):
+    EnrollmentStore._tokens.clear()
+    monkeypatch.setattr(enrollment_module, "get_data_dir", lambda: tmp_path)
+    token = EnrollmentStore().issue_token("tv-outra", "admin")["token"]
+
+    async with await _client() as c:
+        response = await c.post("/api/scrcpy/client/enroll/tv-sala", json={
+            "token": token, "client_name": "PC-01", "public_key": _public_key(),
+        })
+    assert response.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_list_and_revoke_enrollment_require_session(auth_header, setup_device, tmp_path, monkeypatch):
+    EnrollmentStore._tokens.clear()
+    monkeypatch.setattr(enrollment_module, "get_data_dir", lambda: tmp_path)
+    store = EnrollmentStore()
+    from app.managers.adb_enrollment import normalize_adb_public_key
+    normalized, fingerprint = normalize_adb_public_key(_public_key(), "PC-01")
+    registered = store.register("tv-sala", "PC-01", normalized, fingerprint, "admin")
+    revoke = AsyncMock(return_value={"success": True})
+    monkeypatch.setattr(ADBKeyProvisioner, "revoke", revoke)
+
+    async with await _client() as c:
+        unauthorized = await c.get("/api/scrcpy/client/enrollments")
+        listed = await c.get("/api/scrcpy/client/enrollments", headers=auth_header)
+        removed = await c.delete(
+            f"/api/scrcpy/client/enrollments/{registered['id']}/tv-sala", headers=auth_header,
+        )
+
+    assert unauthorized.status_code == 401
+    assert listed.status_code == 200
+    assert "public_key" not in listed.json()["clients"][0]
+    assert removed.status_code == 200
+    assert EnrollmentStore().get_client(registered["id"]) is None
+    revoke.assert_awaited_once()
