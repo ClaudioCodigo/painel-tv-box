@@ -23,7 +23,7 @@ See: .planning/PROJECT.md (updated 2026-08-06)
 Phase: 1-3 of 3 (todas concluidas — instalador, refatoracao, docs)
 Plan: executado (install.ps1 + instalar.bat + refactor + docs)
 Status: Done - aguardando commit/push
-Last activity: 2026-08-31 - Completed quick task 260831-m6z: cliente scrcpy instalado uma vez, Start pelo painel e revogação visual
+Last activity: 2026-08-31 - Resolved debug update-nssm-nao-reinicia: restart externo via tarefa SYSTEM
 
 Progress: [░░░░░░░░░░] 0%
 

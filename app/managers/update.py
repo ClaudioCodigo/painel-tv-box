@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 import logging
 import os
 from pathlib import Path
+import secrets
 import shutil
 import sys
 import time
@@ -251,28 +252,61 @@ class UpdateManager:
             return {"ok": False, "error": str(e)}
 
     async def _schedule_restart(self) -> str:
-        """Agenda reinício do serviço Windows via NSSM se disponível."""
-        from app.utils.system import find_nssm
+        """Agenda reinício fora da árvore do serviço usando uma tarefa SYSTEM."""
+        from app.utils.system import find_nssm, get_data_dir
 
         nssm = find_nssm()
         if not nssm:
             return "NSSM não encontrado — reinicie manualmente se necessário"
 
-        async def _restart_delayed():
-            await asyncio.sleep(2)
-            try:
-                logger.info("Executando reinício do serviço panel-tvbox via NSSM...")
-                proc = await asyncio.create_subprocess_exec(
-                    nssm, "restart", "panel-tvbox",
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                )
-                await asyncio.wait_for(proc.wait(), timeout=15)
-            except Exception as e:
-                logger.warning("Falha no restart agendado via NSSM: %s", e)
+        task_name = f"PanelTVBox-Restart-{secrets.token_hex(6)}"
+        restart_dir = get_data_dir() / "update"
+        restart_dir.mkdir(parents=True, exist_ok=True)
+        script_path = restart_dir / f"{task_name}.cmd"
+        script = (
+            "@echo off\r\n"
+            f'"{nssm}" stop panel-tvbox\r\n'
+            "timeout.exe /t 5 /nobreak >nul\r\n"
+            f'"{nssm}" start panel-tvbox\r\n'
+            f'schtasks.exe /delete /tn "{task_name}" /f >nul 2>&1\r\n'
+            'del /q "%~f0" >nul 2>&1\r\n'
+        )
+        script_path.write_text(script, encoding="utf-8")
 
-        asyncio.create_task(_restart_delayed())
-        return "Serviço panel-tvbox será reiniciado em ~2s"
+        async def _schtasks(*args: str) -> tuple[int, str]:
+            proc = await asyncio.create_subprocess_exec(
+                "schtasks.exe", *args,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=15)
+            output = (stdout + stderr).decode(errors="replace").strip()
+            return proc.returncode, output
+
+        try:
+            code, output = await _schtasks(
+                "/create", "/tn", task_name, "/sc", "ONSTART",
+                "/ru", "SYSTEM", "/rl", "HIGHEST",
+                "/tr", f'"{script_path}"', "/f",
+            )
+            if code != 0:
+                script_path.unlink(missing_ok=True)
+                logger.warning("Falha ao criar tarefa de restart: %s", output)
+                return f"Falha ao agendar reinício: {output[:300]}"
+
+            code, output = await _schtasks("/run", "/tn", task_name)
+            if code != 0:
+                await _schtasks("/delete", "/tn", task_name, "/f")
+                script_path.unlink(missing_ok=True)
+                logger.warning("Falha ao disparar tarefa de restart: %s", output)
+                return f"Falha ao iniciar reinício agendado: {output[:300]}"
+        except Exception as exc:
+            script_path.unlink(missing_ok=True)
+            logger.warning("Falha ao agendar restart externo: %s", exc)
+            return f"Falha ao agendar reinício: {exc}"
+
+        logger.info("Tarefa SYSTEM %s disparada para reiniciar panel-tvbox", task_name)
+        return "Serviço panel-tvbox será reiniciado externamente em ~5s"
 
     def get_status(self) -> dict:
         return self._status

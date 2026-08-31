@@ -9,6 +9,7 @@ import httpx
 from app.managers.update import UpdateManager
 from app.main import app
 import app.core.auth as auth
+import app.managers.update as update_module
 
 
 @pytest.fixture
@@ -149,6 +150,61 @@ async def test_update_apply_validation_failure_rollback(dummy_project, monkeypat
     assert res["success"] is False
     assert res["rolled_back"] is True
     assert "SyntaxError" in res["error"]
+
+
+@pytest.mark.asyncio
+async def test_schedule_restart_uses_system_task_outside_service_tree(tmp_path, monkeypatch):
+    """Restart usa tarefa SYSTEM e script independente, não filho atrasado do painel."""
+    monkeypatch.setattr("app.utils.system.find_nssm", lambda: r"C:\PanelTVBox\bin\nssm.exe")
+    monkeypatch.setattr("app.utils.system.get_data_dir", lambda: tmp_path)
+    calls = []
+
+    class FakeProcess:
+        returncode = 0
+
+        async def communicate(self):
+            return b"SUCCESS", b""
+
+    async def fake_exec(*args, **kwargs):
+        calls.append(args)
+        return FakeProcess()
+
+    monkeypatch.setattr(update_module.asyncio, "create_subprocess_exec", fake_exec)
+    result = await UpdateManager(dummy_project)._schedule_restart()
+
+    assert "externamente" in result
+    assert calls[0][0:2] == ("schtasks.exe", "/create")
+    assert "SYSTEM" in calls[0]
+    assert "ONSTART" in calls[0]
+    assert calls[1][0:2] == ("schtasks.exe", "/run")
+    scripts = list((tmp_path / "update").glob("*.cmd"))
+    assert len(scripts) == 1
+    content = scripts[0].read_text(encoding="utf-8")
+    assert 'nssm.exe" stop panel-tvbox' in content
+    assert "timeout.exe /t 5" in content
+    assert 'nssm.exe" start panel-tvbox' in content
+    assert "schtasks.exe /delete" in content
+
+
+@pytest.mark.asyncio
+async def test_schedule_restart_cleans_script_when_task_creation_fails(tmp_path, monkeypatch):
+    monkeypatch.setattr("app.utils.system.find_nssm", lambda: r"C:\PanelTVBox\bin\nssm.exe")
+    monkeypatch.setattr("app.utils.system.get_data_dir", lambda: tmp_path)
+
+    class FailedProcess:
+        returncode = 1
+
+        async def communicate(self):
+            return b"", b"Access denied"
+
+    async def fake_exec(*args, **kwargs):
+        return FailedProcess()
+
+    monkeypatch.setattr(update_module.asyncio, "create_subprocess_exec", fake_exec)
+    result = await UpdateManager(dummy_project)._schedule_restart()
+
+    assert "Falha ao agendar" in result
+    assert list((tmp_path / "update").glob("*.cmd")) == []
 
 
 @pytest.mark.asyncio
