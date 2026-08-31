@@ -159,7 +159,7 @@ class UpdateManager:
                     }
 
                 stash_out, stash_err, stash_code = await self._run_git(
-                    "stash", "push", "-u", "-m", f"panel-auto-update-{int(time.time())}",
+                    "stash", "push", "-m", f"panel-auto-update-{int(time.time())}",
                 )
                 if stash_code != 0:
                     return {

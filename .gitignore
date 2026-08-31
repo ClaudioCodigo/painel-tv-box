@@ -11,6 +11,7 @@ venv/
 logs/
 *.log
 backups/
+bin/
 
 # scrcpy é runtime local (versões baixadas por máquina/SO — não versionar)
 scrcpy/

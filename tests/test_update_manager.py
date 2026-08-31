@@ -110,6 +110,8 @@ async def test_update_apply_success(dummy_project, monkeypatch):
     assert any(call[:2] == ("fetch", "origin") for call in calls)
     assert ("reset", "--hard", "origin/main") in calls
     assert not any(call[0] == "pull" for call in calls)
+    stash_call = next(call for call in calls if call[:2] == ("stash", "push"))
+    assert "-u" not in stash_call
 
 
 @pytest.mark.asyncio
