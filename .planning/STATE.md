@@ -23,7 +23,7 @@ See: .planning/PROJECT.md (updated 2026-08-06)
 Phase: 1-3 of 3 (todas concluidas — instalador, refatoracao, docs)
 Plan: executado (install.ps1 + instalar.bat + refactor + docs)
 Status: Done - aguardando commit/push
-Last activity: 2026-08-31 - Completed quick task 260831-k17: matrícula scrcpy com chave ADB por estação
+Last activity: 2026-08-31 - Completed quick task 260831-m6z: cliente scrcpy instalado uma vez, Start pelo painel e revogação visual
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -75,6 +75,7 @@ None yet.
 |------|------|--------|--------|
 | 2026-08-12 | Mitigar rede que não sobe no boot em TV boxes Allwinner (netwatch/restart_eth) | `a4f5a05` | complete |
 | 2026-08-31 | Matrícula scrcpy com chave ADB por estação, token descartável e Magisk | `2f2a200` | Verified |
+| 2026-08-31 | Cliente scrcpy instalado uma vez, Start pelo painel e revogação visual | `5ecd9a5` | Verified |
 
 ## Deferred Items
 
