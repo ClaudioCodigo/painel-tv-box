@@ -181,7 +181,8 @@ async def test_schedule_restart_uses_system_task_outside_service_tree(tmp_path, 
     assert len(scripts) == 1
     content = scripts[0].read_text(encoding="utf-8")
     assert 'nssm.exe" stop panel-tvbox' in content
-    assert "timeout.exe /t 5" in content
+    assert "ping.exe -n 6 127.0.0.1" in content
+    assert "timeout.exe" not in content
     assert 'nssm.exe" start panel-tvbox' in content
     assert "schtasks.exe /delete" in content
 

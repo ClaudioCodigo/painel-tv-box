@@ -266,7 +266,7 @@ class UpdateManager:
         script = (
             "@echo off\r\n"
             f'"{nssm}" stop panel-tvbox\r\n'
-            "timeout.exe /t 5 /nobreak >nul\r\n"
+            "ping.exe -n 6 127.0.0.1 >nul\r\n"
             f'"{nssm}" start panel-tvbox\r\n'
             f'schtasks.exe /delete /tn "{task_name}" /f >nul 2>&1\r\n'
             'del /q "%~f0" >nul 2>&1\r\n'
