@@ -138,8 +138,11 @@ async def test_get_bundle_success(auth_header, setup_device, tmp_path, monkeypat
         bat_content = zf.read(bat_files[0]).decode("utf-8")
         assert "192.168.254.150:5555" in bat_content
         assert "scrcpy\\scrcpy.exe" in bat_content
-        assert "ADB_VENDOR_KEYS" in bat_content
+        assert 'set "ADB_VENDOR_KEYS=%~dp0credencial\\adbkey"' in bat_content
         assert "matricular.ps1" in bat_content
+        assert "get-state" in bat_content
+        assert 'findstr /x /c:"device"' in bat_content
+        assert 'del /q "credencial\\.matriculado"' in bat_content
 
         enroll_content = zf.read("matricular.ps1").decode("utf-8-sig")
         assert "$KeyPath + '.pub'" in enroll_content

@@ -51,7 +51,7 @@ def _generate_launcher(ip: str, port: int, name: str, enrollment: bool = False) 
         exit /b 1
     )
 )
-set "ADB_VENDOR_KEYS=%~dp0credencial"
+set "ADB_VENDOR_KEYS=%~dp0credencial\adbkey"
 set "ADB_SERVER_PORT=5037"
 scrcpy\adb.exe kill-server >nul 2>&1
 '''
@@ -68,10 +68,13 @@ cd /d "%~dp0"
 {enrollment_block}echo Chave ADB local: %~dp0credencial
 echo Conectando ao TV Box via ADB...
 scrcpy\\adb.exe connect {ip}:{port}
-if %errorlevel% neq 0 (
+scrcpy\\adb.exe -s {ip}:{port} get-state 2>nul | findstr /x /c:"device" >nul
+if errorlevel 1 (
     echo.
-    echo [ERRO] Nao foi possivel conectar ao TV Box no endereco {ip}:{port}.
-    echo Verifique se o TV Box esta ligado e na mesma rede que este computador.
+    echo [ERRO] O TV Box nao aceitou a chave ADB deste computador.
+    echo A matricula local sera renovada no proximo pacote.
+    del /q "credencial\\.matriculado" >nul 2>&1
+    echo Baixe novamente o pacote no painel e tente outra vez.
     echo.
     pause
     exit /b 1
