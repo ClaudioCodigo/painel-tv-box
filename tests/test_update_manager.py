@@ -82,12 +82,17 @@ async def test_update_check_with_changelog(dummy_project, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_update_apply_success(dummy_project, monkeypatch):
-    """Update apply faz backup da config, executa git pull, valida e recarrega."""
+    """Update apply preserva locais, sincroniza origin/main, valida e recarrega."""
     (dummy_project / ".git").mkdir()
     mgr = UpdateManager(project_root=dummy_project)
 
+    calls = []
+
     async def mock_run_git(*args, timeout=None):
-        return "Already up to date.\n", "", 0
+        calls.append(args)
+        if args[0] == "rev-parse":
+            return "abc123\n", "", 0
+        return "Updated to origin/main.\n", "", 0
 
     async def mock_validate():
         return {"ok": True}
@@ -102,24 +107,26 @@ async def test_update_apply_success(dummy_project, monkeypatch):
     backup_path = Path(res["backup"])
     assert backup_path.is_dir()
     assert (backup_path / "config" / "system.yml").is_file()
+    assert any(call[:2] == ("fetch", "origin") for call in calls)
+    assert ("reset", "--hard", "origin/main") in calls
+    assert not any(call[0] == "pull" for call in calls)
 
 
 @pytest.mark.asyncio
-async def test_update_apply_git_failure_rollback(dummy_project, monkeypatch):
-    """Se o git pull falhar, executa reset --hard HEAD e retorna erro com flag de rollback."""
+async def test_update_apply_sync_failure_rolls_back_exact_previous_head(dummy_project, monkeypatch):
+    """Falha ao sincronizar restaura o SHA exato anterior, sem merge."""
     (dummy_project / ".git").mkdir()
     mgr = UpdateManager(project_root=dummy_project)
 
-    reset_called = False
+    calls = []
 
     async def mock_run_git(*args, timeout=None):
-        nonlocal reset_called
+        calls.append(args)
         cmd = args[0]
-        if cmd == "pull":
-            return "", "error: conflito de merge\n", 1
-        elif cmd == "reset":
-            reset_called = True
-            return "HEAD is now at abc", "", 0
+        if cmd == "rev-parse":
+            return "local123\n", "", 0
+        if args == ("reset", "--hard", "origin/main"):
+            return "", "disk error\n", 1
         return "", "", 0
 
     monkeypatch.setattr(mgr, "_run_git", mock_run_git)
@@ -127,8 +134,9 @@ async def test_update_apply_git_failure_rollback(dummy_project, monkeypatch):
     res = await mgr.apply()
     assert res["success"] is False
     assert res["rolled_back"] is True
-    assert reset_called is True
-    assert "conflito" in res["error"]
+    assert ("reset", "--hard", "local123") in calls
+    assert "origin/main" in res["error"]
+    assert not any(call[0] == "pull" for call in calls)
 
 
 @pytest.mark.asyncio
@@ -138,6 +146,8 @@ async def test_update_apply_validation_failure_rollback(dummy_project, monkeypat
     mgr = UpdateManager(project_root=dummy_project)
 
     async def mock_run_git(*args, timeout=None):
+        if args[0] == "rev-parse":
+            return "previous456\n", "", 0
         return "Update pulled.\n", "", 0
 
     async def mock_validate():

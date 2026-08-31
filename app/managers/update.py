@@ -136,7 +136,7 @@ class UpdateManager:
             return self._status
 
     async def apply(self) -> dict:
-        """Aplica atualização: backup de config -> git pull -> validação -> migração -> agendamento de restart."""
+        """Aplica atualização sincronizando o código publicado sem merges no servidor."""
         async with self._lock:
             try:
                 # 1. Backup de segurança das configurações locais
@@ -148,19 +148,43 @@ class UpdateManager:
                     self._status["backup_path"] = str(backup_dir)
                     logger.info("Backup pré-update salvo em %s", backup_dir)
 
-                # 2. git stash (guarda alterações locais não commitadas)
-                await self._run_git("stash")
-
-                # 3. git pull origin main
-                out, err, code = await self._run_git("pull", "origin", "main")
-                output = (out + err).strip()
-
-                if code != 0:
-                    # Rollback imediato do git
-                    await self._run_git("reset", "--hard", "HEAD")
+                # 2. Guarda o ponto exato de rollback e alterações locais.
+                old_out, old_err, old_code = await self._run_git("rev-parse", "HEAD")
+                previous_head = old_out.strip()
+                if old_code != 0 or not previous_head:
                     return {
                         "success": False,
-                        "error": f"git pull falhou: {output}",
+                        "error": f"Não foi possível identificar o HEAD atual: {(old_out + old_err).strip()}",
+                        "rolled_back": False,
+                    }
+
+                stash_out, stash_err, stash_code = await self._run_git(
+                    "stash", "push", "-u", "-m", f"panel-auto-update-{int(time.time())}",
+                )
+                if stash_code != 0:
+                    return {
+                        "success": False,
+                        "error": f"Não foi possível preservar alterações locais: {(stash_out + stash_err).strip()}",
+                        "rolled_back": False,
+                    }
+
+                # 3. Servidor instalado segue exatamente origin/main. Não há
+                # merge: commits locais continuam recuperáveis pelo reflog.
+                fetch_out, fetch_err, fetch_code = await self._run_git("fetch", "origin", "main")
+                if fetch_code != 0:
+                    return {
+                        "success": False,
+                        "error": f"git fetch falhou: {(fetch_out + fetch_err).strip()}",
+                        "rolled_back": False,
+                    }
+
+                out, err, code = await self._run_git("reset", "--hard", "origin/main")
+                output = (out + err).strip()
+                if code != 0:
+                    await self._run_git("reset", "--hard", previous_head)
+                    return {
+                        "success": False,
+                        "error": f"Sincronização com origin/main falhou: {output}",
                         "rolled_back": True,
                     }
 
@@ -168,7 +192,7 @@ class UpdateManager:
                 validation = await self._validate_post_update()
                 if not validation.get("ok"):
                     logger.error("Validação pós-update falhou: %s. Revertendo commit...", validation.get("error"))
-                    await self._run_git("reset", "--hard", "HEAD~1")
+                    await self._run_git("reset", "--hard", previous_head)
                     if backup_dir.is_dir() and (backup_dir / "config").is_dir():
                         shutil.copytree(backup_dir / "config", config_dir, dirs_exist_ok=True)
                     return {
