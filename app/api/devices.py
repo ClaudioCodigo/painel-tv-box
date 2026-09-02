@@ -136,9 +136,6 @@ async def create_device(data: dict):
     except Exception as e:
         raise HTTPException(422, f"Erro de validação: {e}")
 
-    if device.mode == "web" and not device.target_url:
-        raise HTTPException(422, "target_url é obrigatório quando mode='web'")
-
     try:
         config.add_device(device)
     except ValueError as e:
@@ -184,9 +181,6 @@ async def update_device(device_id: str, data: dict):
 
     if updated is None:
         raise HTTPException(500, "Falha ao atualizar dispositivo")
-
-    if updated.mode == "web" and not updated.target_url:
-        raise HTTPException(422, "target_url é obrigatório quando mode='web'")
 
     # Se mudou IP, o watchdog precisa re-monitorar (o loop lê o config fresco
     # a cada iteração, mas garante que a task existe)
