@@ -22,6 +22,7 @@ from app.api.scrcpy import router as scrcpy_router
 from app.api.client_bundle import router as client_bundle_router
 from app.api.auth import router as auth_router
 from app.api.heartbeat import router as heartbeat_router
+from app.api.signage import router as signage_router
 
 
 @asynccontextmanager
@@ -50,10 +51,11 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 STATIC_DIR = PROJECT_ROOT / "static"
 TEMPLATES_DIR = PROJECT_ROOT / "templates"
 
-# Registra routers (todos exigem autenticação, exceto /api/auth, /api/heartbeat
-# e os caminhos públicos tratados dentro de require_auth)
+# Registra routers (todos exigem autenticação, exceto /api/auth, /api/heartbeat,
+# /signage e os caminhos públicos tratados dentro de require_auth)
 app.include_router(auth_router)
 app.include_router(heartbeat_router)  # chave dedicada própria — NÃO usa o token do painel
+app.include_router(signage_router)    # página wrapper e websocket de signage acessados pelos TV Boxes
 app.include_router(devices_router, dependencies=[Depends(require_auth)])
 app.include_router(system_router, dependencies=[Depends(require_auth)])
 app.include_router(wizard_router, dependencies=[Depends(require_auth)])

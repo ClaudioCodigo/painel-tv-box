@@ -116,13 +116,11 @@ class RecoveryService:
         return {"success": False, "method": "exhausted", "steps_taken": steps_taken, "status": final_status}
 
     async def _reopen_stream(self, device: DeviceConfig) -> dict:
-        """Reabre a stream SEM derrubar o scrcpy (regra ADB×scrcpy):
+        """Reabre o conteúdo (stream ou web) SEM derrubar o scrcpy (regra ADB×scrcpy):
 
         - scrcpy ativo → enfileira via canal de comandos (o device executa
           localmente; zero ADB painel→device — ADB derrubaria o mirror);
-        - senão → ADB direto (síncrono e confiável — o caminho histórico;
-          o canal de comandos tem latência de ~20s e sem verificação, o que
-          causava o loop de force-stop quando o heartbeat ficava fresco).
+        - senão → ADB direto (síncrono e confiável).
         """
         from datetime import datetime
 
@@ -138,16 +136,15 @@ class RecoveryService:
                 return {"success": False, "error": "player não encontrado em players.yml"}
             from app.services import command_queue as cq
 
-            # Evita enfileirar start_stream duplicado: o comando pendente será
-            # executado pelo device no próximo poll do heartbeat (~20s). Se
-            # enfileirar de novo, o am force-stop do novo comando mata o VLC
-            # que acabou de subir → loop de restart (observado 13/08).
+            # Evita enfileirar comando duplicado
             if await cq.pending(device.id):
                 return {"success": True, "method": "heartbeat_queue", "already_queued": True}
             item = await cq.enqueue(device.id, "start_stream", cmd)
             return {"success": True, "method": "heartbeat_queue", "queued": item["id"]}
 
         if self.player:
+            if getattr(device, "mode", "stream") == "web":
+                return await self.player.start_web(device)
             return await self.player.start_stream(device)
         return {"success": False, "error": "player config ausente"}
 

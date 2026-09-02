@@ -149,7 +149,7 @@ const DEVICES = (() => {
             </div>
             <div class="card-info dcard-meta">
                 <div class="card-info-item"><span class="card-info-key">IP</span><span class="card-info-val">${UI.escapeHtml(d.ip || '--')}</span></div>
-                <div class="card-info-item"><span class="card-info-key">Player</span><span class="card-info-val">${UI.escapeHtml(d.player || 'vlc')}</span></div>
+                <div class="card-info-item"><span class="card-info-key">Exibição</span><span class="card-info-val">${(d.mode === 'web') ? '🌐 Web Kiosk' : UI.escapeHtml(d.player || 'vlc')}</span></div>
                 <div class="card-info-item"><span class="card-info-key">Grupo</span><span class="card-info-val">${UI.escapeHtml(groupNames[d.group] || d.group || '--')}</span></div>
                 ${loc ? `<div class="card-info-item"><span class="card-info-key">Local</span><span class="card-info-val">${UI.escapeHtml(loc)}</span></div>` : ''}
             </div>

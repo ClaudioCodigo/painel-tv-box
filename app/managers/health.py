@@ -156,27 +156,42 @@ class HealthManager:
             except Exception:
                 results["activity"] = ""
 
-        # 5. MediaMTX path — readers indicam stream ativa
-        if self.mediamtx:
-            try:
-                paths_resp = await self.mediamtx.list_paths()
-                if paths_resp.get("success"):
-                    items = paths_resp.get("data", {}).get("items", [])
-                    for p in items:
-                        if p.get("name") == device.rtsp_path:
-                            results["mediamtx_path"] = p.get("ready", False) or p.get("online", False)
-                            results["tracks"] = len(p.get("tracks", []))
-                            results["readers"] = len(p.get("readers", []))
-                            results["stream_active"] = results["readers"] > 0
-                            break
-            except Exception as e:
-                logger.warning("MediaMTX check failed for %s: %s", device.id, e)
+        # 5. MediaMTX path — readers indicam stream ativa (apenas se mode == "stream")
+        device_mode = getattr(device, "mode", "stream")
+        results["mode"] = device_mode
 
-        # 6. Player OK?
-        if results.get("stream_active"):
-            results["player_ok"] = True
-        elif results["activity"] and device.player:
-            results["player_ok"] = device.player in results["activity"].lower()
+        if device_mode == "web":
+            # Web Signage: verifica ping WebSocket do wrapper HTML
+            signage_fresh = False
+            if device.state.last_signage_ping:
+                elapsed_signage = (datetime.now() - device.state.last_signage_ping).total_seconds()
+                signage_fresh = elapsed_signage < 30
+            results["signage_fresh"] = signage_fresh
+
+            browser_pkg = getattr(device, "web_browser", "chrome")
+            act_lower = (results["activity"] or "").lower()
+            results["player_ok"] = signage_fresh or ("chrome" in act_lower or "browser" in act_lower or browser_pkg in act_lower)
+        else:
+            if self.mediamtx:
+                try:
+                    paths_resp = await self.mediamtx.list_paths()
+                    if paths_resp.get("success"):
+                        items = paths_resp.get("data", {}).get("items", [])
+                        for p in items:
+                            if p.get("name") == device.rtsp_path:
+                                results["mediamtx_path"] = p.get("ready", False) or p.get("online", False)
+                                results["tracks"] = len(p.get("tracks", []))
+                                results["readers"] = len(p.get("readers", []))
+                                results["stream_active"] = results["readers"] > 0
+                                break
+                except Exception as e:
+                    logger.warning("MediaMTX check failed for %s: %s", device.id, e)
+
+            # 6. Player OK?
+            if results.get("stream_active"):
+                results["player_ok"] = True
+            elif results["activity"] and device.player:
+                results["player_ok"] = device.player in results["activity"].lower()
 
         # 7. Resolve status final
         results["status"], results["reason"] = self._resolve_status(results)
@@ -184,15 +199,22 @@ class HealthManager:
 
     def _resolve_status(self, r: dict) -> tuple[str, str]:
         """Retorna (status, motivo).
-        Prioridade: readers MediaMTX > activity Android > mediamtx_path.
+        Prioridade: Web Signage ping / readers MediaMTX > activity Android.
         """
         adb = r["adb"]
+        if not adb:
+            return ("offline", "Desconectado")
+
+        if r.get("mode") == "web":
+            if r.get("signage_fresh"):
+                return ("online", "Página web ativa ✅")
+            if r.get("activity"):
+                return ("degraded", "Browser aberto mas página sem resposta")
+            return ("degraded", "Browser fechado")
+
         readers = r.get("readers", 0)
         mtx_ready = r.get("mediamtx_path", False)
         act = r.get("activity", "") != ""
-
-        if not adb:
-            return ("offline", "Desconectado")
 
         # Stream com leitores → online
         if readers > 0 and mtx_ready:

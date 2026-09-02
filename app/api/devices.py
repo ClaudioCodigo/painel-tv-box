@@ -3,7 +3,7 @@
 import asyncio
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 from app.models.device import DeviceConfig
 from app.utils.system import slugify, is_safe_package
@@ -136,6 +136,9 @@ async def create_device(data: dict):
     except Exception as e:
         raise HTTPException(422, f"Erro de validação: {e}")
 
+    if device.mode == "web" and not device.target_url:
+        raise HTTPException(422, "target_url é obrigatório quando mode='web'")
+
     try:
         config.add_device(device)
     except ValueError as e:
@@ -181,6 +184,9 @@ async def update_device(device_id: str, data: dict):
 
     if updated is None:
         raise HTTPException(500, "Falha ao atualizar dispositivo")
+
+    if updated.mode == "web" and not updated.target_url:
+        raise HTTPException(422, "target_url é obrigatório quando mode='web'")
 
     # Se mudou IP, o watchdog precisa re-monitorar (o loop lê o config fresco
     # a cada iteração, mas garante que a task existe)
@@ -232,12 +238,12 @@ async def delete_device(device_id: str):
     return {"deleted": device_id}
 
 
-# ── Stream actions ────────────────────────────────
+# ── Stream & Web actions ──────────────────────────
 
 
 @router.post("/{device_id}/start-stream")
-async def device_start_stream(device_id: str):
-    """Abre stream no dispositivo."""
+async def device_start_stream(device_id: str, request: Request = None):
+    """Abre stream ou página web no dispositivo."""
     config = _get_config()
     device = config.get_device(device_id)
     if not device:
@@ -248,20 +254,22 @@ async def device_start_stream(device_id: str):
 
     adb = ADBManager()
 
+    panel_url = str(request.base_url).rstrip("/") if request else ""
     player = PlayerManager(
         adb_manager=adb,
         players_config=config.players,
         host_ip=config.system.host.ip if config.system else "192.168.254.102",
         rtsp_port=config.mediamtx.server.rtsp_port if config.mediamtx and hasattr(config.mediamtx, "server") else 8554,
+        panel_port=config.system.server.port if config.system and hasattr(config.system, "server") else 8080,
     )
 
-    result = await player.start_stream(device)
+    result = await player.start(device, panel_url=panel_url)
     return result
 
 
 @router.post("/{device_id}/stop-stream")
 async def device_stop_stream(device_id: str):
-    """Fecha stream no dispositivo."""
+    """Fecha stream ou página web no dispositivo."""
     config = _get_config()
     device = config.get_device(device_id)
     if not device:
@@ -273,7 +281,7 @@ async def device_stop_stream(device_id: str):
     adb = ADBManager()
     player = PlayerManager(adb_manager=adb, players_config=config.players)
 
-    result = await player.stop_stream(device)
+    result = await player.stop(device)
     return result
 
 

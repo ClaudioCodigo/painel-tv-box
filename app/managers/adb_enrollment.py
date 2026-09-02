@@ -141,7 +141,15 @@ class EnrollmentStore:
         tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
         tmp.replace(self.path)
 
-    def register(self, device_id: str, client_name: str, public_key: str, fingerprint: str, issued_by: str) -> dict:
+    def register(
+        self,
+        device_id: str,
+        client_name: str,
+        public_key: str,
+        fingerprint: str,
+        issued_by: str,
+        expires_at: Optional[float] = None,
+    ) -> dict:
         data = self._load()
         client_id = "ws-" + fingerprint.removeprefix("SHA256:")[:16].lower()
         client = data["clients"].get(client_id, {
@@ -157,6 +165,8 @@ class EnrollmentStore:
         client["public_key"] = public_key
         client["fingerprint"] = fingerprint
         client["last_enrolled_at"] = datetime.now(timezone.utc).isoformat()
+        if expires_at is not None:
+            client["expires_at"] = expires_at
         if device_id not in client["devices"]:
             client["devices"].append(device_id)
             client["devices"].sort()
@@ -191,6 +201,36 @@ class EnrollmentStore:
             data["clients"].pop(client_id, None)
         self._save(data)
         return dict(client)
+
+    async def cleanup_expired(self, provisioner: Optional["ADBKeyProvisioner"] = None) -> list[str]:
+        """Revoga e remove estações cujo expires_at já passou."""
+        data = self._load()
+        now = time.time()
+        expired_ids = []
+
+        import app.main
+
+        cfg = getattr(app.main, "config", None)
+        prov = provisioner or ADBKeyProvisioner()
+
+        for client_id, client in list(data["clients"].items()):
+            exp = client.get("expires_at")
+            if exp and exp < now:
+                expired_ids.append(client_id)
+                # Tenta revogar nos devices
+                if cfg:
+                    for dev_id in client.get("devices", []):
+                        dev = cfg.get_device(dev_id)
+                        if dev:
+                            try:
+                                await prov.revoke(dev.ip, dev.adb_port, client["public_key"])
+                            except Exception:
+                                pass
+                data["clients"].pop(client_id, None)
+
+        if expired_ids:
+            self._save(data)
+        return expired_ids
 
 
 class ADBKeyProvisioner:

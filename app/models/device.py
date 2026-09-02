@@ -22,6 +22,7 @@ class DeviceState(BaseModel):
     status: str = "unknown"  # online | degraded | warning | offline | unknown
     last_seen: Optional[datetime] = None
     last_heartbeat: Optional[datetime] = None  # batida HTTP do device (sem ADB)
+    last_signage_ping: Optional[datetime] = None  # último ping do wrapper WebSocket da página web
     last_recovery_time: Optional[datetime] = None
     reboot_count: int = 0
     current_activity: str = ""
@@ -45,6 +46,9 @@ class DeviceConfig(BaseModel):
     group: str = ""
     rtsp_path: str = ""
     player: str = "vlc"
+    mode: str = "stream"  # "stream" | "web"
+    target_url: str = ""  # URL exibida quando mode="web"
+    web_browser: str = "chrome"  # "chrome" | "webview"
     root: bool = False
     recovery_enabled: bool = True  # watchdog reabre stream em degraded/offline
     capabilities: DeviceCapabilities = Field(default_factory=DeviceCapabilities)

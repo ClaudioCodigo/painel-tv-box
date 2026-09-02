@@ -77,7 +77,7 @@ const DEVICE_PAGE = (() => {
 
                 <div class="device-tabs" role="tablist" aria-label="Seções do dispositivo">
                     <button class="tab-pill active" data-tab="visao" role="tab" aria-selected="true" onclick="DEVICE_PAGE.switchTab('visao')">Visão geral</button>
-                    <button class="tab-pill" data-tab="stream" role="tab" aria-selected="false" onclick="DEVICE_PAGE.switchTab('stream')">Stream</button>
+                    <button class="tab-pill" data-tab="stream" role="tab" aria-selected="false" onclick="DEVICE_PAGE.switchTab('stream')">Conteúdo</button>
                     <button class="tab-pill" data-tab="apps" role="tab" aria-selected="false" onclick="DEVICE_PAGE.switchTab('apps')">Apps</button>
                     <button class="tab-pill" data-tab="shell" role="tab" aria-selected="false" onclick="DEVICE_PAGE.switchTab('shell')">Shell</button>
                     <button class="tab-pill" data-tab="screenshots" role="tab" aria-selected="false" onclick="DEVICE_PAGE.switchTab('screenshots')">Screenshots</button>
@@ -130,6 +130,7 @@ const DEVICE_PAGE = (() => {
 
     function renderVisao(container, device) {
         const st = device.state || {};
+        const isWeb = (device.mode || 'stream') === 'web';
         container.innerHTML = `
             <div class="device-grid">
                 <div class="device-info-card">
@@ -141,17 +142,23 @@ const DEVICE_PAGE = (() => {
                     <div class="info-row"><span class="info-key">Local</span><span class="info-val">${UI.escapeHtml(device.location || '--')}</span></div>
                 </div>
                 <div class="device-info-card">
-                    <h3>${UI.icon('monitor')} Config Stream</h3>
+                    <h3>${UI.icon('monitor')} Configuração de Exibição</h3>
+                    <div class="info-row"><span class="info-key">Modo</span><span class="info-val">${isWeb ? '🌐 Página Web (Kiosk)' : '📺 Stream RTSP'}</span></div>
+                    ${isWeb ? `
+                    <div class="info-row"><span class="info-key">URL Alvo</span><span class="info-val" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${UI.escapeHtml(device.target_url || '')}">${UI.escapeHtml(device.target_url || '--')}</span></div>
+                    <div class="info-row"><span class="info-key">Browser</span><span class="info-val">${UI.escapeHtml(device.web_browser || 'chrome')}</span></div>
+                    ` : `
                     <div class="info-row"><span class="info-key">Path RTSP</span><span class="info-val">${UI.escapeHtml(device.rtsp_path || '--')}</span></div>
                     <div class="info-row"><span class="info-key">Player</span><span class="info-val">${UI.escapeHtml(device.player || 'vlc')}</span></div>
+                    `}
                     <div class="info-row"><span class="info-key">Root</span><span class="info-val" id="d-root">--</span></div>
                     <div class="info-row"><span class="info-key">Modelo</span><span class="info-val" id="d-model">--</span></div>
-                    <div class="info-row"><span class="info-key">Porta ADB</span><span class="info-val">${device.adb_port}</span></div>
                 </div>
             </div>
             <div class="device-info-card full" style="margin-top:var(--space-4)">
                 <h3>${UI.icon('clock')} Linha de vida</h3>
-                <div class="info-row"><span class="info-key">Heartbeat</span><span class="info-val" id="d-heartbeat">${st.last_heartbeat ? freshness({ last_heartbeat: st.last_heartbeat }) : '—'}</span></div>
+                <div class="info-row"><span class="info-key">Heartbeat OS</span><span class="info-val" id="d-heartbeat">${st.last_heartbeat ? freshness({ last_heartbeat: st.last_heartbeat }) : '—'}</span></div>
+                ${isWeb ? `<div class="info-row"><span class="info-key">Ping Página Web</span><span class="info-val" id="d-signage-ping">${st.last_signage_ping ? freshness({ last_heartbeat: st.last_signage_ping }) : '—'}</span></div>` : ''}
                 <div class="info-row"><span class="info-key">Última recuperação</span><span class="info-val">${st.last_recovery_time ? freshness({ last_recovery_time: st.last_recovery_time }) : '—'}</span></div>
                 <div class="info-row"><span class="info-key">Reboots (watchdog)</span><span class="info-val">${st.reboot_count || 0}</span></div>
             </div>
@@ -160,32 +167,61 @@ const DEVICE_PAGE = (() => {
 
     function renderStream(container, device) {
         const st = device.state || {};
+        const isWeb = (device.mode || 'stream') === 'web';
         container.innerHTML = `
             <div class="device-grid">
                 <div class="device-info-card">
-                    <h3>${UI.icon('monitor')} Status do stream</h3>
-                    <div class="info-row"><span class="info-key">Atividade em foco</span><span class="info-val" id="d-activity">${UI.escapeHtml(st.current_activity || '—')}</span></div>
+                    <h3>${UI.icon('monitor')} Modo de Operação</h3>
+                    <div style="display:flex;gap:12px;margin:var(--space-3) 0">
+                        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                            <input type="radio" name="d-mode-select" value="stream" ${!isWeb ? 'checked' : ''} onchange="DEVICE_PAGE.setMode('stream')">
+                            <span>📺 Stream RTSP (VLC/MPV)</span>
+                        </label>
+                        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                            <input type="radio" name="d-mode-select" value="web" ${isWeb ? 'checked' : ''} onchange="DEVICE_PAGE.setMode('web')">
+                            <span>🌐 Página Web (Kiosk)</span>
+                        </label>
+                    </div>
+
+                    ${isWeb ? `
+                    <div style="margin-top:var(--space-3);border-top:1px solid var(--border-subtle);padding-top:var(--space-3)">
+                        <label class="form-label" style="font-size:12px;font-weight:600">URL da Página Web</label>
+                        <input type="url" id="d-web-url" class="input-field" style="width:100%;margin-bottom:8px" placeholder="https://app.powerbi.com/view?r=..." value="${UI.escapeHtml(device.target_url || '')}">
+                        <div style="display:flex;gap:8px;align-items:center">
+                            <label style="font-size:12px">Browser:</label>
+                            <select id="d-web-browser" class="input-field" style="padding:4px 8px">
+                                <option value="chrome" ${device.web_browser === 'chrome' ? 'selected' : ''}>Google Chrome</option>
+                                <option value="browser" ${device.web_browser === 'browser' ? 'selected' : ''}>Navegador Padrão</option>
+                            </select>
+                            <button class="btn btn-primary btn-sm" onclick="DEVICE_PAGE.saveWebConfig()">Salvar Configuração Web</button>
+                        </div>
+                    </div>
+                    ` : `
                     <div class="info-row"><span class="info-key">Player</span><span class="info-val">${UI.escapeHtml(device.player || 'vlc')}</span></div>
                     <div class="info-row"><span class="info-key">Path RTSP</span><span class="info-val">${UI.escapeHtml(device.rtsp_path || '—')}</span></div>
                     <div class="info-row"><span class="info-key">Args extras</span><span class="info-val">${UI.escapeHtml(device.player_extra_args || '—')}</span></div>
+                    `}
+                    <div class="info-row" style="margin-top:var(--space-2)"><span class="info-key">Atividade em foco</span><span class="info-val" id="d-activity">${UI.escapeHtml(st.current_activity || '—')}</span></div>
                 </div>
                 <div class="device-info-card">
-                    <h3>${UI.icon('play')} Controle</h3>
-                    <p class="text-muted text-sm" style="margin-bottom:var(--space-3)">Abre ou fecha o stream no TV Box (VLC/MPV).</p>
+                    <h3>${UI.icon('play')} Controle de Exibição</h3>
+                    <p class="text-muted text-sm" style="margin-bottom:var(--space-3)">
+                        ${isWeb ? 'Abre ou fecha a página Web Kiosk no TV Box via browser.' : 'Abre ou fecha o stream RTSP no TV Box (VLC/MPV).'}
+                    </p>
                     <div style="display:flex;gap:8px;flex-wrap:wrap">
-                        <button class="btn btn-primary btn-sm" onclick="DEVICE_PAGE.action('start-stream')">${UI.icon('play')} Iniciar</button>
-                        <button class="btn btn-secondary btn-sm" onclick="DEVICE_PAGE.action('stop-stream')">${UI.icon('stop')} Parar</button>
+                        <button class="btn btn-primary btn-sm" onclick="DEVICE_PAGE.action('start-stream')">${UI.icon('play')} ${isWeb ? 'Abrir Página' : 'Iniciar Stream'}</button>
+                        <button class="btn btn-secondary btn-sm" onclick="DEVICE_PAGE.action('stop-stream')">${UI.icon('stop')} ${isWeb ? 'Fechar Browser' : 'Parar Stream'}</button>
                     </div>
                     <div class="info-row" style="margin-top:var(--space-4);border-top:1px solid var(--border-subtle);padding-top:var(--space-3)">
-                        <span class="info-key">Recuperação automática da stream</span>
+                        <span class="info-key">Recuperação automática</span>
                         <span class="info-val">
-                            <label class="switch" title="Watchdog reabre o player se a stream cair">
+                            <label class="switch" title="Watchdog reabre o conteúdo se cair">
                                 <input type="checkbox" id="d-recovery-toggle" ${device.recovery_enabled === false ? '' : 'checked'} onchange="DEVICE_PAGE.toggleRecovery(this.checked)">
                                 <span class="switch-slider" aria-hidden="true"></span>
                             </label>
                         </span>
                     </div>
-                    <p class="text-muted text-sm" style="margin-top:6px">Desative se a stream foi fechada de propósito — evita que o watchdog fique tentando reabrir.</p>
+                    <p class="text-muted text-sm" style="margin-top:6px">Desative se o conteúdo foi pausado de propósito — evita que o watchdog fique tentando reabrir.</p>
                 </div>
             </div>
         `;
@@ -472,10 +508,43 @@ const DEVICE_PAGE = (() => {
         output.scrollTop = output.scrollHeight;
     }
 
-    function clearShell() {
-        const output = document.getElementById('d-shell-out');
-        if (output) output.textContent = 'Shell limpo.';
+    async function setMode(mode) {
+        try {
+            await API.put(`/devices/${deviceId}`, { mode: mode });
+            UI.createToast(mode === 'web' ? 'Modo alterado para Página Web' : 'Modo alterado para Stream RTSP', 'success');
+            const container = document.getElementById('device-tab-content');
+            if (container) {
+                const device = await API.get(`/devices/${deviceId}`);
+                renderStream(container, device);
+            }
+        } catch (e) {
+            UI.createToast(`Erro: ${e.message}`, 'error');
+        }
     }
 
-    return { render, destroy, switchTab, refreshStatus, action, captureScreenshot, installApp, loadApps, uninstallApp, provisionScripts, deleteDevice, runShell, clearShell, toggleRecovery };
+    async function saveWebConfig() {
+        const urlInput = document.getElementById('d-web-url');
+        const browserSelect = document.getElementById('d-web-browser');
+        if (!urlInput) return;
+
+        const target_url = urlInput.value.trim();
+        if (!target_url) {
+            UI.createToast('Informe uma URL válida', 'error');
+            return;
+        }
+
+        const web_browser = browserSelect ? browserSelect.value : 'chrome';
+        try {
+            await API.put(`/devices/${deviceId}`, {
+                mode: 'web',
+                target_url: target_url,
+                web_browser: web_browser
+            });
+            UI.createToast('Configuração Web salva com sucesso', 'success');
+        } catch (e) {
+            UI.createToast(`Erro: ${e.message}`, 'error');
+        }
+    }
+
+    return { render, destroy, switchTab, refreshStatus, action, captureScreenshot, installApp, loadApps, uninstallApp, provisionScripts, deleteDevice, runShell, clearShell, toggleRecovery, setMode, saveWebConfig };
 })();

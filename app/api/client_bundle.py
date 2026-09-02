@@ -2,6 +2,7 @@
 
 import base64
 import io
+import logging
 from pathlib import Path
 import re
 import shutil
@@ -20,6 +21,8 @@ from app.managers.adb_enrollment import (
 )
 from app.managers.scrcpy import ScrcpyManager
 from app.utils.system import is_safe_id
+
+logger = logging.getLogger("scrcpy-client")
 
 router = APIRouter(prefix="/api/scrcpy/client", tags=["scrcpy-client"])
 
@@ -547,13 +550,15 @@ async def enroll_client(device_id: str, data: EnrollmentRequest, request: Reques
         fingerprint=fingerprint,
         issued_by=token_record.get("issued_by", "panel"),
     )
+    src_ip = request.client.host if request.client else ""
+    logger.info("Estação matriculada: client=%s (id=%s) device=%s ip=%s fingerprint=%s", data.client_name, client["id"], device_id, src_ip, fingerprint)
     return {
         "success": True,
         "client_id": client["id"],
         "fingerprint": fingerprint,
         "device_id": device_id,
         "enrolled_at": time.time(),
-        "source_ip": request.client.host if request.client else "",
+        "source_ip": src_ip,
     }
 
 
@@ -584,6 +589,7 @@ async def revoke_enrollment(client_id: str, device_id: str):
     if not result.get("success"):
         raise HTTPException(502, result.get("error", "Falha ao revogar chave no TV Box"))
     EnrollmentStore().remove_device(client_id, device_id)
+    logger.info("Matrícula de estação revogada: client_id=%s device_id=%s", client_id, device_id)
     return {"success": True, "client_id": client_id, "device_id": device_id}
 
 
