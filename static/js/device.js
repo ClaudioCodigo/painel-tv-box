@@ -508,6 +508,11 @@ const DEVICE_PAGE = (() => {
         output.scrollTop = output.scrollHeight;
     }
 
+    function clearShell() {
+        const output = document.getElementById('d-shell-out');
+        if (output) output.textContent = 'Shell limpo.';
+    }
+
     async function setMode(mode) {
         try {
             await API.put(`/devices/${deviceId}`, { mode: mode });
