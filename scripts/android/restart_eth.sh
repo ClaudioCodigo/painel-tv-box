@@ -29,7 +29,9 @@ PANEL_IP=""
 if [ -f "$CONFIG" ]; then
   PANEL_IP=$(sed -n 's#^PANEL_URL=http://\([^:]*\):.*#\1#p' "$CONFIG" | head -n 1)
 fi
-[ -z "$PANEL_IP" ] && PANEL_IP="192.168.254.219"
+# Sem heartbeat.conf, use apenas um endereço de documentação neutro. Em
+# produção o provisioning sempre deve gravar PANEL_URL no arquivo local.
+[ -z "$PANEL_IP" ] && PANEL_IP="192.0.2.10"
 
 # Passo 1: toggle simples
 nohup sh -c "$SU_PREFIX 'ip link set eth0 down && sleep 2 && ip link set eth0 up'" >/dev/null 2>&1 &
