@@ -223,7 +223,7 @@ const DEVICES = (() => {
             'Novo TV Box',
             `
                 <div class="form-group"><label class="form-label">Nome *</label><input type="text" id="d-name" class="form-input" placeholder="Ex: TV Box Portaria"></div>
-                <div class="form-group"><label class="form-label">IP *</label><input type="text" id="d-ip" class="form-input" placeholder="Ex: 192.168.254.219"></div>
+                <div class="form-group"><label class="form-label">IP *</label><input type="text" id="d-ip" class="form-input" placeholder="Ex: 192.168.1.50"></div>
                 <div class="form-group"><label class="form-label">Porta ADB</label><input type="text" id="d-port" class="form-input" value="5555"></div>
                 <div class="form-group"><label class="form-label">Localização</label><input type="text" id="d-loc" class="form-input" placeholder="Ex: Armazém 1B"></div>
                 <div class="form-group"><label class="form-label">Descrição</label><input type="text" id="d-desc" class="form-input" placeholder="Stream câmera frontal"></div>
