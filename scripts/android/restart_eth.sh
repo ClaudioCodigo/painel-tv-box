@@ -29,9 +29,6 @@ PANEL_IP=""
 if [ -f "$CONFIG" ]; then
   PANEL_IP=$(sed -n 's#^PANEL_URL=http://\([^:]*\):.*#\1#p' "$CONFIG" | head -n 1)
 fi
-# Sem heartbeat.conf, use apenas um endereço de documentação neutro. Em
-# produção o provisioning sempre deve gravar PANEL_URL no arquivo local.
-[ -z "$PANEL_IP" ] && PANEL_IP="192.0.2.10"
 
 # Passo 1: toggle simples
 nohup sh -c "$SU_PREFIX 'ip link set eth0 down && sleep 2 && ip link set eth0 up'" >/dev/null 2>&1 &
@@ -54,8 +51,11 @@ nohup sh -c "sleep 8; $SU_PREFIX '
   else
     echo \"\$(date +%s) eth_restart: driver nao encontrado, pulando rebind\" >> $LOG
   fi
-  # Passo 3: teste real (nc), nao o estado da interface
-  if command -v nc >/dev/null 2>&1; then
+  # Passo 3: teste real (nc), nao o estado da interface. Sem PANEL_URL local,
+  # nao inventa host de producao: registra que a verificacao foi pulada.
+  if [ -z \"$PANEL_IP\" ]; then
+    echo \"\$(date +%s) eth_restart: WARN sem PANEL_URL em $CONFIG; verificacao pulada\" >> $LOG
+  elif command -v nc >/dev/null 2>&1; then
     if nc -w 5 $PANEL_IP 8080 </dev/null >/dev/null 2>&1; then
       echo \"\$(date +%s) eth_restart: OK, rede voltou apos toggle+rebind\" >> $LOG
     else
