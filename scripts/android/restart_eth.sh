@@ -2,64 +2,197 @@
 # restart_eth.sh — Reinicia Ethernet via root (sem acesso físico ao cabo).
 #
 # O toggle simples (ip link set eth0 down/up) NÃO resolve em alguns TV boxes
-# (ex.: Allwinner sunxi-gmac): o PHY não reinicializa e o Android não reaplica
-# o IP. Equivalente a "replugar o cabo": faz unbind+bind do driver, que
-# reinicializa o PHY de verdade.
+# (ex.: Allwinner sunxi-gmac): o PHY pode ficar em "link fantasma" (carrier=1,
+# interface UP, mas sem tráfego). O rebind do driver reinicializa o PHY de
+# verdade e equivale, na prática, a replugar o cabo.
 #
-# IMPORTANTE: o netwatch só chama este script após FALHA REAL de conectividade
-# (nc/ping no painel) — não pelo estado da interface. Por isso o rebind roda
-# SEMPRE: no "link fantasma" a interface reporta carrier=1 e UP mesmo sem
-# tráfego, e um gate antigo em `carrier != 1` fazia o rebind nunca rodar
-# justamente no caso em que ele é a única estratégia eficaz.
-#
-# Cascata:
-#   1. toggle ip link down/up (rápido, suficiente na maioria)
-#   2. rebind do driver (força reset do PHY — resolve o link fantasma)
-#   3. verificação real (nc no painel) + log do resultado
-
-SU_PREFIX="/sbin/su -c"
-if [ ! -x /sbin/su ]; then
-  SU_PREFIX="su -c"
-fi
+# O netwatch chama este script somente após falha REAL de conectividade com o
+# painel, então o rebind continua sendo executado sempre. O recovery roda em um
+# único worker root para evitar corrida entre toggle/rebind e usa lock para não
+# deixar duas recuperações simultâneas brigarem pelo mesmo driver.
 
 CONFIG="/data/local/tmp/panel/heartbeat.conf"
 LOG="/data/local/tmp/panel/restart_eth.log"
+LOCK_DIR="/data/local/tmp/panel/restart_eth.lock"
 
-PANEL_IP=""
-if [ -f "$CONFIG" ]; then
-  PANEL_IP=$(sed -n 's#^PANEL_URL=http://\([^:]*\):.*#\1#p' "$CONFIG" | head -n 1)
-fi
-[ -z "$PANEL_IP" ] && PANEL_IP="192.168.254.219"
+log() {
+    echo "$(date +%s) eth_restart: $*" >> "$LOG"
+}
 
-# Passo 1: toggle simples
-nohup sh -c "$SU_PREFIX 'ip link set eth0 down && sleep 2 && ip link set eth0 up'" >/dev/null 2>&1 &
-
-# Passo 2 (após 8s): rebind do driver (reset do PHY) — sempre, ver acima.
-# Detecta driver/device via sysfs (funciona em Allwinner sunxi-gmac e outros).
-# Passo 3 (após o rebind): verifica conectividade REAL com nc e loga.
-nohup sh -c "sleep 8; $SU_PREFIX '
-  echo \"\$(date +%s) eth_restart: toggle feito, iniciando rebind\" >> $LOG
-  DRV=\$(basename \$(readlink /sys/class/net/eth0/device/driver 2>/dev/null) 2>/dev/null)
-  DEV=\$(basename \$(readlink /sys/class/net/eth0/device 2>/dev/null) 2>/dev/null)
-  if [ -n \"\$DRV\" ] && [ -n \"\$DEV\" ] && [ -d \"/sys/bus/platform/drivers/\$DRV\" ]; then
-    echo \"\$(date +%s) eth_restart: rebind \$DRV/\$DEV\" >> $LOG
-    echo \$DEV > /sys/bus/platform/drivers/\$DRV/unbind 2>/dev/null
-    sleep 3
-    echo \$DEV > /sys/bus/platform/drivers/\$DRV/bind 2>/dev/null
-    sleep 6
-    ip link set eth0 up 2>/dev/null
-    sleep 2
-  else
-    echo \"\$(date +%s) eth_restart: driver nao encontrado, pulando rebind\" >> $LOG
-  fi
-  # Passo 3: teste real (nc), nao o estado da interface
-  if command -v nc >/dev/null 2>&1; then
-    if nc -w 5 $PANEL_IP 8080 </dev/null >/dev/null 2>&1; then
-      echo \"\$(date +%s) eth_restart: OK, rede voltou apos toggle+rebind\" >> $LOG
-    else
-      echo \"\$(date +%s) eth_restart: FALHOU, rede ainda indisponivel apos toggle+rebind\" >> $LOG
+panel_ip() {
+    local ip=""
+    if [ -f "$CONFIG" ]; then
+        ip=$(sed -n 's#^PANEL_URL=http://\([^:]*\):.*#\1#p' "$CONFIG" | head -n 1)
     fi
-  fi
-'" >/dev/null 2>&1 &
+    [ -n "$ip" ] && echo "$ip"
+}
 
-echo "eth_restart: iniciado (toggle + rebind sempre + verificacao nc)"
+check_net() {
+    local ip="$1"
+    [ -n "$ip" ] || return 2
+    if command -v nc >/dev/null 2>&1; then
+        nc -w 5 "$ip" 8080 < /dev/null >/dev/null 2>&1 && return 0
+    fi
+    ping -c 1 -W 3 "$ip" >/dev/null 2>&1 && return 0
+    return 1
+}
+
+wait_iface() {
+    local i=0
+    while [ ! -e /sys/class/net/eth0 ] && [ "$i" -lt 10 ]; do
+        sleep 1
+        i=$((i + 1))
+    done
+    [ -e /sys/class/net/eth0 ]
+}
+
+wait_carrier() {
+    local i=0
+    while [ "$i" -lt 12 ]; do
+        [ "$(cat /sys/class/net/eth0/carrier 2>/dev/null)" = "1" ] && return 0
+        sleep 1
+        i=$((i + 1))
+    done
+    return 1
+}
+
+get_ipv4() {
+    ip -4 addr show dev eth0 2>/dev/null \
+        | sed -n 's/.*inet \([^ ]*\).*/\1/p' \
+        | head -n 1
+}
+
+wait_ipv4() {
+    local i=0 ip=""
+    while [ "$i" -lt 12 ]; do
+        ip=$(get_ipv4)
+        [ -n "$ip" ] && echo "$ip" && return 0
+        sleep 1
+        i=$((i + 1))
+    done
+    return 1
+}
+
+acquire_lock() {
+    local old_pid=""
+
+    if mkdir "$LOCK_DIR" 2>/dev/null; then
+        echo "$$" > "$LOCK_DIR/pid" 2>/dev/null
+        return 0
+    fi
+
+    # /data/local/tmp persiste após reboot; limpa lock órfão para não desativar
+    # o recovery para sempre se a box reiniciar no meio do reset.
+    old_pid=$(cat "$LOCK_DIR/pid" 2>/dev/null)
+    if [ -n "$old_pid" ] && kill -0 "$old_pid" 2>/dev/null; then
+        return 1
+    fi
+
+    rm -f "$LOCK_DIR/pid" 2>/dev/null
+    rmdir "$LOCK_DIR" 2>/dev/null
+    mkdir "$LOCK_DIR" 2>/dev/null || return 1
+    echo "$$" > "$LOCK_DIR/pid" 2>/dev/null
+    return 0
+}
+
+release_lock() {
+    rm -f "$LOCK_DIR/pid" 2>/dev/null
+    rmdir "$LOCK_DIR" 2>/dev/null
+}
+
+worker() {
+    if ! acquire_lock; then
+        log "ignorado: recovery ja em andamento"
+        return 0
+    fi
+    trap 'release_lock' EXIT
+    trap 'release_lock; exit 1' HUP INT TERM
+
+    local target driver dev driver_dir carrier ipv4
+    target=$(panel_ip)
+    if [ -n "$target" ]; then
+        log "inicio target=$target"
+    else
+        log "inicio sem PANEL_URL; recovery executara sem teste do painel"
+    fi
+
+    # Passo 1: toggle simples.
+    ip link set eth0 down 2>/dev/null
+    sleep 2
+    ip link set eth0 up 2>/dev/null
+    log "toggle concluido"
+
+    # Mantém aproximadamente a janela antiga de 8s antes do rebind.
+    sleep 6
+
+    # Passo 2: rebind do driver. Salva o caminho real antes do unbind, pois o
+    # symlink em /sys/class/net/eth0/device/driver pode sumir durante o reset.
+    driver=$(basename "$(readlink /sys/class/net/eth0/device/driver 2>/dev/null)" 2>/dev/null)
+    dev=$(basename "$(readlink /sys/class/net/eth0/device 2>/dev/null)" 2>/dev/null)
+    driver_dir=$(readlink -f /sys/class/net/eth0/device/driver 2>/dev/null)
+
+    # Fallback para firmwares/toybox sem `readlink -f`.
+    if [ -z "$driver_dir" ] && [ -n "$driver" ] && [ -d "/sys/bus/platform/drivers/$driver" ]; then
+        driver_dir="/sys/bus/platform/drivers/$driver"
+    fi
+
+    if [ -n "$dev" ] && [ -n "$driver_dir" ] \
+        && [ -e "$driver_dir/unbind" ] && [ -e "$driver_dir/bind" ]; then
+        log "rebind driver=$driver dev=$dev path=$driver_dir"
+        echo "$dev" > "$driver_dir/unbind" 2>/dev/null
+        sleep 3
+        echo "$dev" > "$driver_dir/bind" 2>/dev/null
+
+        if wait_iface; then
+            ip link set eth0 up 2>/dev/null
+        else
+            log "WARN eth0 nao reapareceu apos rebind"
+        fi
+    else
+        log "WARN driver nao encontrado; rebind pulado driver=$driver dev=$dev"
+    fi
+
+    # Passo 3: espera sinais mínimos da pilha antes de testar o painel. Não
+    # força DHCP aqui para não sobrescrever configuração de IP estático.
+    if wait_carrier; then
+        carrier=1
+    else
+        carrier=$(cat /sys/class/net/eth0/carrier 2>/dev/null)
+        [ -z "$carrier" ] && carrier="?"
+    fi
+
+    ipv4=$(wait_ipv4)
+    [ -z "$ipv4" ] && ipv4="none"
+    log "estado carrier=$carrier ipv4=$ipv4"
+
+    # Passo 4: valida conectividade real (TCP no painel; ping como fallback).
+    # Sem heartbeat.conf/PANEL_URL, não inventa host de produção.
+    if [ -z "$target" ]; then
+        log "WARN verificacao do painel pulada: PANEL_URL ausente em $CONFIG"
+    elif check_net "$target"; then
+        log "OK rede voltou apos toggle+rebind"
+    else
+        log "FALHOU rede indisponivel apos toggle+rebind carrier=$carrier ipv4=$ipv4"
+    fi
+}
+
+if [ "${1:-}" = "_worker" ]; then
+    if [ "$(id -u 2>/dev/null)" != "0" ]; then
+        log "ERRO worker sem root"
+        exit 1
+    fi
+    worker
+    exit $?
+fi
+
+# Mantém o contrato assíncrono com o netwatch: dispara e retorna imediatamente.
+# O worker decide se há outro recovery ativo e também limpa locks órfãos.
+if [ "$(id -u 2>/dev/null)" = "0" ]; then
+    nohup sh "$0" _worker >/dev/null 2>&1 &
+elif [ -x /sbin/su ]; then
+    nohup /sbin/su -c "sh '$0' _worker" >/dev/null 2>&1 &
+else
+    nohup su -c "sh '$0' _worker" >/dev/null 2>&1 &
+fi
+
+echo "eth_restart: iniciado (toggle + rebind + espera carrier/IP + verificacao real)"
