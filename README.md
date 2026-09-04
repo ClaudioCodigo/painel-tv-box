@@ -2,7 +2,7 @@
 
 Painel web para gerenciamento de TV Boxes Android com reprodução de streams RTSP via MediaMTX.
 
-> **Nota de segurança:** configurações reais, credenciais, IPs da LAN e estado por dispositivo são locais e não devem ser versionados. Use os arquivos `config/*.yml.example` como referência e mantenha `config/*.yml`, `devices/*.yml`, `groups/*.yml`, chaves ADB e arquivos de heartbeat fora do Git.
+> 🔐 **Repositório público:** configs reais, IPs da LAN, `heartbeat_key`, credenciais e chaves ADB são dados locais e não devem ser versionados. Use apenas os templates `config/*.yml.example`; `config/*.yml`, `devices/*.yml`, `groups/*.yml`, `adbkey` e `heartbeat.conf` devem permanecer fora do Git.
 
 ## Recursos
 
