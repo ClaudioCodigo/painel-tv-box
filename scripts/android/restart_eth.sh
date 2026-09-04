@@ -24,11 +24,12 @@ panel_ip() {
     if [ -f "$CONFIG" ]; then
         ip=$(sed -n 's#^PANEL_URL=http://\([^:]*\):.*#\1#p' "$CONFIG" | head -n 1)
     fi
-    [ -n "$ip" ] && echo "$ip" || echo "192.168.254.219"
+    [ -n "$ip" ] && echo "$ip"
 }
 
 check_net() {
     local ip="$1"
+    [ -n "$ip" ] || return 2
     if command -v nc >/dev/null 2>&1; then
         nc -w 5 "$ip" 8080 < /dev/null >/dev/null 2>&1 && return 0
     fi
@@ -109,7 +110,11 @@ worker() {
 
     local target driver dev driver_dir carrier ipv4
     target=$(panel_ip)
-    log "inicio target=$target"
+    if [ -n "$target" ]; then
+        log "inicio target=$target"
+    else
+        log "inicio sem PANEL_URL; recovery executara sem teste do painel"
+    fi
 
     # Passo 1: toggle simples.
     ip link set eth0 down 2>/dev/null
@@ -161,7 +166,10 @@ worker() {
     log "estado carrier=$carrier ipv4=$ipv4"
 
     # Passo 4: valida conectividade real (TCP no painel; ping como fallback).
-    if check_net "$target"; then
+    # Sem heartbeat.conf/PANEL_URL, não inventa host de produção.
+    if [ -z "$target" ]; then
+        log "WARN verificacao do painel pulada: PANEL_URL ausente em $CONFIG"
+    elif check_net "$target"; then
         log "OK rede voltou apos toggle+rebind"
     else
         log "FALHOU rede indisponivel apos toggle+rebind carrier=$carrier ipv4=$ipv4"
