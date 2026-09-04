@@ -39,10 +39,20 @@ config/*.yml
 devices/*.yml
 groups/*.yml
 
-# Segredos
+# Segredos e credenciais locais
 config/.panel_token
 config/admin.json
 config/.session_secret
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+**/adbkey
+**/adbkey.pub
+**/heartbeat.conf
 
 # OS
 .DS_Store

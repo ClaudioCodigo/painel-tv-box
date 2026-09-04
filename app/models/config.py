@@ -14,7 +14,8 @@ class ServerConfig(BaseModel):
 
 
 class HostConfig(BaseModel):
-    ip: str = "192.168.254.102"
+    # Default genérico; instalações reais devem definir o IP LAN no system.yml local.
+    ip: str = "192.168.1.100"
 
 
 class ADBConfig(BaseModel):
@@ -157,4 +158,5 @@ class MediaMTXConfig(BaseModel):
     hls: bool = False
     webrtc: bool = False
     metrics: bool = False
-    api_allowed_network: str = "192.168.254.0/24"
+    # Sub-rede apenas como exemplo/default genérico; configure a LAN real localmente.
+    api_allowed_network: str = "192.168.1.0/24"
