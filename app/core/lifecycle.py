@@ -110,6 +110,13 @@ async def startup(fastapi_app):
         fastapi_app.state.schedule_manager = sched_mgr
         logger.info("ScheduleManager iniciado")
 
+        # Inicializa HostStreamManager
+        from app.managers.host_stream import HostStreamManager
+        fastapi_app.state.mediamtx = mtx_mgr
+        fastapi_app.state.player = player_mgr
+        fastapi_app.state.host_stream = HostStreamManager(mediamtx_manager=mtx_mgr)
+        logger.info("HostStreamManager inicializado")
+
         # Sincroniza scripts/conf nos TV boxes (IP do painel, versao dos scripts)
         from app.services.provision import ProvisionService
 
@@ -130,6 +137,15 @@ async def startup(fastapi_app):
 
 async def shutdown(fastapi_app):
     """Roda no shutdown do uvicorn."""
+    # Encerra host streams
+    host_stream = getattr(fastapi_app.state, "host_stream", None)
+    if host_stream:
+        try:
+            await host_stream.stop_all()
+            logger.info("Host streams encerradas")
+        except Exception as e:
+            logger.warning("Erro ao parar host streams: %s", e)
+
     # Para watchdog
     watchdog = getattr(fastapi_app.state, "watchdog", None)
     if watchdog:

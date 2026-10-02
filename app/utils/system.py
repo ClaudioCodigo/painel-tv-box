@@ -168,61 +168,75 @@ def get_metrics() -> dict:
     }
 
 
-def find_nssm() -> str | None:
-    """Resolve o executável nssm.exe: repo/bin → C:\\PanelTVBox\\bin → PATH.
+def resolve_binary(name: str) -> str | None:
+    """Resolve o executável no Windows (PATH → C:\\PanelTVBox → repo/bin → Programs).
 
-    Retorna o caminho absoluto ou None se não encontrado.
-    """
-    import shutil
-
-    candidates = [
-        Path(__file__).resolve().parent.parent.parent / "bin" / "nssm.exe",
-        Path(r"C:\PanelTVBox\bin\nssm.exe"),
-    ]
-    for p in candidates:
-        if p.is_file():
-            return str(p)
-    return shutil.which("nssm")
-
-
-def find_git() -> str | None:
-    """Resolve o executável git.exe: PATH → caminhos padrão de instalação do Windows.
-
-    Retorna o caminho absoluto do git.exe ou None se não encontrado.
+    Busca binários como ffmpeg, adb, mediamtx, nssm, git.
+    Retorna o caminho absoluto do arquivo ou None se não encontrado.
     """
     import os
     import shutil
 
+    base_name = name[:-4] if name.lower().endswith(".exe") else name
+
     # 1. PATH do processo
-    p = shutil.which("git")
+    p = shutil.which(base_name) or shutil.which(f"{base_name}.exe")
     if p:
         return p
 
-    # 2. Caminhos comuns no Windows
+    project_root = Path(__file__).resolve().parent.parent.parent
+
+    # 2. Caminhos padrão do projeto e do instalador
     candidates = [
-        Path(r"C:\Program Files\Git\cmd\git.exe"),
-        Path(r"C:\Program Files\Git\bin\git.exe"),
-        Path(r"C:\Program Files (x86)\Git\cmd\git.exe"),
-        Path(r"C:\Program Files (x86)\Git\bin\git.exe"),
-        Path(r"C:\PanelTVBox\bin\git.exe"),
-        Path(r"C:\PanelTVBox\bin\Git\cmd\git.exe"),
+        project_root / "bin" / f"{base_name}.exe",
+        project_root / f"{base_name}.exe",
+        Path(rf"C:\PanelTVBox\bin\{base_name}.exe"),
+        Path(rf"C:\PanelTVBox\{base_name}\{base_name}.exe"),
+        Path(rf"C:\PanelTVBox\platform-tools\{base_name}.exe"),
+        Path(rf"C:\PanelTVBox\mediamtx\{base_name}.exe"),
+        Path(rf"C:\PanelTVBox\ffmpeg\bin\{base_name}.exe"),
+        Path(rf"C:\Program Files\{base_name}\{base_name}.exe"),
+        Path(rf"C:\Program Files (x86)\{base_name}\{base_name}.exe"),
     ]
+
+    # Variações específicas para Git
+    if base_name == "git":
+        candidates.extend([
+            Path(r"C:\Program Files\Git\cmd\git.exe"),
+            Path(r"C:\Program Files\Git\bin\git.exe"),
+            Path(r"C:\Program Files (x86)\Git\cmd\git.exe"),
+            Path(r"C:\Program Files (x86)\Git\bin\git.exe"),
+            Path(r"C:\PanelTVBox\bin\Git\cmd\git.exe"),
+        ])
 
     local_app_data = os.environ.get("LOCALAPPDATA")
     if local_app_data:
-        candidates.append(Path(local_app_data) / "Programs" / "Git" / "cmd" / "git.exe")
-        candidates.append(Path(local_app_data) / "Programs" / "Git" / "bin" / "git.exe")
-
-    program_data = os.environ.get("ProgramData")
-    if program_data:
-        candidates.append(Path(program_data) / "chocolatey" / "bin" / "git.exe")
+        candidates.append(Path(local_app_data) / "Programs" / base_name / f"{base_name}.exe")
+        if base_name == "git":
+            candidates.append(Path(local_app_data) / "Programs" / "Git" / "cmd" / "git.exe")
+            candidates.append(Path(local_app_data) / "Programs" / "Git" / "bin" / "git.exe")
 
     user_profile = os.environ.get("USERPROFILE")
     if user_profile:
-        candidates.append(Path(user_profile) / "scoop" / "shims" / "git.exe")
+        candidates.append(Path(user_profile) / "scoop" / "shims" / f"{base_name}.exe")
+
+    program_data = os.environ.get("ProgramData")
+    if program_data:
+        candidates.append(Path(program_data) / "chocolatey" / "bin" / f"{base_name}.exe")
 
     for cand in candidates:
         if cand.is_file():
             return str(cand)
 
     return None
+
+
+def find_nssm() -> str | None:
+    """Resolve o executável nssm.exe: repo/bin → C:\\PanelTVBox\\bin → PATH."""
+    return resolve_binary("nssm")
+
+
+def find_git() -> str | None:
+    """Resolve o executável git.exe: PATH → caminhos padrão de instalação do Windows."""
+    return resolve_binary("git")
+

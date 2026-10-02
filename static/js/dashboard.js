@@ -171,6 +171,8 @@ const DASHBOARD = (() => {
                         <button class="dropdown-btn" onclick="DASHBOARD.toggleMenu(event,'${d.id}')" title="Ações" aria-label="Ações">${UI.icon('chevron-down')}</button>
                         <div class="dropdown-menu" id="menu-${d.id}">
                             <button class="dropdown-item" onclick="DASHBOARD.cmd('${d.id}','reboot')">${UI.icon('reboot')} Reboot</button>
+                            <button class="dropdown-item" onclick="DASHBOARD.captureScreenshot('${d.id}')">📸 Capturar Tela</button>
+                            <button class="dropdown-item" onclick="DASHBOARD.toggleMode('${d.id}','${d.mode || 'stream'}')">${d.mode === 'web' ? '🎬 Alternar p/ RTSP' : '🌐 Alternar p/ Signage'}</button>
                             <div class="dropdown-divider"></div>
                             <button class="dropdown-item" onclick="DASHBOARD.rename('${d.id}','${UI.escAttr(d.name)}')">${UI.icon('edit')} Renomear</button>
                             <button class="dropdown-item" onclick="DASHBOARD.renameStream('${d.id}','${UI.escAttr(d.rtsp_path)}')">${UI.icon('file-text')} Alterar Path RTSP</button>
@@ -185,9 +187,21 @@ const DASHBOARD = (() => {
             <div class="dcard-status ${sClass}" id="status-${d.id}">
                 ${renderStatusBar(status, reason)}
             </div>
+            <div class="dcard-thumb-wrap" style="position:relative;margin:8px 0 4px 0;background:var(--bg-deep,#111);border-radius:var(--radius-xs,4px);height:100px;display:flex;align-items:center;justify-content:center;overflow:hidden;border:1px solid var(--border-subtle)">
+                <img src="${API.authUrl('/devices/' + encodeURIComponent(d.id) + '/screenshot')}" 
+                     alt="Preview da TV" 
+                     loading="lazy"
+                     style="width:100%;height:100%;object-fit:cover;cursor:pointer"
+                     onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';"
+                     onclick="window.open('${API.authUrl('/devices/' + encodeURIComponent(d.id) + '/screenshot')}', '_blank')">
+                <div class="thumb-placeholder" style="display:none;flex-direction:column;align-items:center;color:var(--text-muted);font-size:0.75em;gap:6px">
+                    <span>Sem miniatura</span>
+                    <button class="btn btn-sm btn-secondary" style="font-size:0.75em;padding:2px 8px" onclick="DASHBOARD.captureScreenshot('${d.id}')">📸 Capturar</button>
+                </div>
+            </div>
             <div class="card-info dcard-meta">
                 <div class="card-info-item"><span class="card-info-key">IP</span><span class="card-info-val">${UI.escapeHtml(d.ip || '--')}</span></div>
-                <div class="card-info-item"><span class="card-info-key">Player</span><span class="card-info-val">${UI.escapeHtml(d.player || 'vlc')}</span></div>
+                <div class="card-info-item"><span class="card-info-key">Modo</span><span class="card-info-val">${d.mode === 'web' ? '🌐 Signage' : '🎬 RTSP'}</span></div>
                 <div class="card-info-item"><span class="card-info-key">Grupo</span><span class="card-info-val">${UI.escapeHtml(groupNames[d.group] || d.group || '--')}</span></div>
             </div>
             <div class="dcard-life">
@@ -541,5 +555,54 @@ const DASHBOARD = (() => {
         });
     }
 
-    return { render, destroy, toggleMenu, rename, renameStream, createGroup, moveGroup, cmd, deleteDevice, deleteGroup, addEvent, clearEvents, viewLog, downloadLog };
+    async function toggleMode(deviceId, currentMode) {
+        const newMode = currentMode === 'web' ? 'stream' : 'web';
+        if (newMode === 'web') {
+            const dev = devicesCache.find(d => d.id === deviceId);
+            const currentUrl = dev?.target_url || '';
+            UI.showModal('Alternar para Modo Web (Signage)', `
+                <p class="text-sm">O TV Box abrirá um navegador em tela cheia com a URL indicada.</p>
+                <div class="form-group mt-sm">
+                    <label class="form-label" for="tg-web-url">URL da Página / Signage:</label>
+                    <input type="text" id="tg-web-url" class="form-control" value="${UI.escAttr(currentUrl)}" placeholder="http://${location.host}/signage?device_id=${encodeURIComponent(deviceId)}">
+                </div>
+            `, async () => {
+                const targetUrl = document.getElementById('tg-web-url')?.value.trim() || '';
+                try {
+                    await API.put(`/devices/${deviceId}`, { mode: 'web', target_url: targetUrl });
+                    UI.createToast('🌐 Modo alterado para Signage Web', 'success');
+                    await API.post(`/devices/${deviceId}/start-stream`);
+                    loadDevices();
+                } catch (e) {
+                    UI.createToast(`❌ ${e.message}`, 'error');
+                }
+            });
+        } else {
+            try {
+                await API.put(`/devices/${deviceId}`, { mode: 'stream' });
+                UI.createToast('🎬 Modo alterado para RTSP (Vídeo)', 'success');
+                await API.post(`/devices/${deviceId}/start-stream`);
+                loadDevices();
+            } catch (e) {
+                UI.createToast(`❌ ${e.message}`, 'error');
+            }
+        }
+    }
+
+    async function captureScreenshot(deviceId) {
+        UI.createToast('📸 Solicitando captura de tela...', 'info', 2000);
+        try {
+            const res = await API.post(`/devices/${deviceId}/screenshot`);
+            if (res.success) {
+                UI.createToast('✅ Screenshot capturado', 'success');
+                setTimeout(loadDevices, 1000);
+            } else {
+                UI.createToast(`❌ ${res.error || 'Falha ao capturar'}`, 'error');
+            }
+        } catch (e) {
+            UI.createToast(`❌ ${e.message}`, 'error');
+        }
+    }
+
+    return { render, destroy, toggleMenu, rename, renameStream, createGroup, moveGroup, cmd, deleteDevice, deleteGroup, toggleMode, captureScreenshot, addEvent, clearEvents, viewLog, downloadLog };
 })();

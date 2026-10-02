@@ -11,8 +11,16 @@ logger = logging.getLogger("mediamtx")
 class MediaMTXManager:
     """Gerencia paths e monitora o MediaMTX via API REST."""
 
-    def __init__(self, api_url: str = "http://localhost:9997", timeout: int = 5):
-        self.api_url = api_url.rstrip("/")
+    def __init__(self, api_url: str | object = "http://localhost:9997", timeout: int = 5):
+        if not isinstance(api_url, str):
+            url = None
+            if hasattr(api_url, "mediamtx") and hasattr(api_url.mediamtx, "api") and hasattr(api_url.mediamtx.api, "url"):
+                url = api_url.mediamtx.api.url
+            elif hasattr(api_url, "system") and hasattr(api_url.system, "mediamtx") and hasattr(api_url.system.mediamtx, "api_url"):
+                url = api_url.system.mediamtx.api_url
+            self.api_url = (url or "http://localhost:9997").rstrip("/")
+        else:
+            self.api_url = api_url.rstrip("/")
         self.timeout = timeout
         self._client: Optional[httpx.AsyncClient] = None
 

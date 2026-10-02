@@ -82,31 +82,7 @@ const BACKUP = (() => {
 
     async function doExport() {
         try {
-            // Endpoint é POST — precisa de fetch, não window.open
-            const token = (typeof AUTH !== 'undefined') ? AUTH.getToken() : '';
-            const headers = {};
-            if (token) headers['Authorization'] = 'Bearer ' + token;
-            const res = await fetch('/api/backup/export', { method: 'POST', headers });
-            if (!res.ok) {
-                if (res.status === 401 && typeof AUTH !== 'undefined') {
-                    AUTH.requireLogin();
-                }
-                throw new Error(`HTTP ${res.status}`);
-            }
-
-            const cd = res.headers.get('Content-Disposition') || '';
-            const m = cd.match(/filename="?([^";]+)"?/);
-            const filename = m ? m[1] : `backup-${Date.now()}.zip`;
-
-            const blob = await res.blob();
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            URL.revokeObjectURL(url);
+            await API.download('/backup/export', `backup-${Date.now()}.zip`, 'POST');
             UI.createToast('✅ Backup exportado', 'success');
             await loadList();
         } catch (e) {

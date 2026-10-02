@@ -23,6 +23,7 @@ from app.api.client_bundle import router as client_bundle_router
 from app.api.auth import router as auth_router
 from app.api.heartbeat import router as heartbeat_router
 from app.api.signage import router as signage_router
+from app.api.host_stream import router as host_stream_router
 
 
 @asynccontextmanager
@@ -66,6 +67,7 @@ app.include_router(update_router, dependencies=[Depends(require_auth)])
 app.include_router(groups_router, dependencies=[Depends(require_auth)])
 app.include_router(scrcpy_router, dependencies=[Depends(require_auth)])
 app.include_router(client_bundle_router, dependencies=[Depends(require_auth)])
+app.include_router(host_stream_router, dependencies=[Depends(require_auth)])
 
 
 # --- API health check ---

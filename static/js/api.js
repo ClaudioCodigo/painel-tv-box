@@ -87,5 +87,48 @@ const API = (() => {
         return res.json();
     }
 
-    return { get, post, put, del, upload, authUrl };
+    async function download(path, defaultFilename = 'download.zip', method = 'POST', body = null) {
+        const url = `${BASE}${path}`;
+        const opts = {
+            method,
+            headers: authHeaders(),
+        };
+        if (body && method !== 'GET') {
+            opts.headers['Content-Type'] = 'application/json';
+            opts.body = JSON.stringify(body);
+        }
+
+        let res;
+        try {
+            res = await fetch(url, opts);
+        } catch (err) {
+            throw new Error(`Network error: ${err.message}`);
+        }
+
+        if (!res.ok) {
+            handleUnauthorized(res);
+            let detail = res.statusText;
+            try { const d = await res.json(); detail = d.detail || detail; } catch {}
+            const err = new Error(detail);
+            err.status = res.status;
+            throw err;
+        }
+
+        const cd = res.headers.get('Content-Disposition') || '';
+        const m = cd.match(/filename="?([^";]+)"?/);
+        const filename = m ? m[1] : defaultFilename;
+
+        const blob = await res.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+        return { success: true, filename };
+    }
+
+    return { get, post, put, del, upload, download, authUrl };
 })();

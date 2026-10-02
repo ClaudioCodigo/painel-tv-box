@@ -34,20 +34,28 @@ async def _sync_mediamtx(config, old_path: str | None = None, new_path: str | No
         mtx = MediaMTXManager(config)
 
         hot_ok = True
-        if old_path and old_path != new_path:
-            del_res = await mtx.delete_path(old_path)
-            if not del_res.get("success"):
-                hot_ok = False
-        if new_path and new_path != old_path:
-            add_res = await mtx.add_path(new_path)
-            if not add_res.get("success"):
-                hot_ok = False
+        try:
+            if old_path and old_path != new_path:
+                del_res = await mtx.delete_path(old_path)
+                if not del_res.get("success"):
+                    err = str(del_res.get("error", "")).lower()
+                    if "not found" not in err and "404" not in err:
+                        hot_ok = False
+            if new_path and new_path != old_path:
+                add_res = await mtx.add_path(new_path)
+                if not add_res.get("success"):
+                    err = str(add_res.get("error", "")).lower()
+                    if "already exists" not in err and "400" not in err:
+                        hot_ok = False
+        finally:
+            await mtx.close()
 
-        # Se API REST falhou (ex: mediamtx ainda não subiu), fallback para restart do serviço
-        if not hot_ok and (old_path or new_path):
-            _restart_mediamtx_service()
-        return True
-    except Exception:
+        # O arquivo config/mediamtx.generated.yml foi atualizado para persistência.
+        # Não reiniciamos o serviço MediaMTX automaticamente durante operações CRUD normais
+        # para evitar interrupção de transmissões ativas em outros TV Boxes.
+        return hot_ok
+    except Exception as e:
+        logger.warning("Erro ao sincronizar rotas no MediaMTX: %s", e)
         return False
 
 
