@@ -70,9 +70,12 @@ const SCRCPY = (() => {
  <div class="settings-card" id="scrcpy-status-card"><div class="loading">Carregando...</div></div>
 
  <div class="settings-card full">
-  <h3 style="margin-bottom:8px">🖥️ scrcpy no seu computador</h3>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+    <h3 style="margin:0">🖥️ Espelhamento e Controle (scrcpy)</h3>
+    <span class="live-badge" id="scrcpy-session"><span class="status-mini-dot"></span> Parado</span>
+  </div>
   <p class="text-muted text-sm">
-    Instale o cliente uma vez. Depois, selecione um box e pressione <strong>Start</strong>.
+    Abra uma janela nativa do scrcpy no desktop deste computador ou em qualquer estação de trabalho na rede.
   </p>
   <div class="form-group" style="margin-top:12px">
    <label class="form-label">Selecione o TV Box</label>
@@ -81,18 +84,32 @@ const SCRCPY = (() => {
    </select>
   </div>
 
-  <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
-   <button class="btn btn-primary" onclick="SCRCPY.startLocal()">${UI.icon('play')} Start</button>
-   <button class="btn btn-secondary" onclick="SCRCPY.downloadStationBundle()">${UI.icon('download')} Instalar cliente neste PC</button>
+  <details style="margin-top:12px;background:var(--bg-secondary,#1e293b);border-radius:6px;padding:10px">
+    <summary style="cursor:pointer;font-weight:600;font-size:13px;color:var(--text-secondary)">⚙️ Opções avançadas do scrcpy (Bitrate, FPS, Codec)</summary>
+    <div style="margin-top:10px">
+      ${cb}
+      <div style="margin-top:8px">
+        <label class="text-muted text-sm" style="display:block;margin-bottom:4px">Argumentos adicionais:</label>
+        <input type="text" id="scrcpy-args" class="form-input text-sm mono" placeholder="ex: --max-size=1280 --stay-awake">
+      </div>
+    </div>
+  </details>
+
+  <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;align-items:center">
+   <button class="btn btn-primary" onclick="SCRCPY.startHost()">${UI.icon('play')} Abrir Janela no Host (1-clique)</button>
+   <button class="btn btn-danger" onclick="SCRCPY.stopMirroring()">${UI.icon('stop')} Fechar Janela</button>
+   <button class="btn btn-secondary" onclick="SCRCPY.startLocal()">${UI.icon('monitor')} Abrir via Protocolo</button>
+   <button class="btn btn-secondary" onclick="SCRCPY.downloadLauncher()">${UI.icon('download')} Baixar Launcher (.bat)</button>
+   <button class="btn btn-secondary" onclick="SCRCPY.downloadStationBundle()">${UI.icon('download')} Instalar cliente</button>
   </div>
 
   <div style="margin-top:14px;padding:12px;background:var(--bg-secondary,#1e293b);border-radius:6px;font-size:12px;color:var(--text-muted)">
     <strong style="color:var(--text-primary)">💡 Como usar:</strong>
-    <ol style="margin:6px 0 0 18px;padding:0;line-height:1.6">
-      <li>Uma única vez: baixe e execute <code>instalar-scrcpy.cmd</code>.</li>
-      <li>Depois, escolha o TV Box e pressione <strong>Start</strong>.</li>
-      <li>O Windows poderá pedir confirmação para abrir o cliente na primeira vez.</li>
-    </ol>
+    <ul style="margin:6px 0 0 18px;padding:0;line-height:1.6">
+      <li><strong>Abrir Janela no Host:</strong> Se você está acessando o painel no próprio PC servidor, abre a janela instantaneamente na sua tela com 1 clique.</li>
+      <li><strong>Baixar Launcher (.bat):</strong> Baixa um script executável com duplo clique para qualquer computador na rede local.</li>
+      <li><strong>Abrir via Protocolo:</strong> Se você instalou o cliente neste PC (botão "Instalar cliente"), abre o scrcpy direto pelo navegador via link <code>paineltvbox://</code>.</li>
+    </ul>
   </div>
  </div>
 
@@ -226,6 +243,28 @@ const SCRCPY = (() => {
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
+    }
+
+    async function startHost() {
+        const deviceId = document.getElementById('scrcpy-device')?.value;
+        if (!deviceId) {
+            UI.createToast('Selecione um dispositivo primeiro', 'warning');
+            return;
+        }
+        const devName = deviceNames.get(deviceId) || deviceId;
+        UI.createToast(`Iniciando scrcpy para ${devName}...`, 'info');
+        try {
+            const extra = buildArgs();
+            const res = await API.post(`/scrcpy/start/${encodeURIComponent(deviceId)}`, { extra_args: extra });
+            if (res.success) {
+                setSession('mirroring');
+                UI.createToast(`Janela do scrcpy aberta no desktop (PID ${res.pid})!`, 'success');
+            } else {
+                UI.createToast(res.error || 'Falha ao iniciar scrcpy', 'error');
+            }
+        } catch (e) {
+            UI.createToast(e.message || 'Erro ao comunicar com o servidor', 'error');
+        }
     }
 
     async function startLocal() {
@@ -413,5 +452,5 @@ const SCRCPY = (() => {
         });
     }
 
-    return { render, downloadBundle, downloadLauncher, downloadStationBundle, startLocal, loadEnrollments, revokeEnrollment, revokeAll, startMirroring, startStreaming, stopMirroring, startLive, stopLive, checkUpdates, installLatest, activateVersion, deleteVersion };
+    return { render, startHost, downloadBundle, downloadLauncher, downloadStationBundle, startLocal, loadEnrollments, revokeEnrollment, revokeAll, startMirroring, startStreaming, stopMirroring, startLive, stopLive, checkUpdates, installLatest, activateVersion, deleteVersion };
 })();

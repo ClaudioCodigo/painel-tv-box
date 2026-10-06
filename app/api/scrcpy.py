@@ -156,7 +156,12 @@ async def scrcpy_start(device_id: str, data: dict = {}):
 
     device = config.get_device(device_id) if config else None
     if not device:
-        raise HTTPException(404, "Dispositivo não encontrado")
+        from app.utils.system import is_safe_network_target
+        if is_safe_network_target(device_id):
+            from app.models.device import DeviceConfig
+            device = DeviceConfig(id=device_id, ip=device_id)
+        else:
+            raise HTTPException(404, "Dispositivo não encontrado")
 
     mgr = ScrcpyManager()
     extra_args = data.get("extra_args", "")

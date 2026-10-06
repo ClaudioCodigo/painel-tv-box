@@ -70,6 +70,7 @@ const DEVICE_PAGE = (() => {
                     <button class="btn btn-primary btn-sm" onclick="DEVICE_PAGE.action('start-stream')">${UI.icon('play')} Start</button>
                     <button class="btn btn-secondary btn-sm" onclick="DEVICE_PAGE.action('stop-stream')">${UI.icon('stop')} Stop</button>
                     <button class="btn btn-secondary btn-sm" onclick="DEVICE_PAGE.action('reboot')">${UI.icon('reboot')} Reboot</button>
+                    <button class="btn btn-secondary btn-sm" onclick="DEVICE_PAGE.openScrcpy()">${UI.icon('monitor')} Scrcpy</button>
                     <button class="btn btn-secondary btn-sm" onclick="DEVICE_PAGE.refreshStatus()">${UI.icon('refresh')} Atualizar</button>
                     <button class="btn btn-secondary btn-sm" onclick="DEVICE_PAGE.provisionScripts()">${UI.icon('upload')} Scripts</button>
                     <button class="btn btn-danger btn-sm" onclick="DEVICE_PAGE.deleteDevice()">${UI.icon('trash')} Remover</button>
@@ -417,6 +418,20 @@ const DEVICE_PAGE = (() => {
         }
     }
 
+    async function openScrcpy() {
+        UI.createToast('Abrindo janela do scrcpy no desktop...', 'info');
+        try {
+            const res = await API.post(`/scrcpy/start/${encodeURIComponent(deviceId)}`);
+            if (res.success) {
+                UI.createToast(`Janela do scrcpy aberta (PID ${res.pid})!`, 'success');
+            } else {
+                UI.createToast(res.error || 'Falha ao iniciar scrcpy', 'error');
+            }
+        } catch (e) {
+            UI.createToast(e.message || 'Erro ao comunicar com o servidor', 'error');
+        }
+    }
+
     async function toggleRecovery(enabled) {
         try {
             await API.put(`/devices/${deviceId}`, { recovery_enabled: enabled });
@@ -551,5 +566,5 @@ const DEVICE_PAGE = (() => {
         }
     }
 
-    return { render, destroy, switchTab, refreshStatus, action, captureScreenshot, installApp, loadApps, uninstallApp, provisionScripts, deleteDevice, runShell, clearShell, toggleRecovery, setMode, saveWebConfig };
+    return { render, destroy, switchTab, refreshStatus, action, openScrcpy, captureScreenshot, installApp, loadApps, uninstallApp, provisionScripts, deleteDevice, runShell, clearShell, toggleRecovery, setMode, saveWebConfig };
 })();

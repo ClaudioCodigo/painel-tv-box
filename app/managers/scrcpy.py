@@ -423,6 +423,8 @@ class ScrcpyManager:
         await self._cleanup_server(target, adb)
 
         cmd = [str(scrcpy_bin), "-s", target]
+        if "--window-title" not in extra_args:
+            cmd.extend(["--window-title", f"Painel TV Box: {target}"])
         if extra_args:
             cmd.extend(shlex.split(extra_args))
 
@@ -501,7 +503,20 @@ class ScrcpyManager:
     async def _watch_process(self, target: str, proc: asyncio.subprocess.Process):
         stderr_text = ""
         try:
-            stderr = await proc.stderr.read() if proc.stderr else b""
+            async def _drain(stream):
+                if not stream:
+                    return b""
+                buf = bytearray()
+                while True:
+                    chunk = await stream.read(4096)
+                    if not chunk:
+                        break
+                    buf.extend(chunk)
+                    if len(buf) > 32768:
+                        buf = buf[-32768:]
+                return bytes(buf)
+
+            _, stderr = await asyncio.gather(_drain(proc.stdout), _drain(proc.stderr))
             stderr_text = stderr.decode(errors="replace")[-2000:] if stderr else ""
             await proc.wait()
         except Exception as e:
