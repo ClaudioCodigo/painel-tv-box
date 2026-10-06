@@ -131,28 +131,27 @@ class ProvisionService:
                 if code_m == 0 and "MAGISK" in out_m.upper():
                     magisk_cmd = (
                         "if [ -x /sbin/su ]; then /sbin/su -c "
-                        f"'cp {REMOTE_DIR}/boot_hook.sh "
-                        f"/data/adb/service.d/99panel.sh && "
+                        f"'mkdir -p /data/adb/service.d && "
+                        f"cp {REMOTE_DIR}/boot_hook.sh /data/adb/service.d/99panel.sh && "
                         f"chmod 755 /data/adb/service.d/99panel.sh && "
-                        f"cp {REMOTE_DIR}/99-adb-insecure.sh "
-                        f"/data/adb/service.d/99-adb-insecure.sh && "
+                        f"cp {REMOTE_DIR}/99-adb-insecure.sh /data/adb/service.d/99-adb-insecure.sh && "
                         f"chmod 755 /data/adb/service.d/99-adb-insecure.sh && "
-                        f"sh /data/adb/service.d/99-adb-insecure.sh now'; "
+                        f"sh /data/adb/service.d/99-adb-insecure.sh props'; "
                         "else su -c "
-                        f"'cp {REMOTE_DIR}/boot_hook.sh "
-                        f"/data/adb/service.d/99panel.sh && "
+                        f"'mkdir -p /data/adb/service.d && "
+                        f"cp {REMOTE_DIR}/boot_hook.sh /data/adb/service.d/99panel.sh && "
                         f"chmod 755 /data/adb/service.d/99panel.sh && "
-                        f"cp {REMOTE_DIR}/99-adb-insecure.sh "
-                        f"/data/adb/service.d/99-adb-insecure.sh && "
+                        f"cp {REMOTE_DIR}/99-adb-insecure.sh /data/adb/service.d/99-adb-insecure.sh && "
                         f"chmod 755 /data/adb/service.d/99-adb-insecure.sh && "
-                        f"sh /data/adb/service.d/99-adb-insecure.sh now'; fi"
+                        f"sh /data/adb/service.d/99-adb-insecure.sh props'; fi"
                     )
                     output, code = await self.adb.shell(ip, magisk_cmd, port=port, timeout=15)
                     if code == 0 and "not found" not in output.lower():
                         results.append("boot_hook_magisk")
                         results.append("adb_insecure_magisk")
                     else:
-                        errors.append(f"boot hook magisk: {output.strip()}")
+                        err_detail = output.strip() or f"falha na execução (código {code})"
+                        errors.append(f"boot hook magisk: {err_detail}")
                 else:
                     # Sem Magisk: tenta install-recovery.sh (não sobrescreve
                     # script real de OTA do firmware).

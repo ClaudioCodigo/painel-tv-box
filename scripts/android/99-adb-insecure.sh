@@ -8,9 +8,11 @@
 # Elimina a necessidade de autorização física de chave RSA na tela da TV, permitindo
 # conexão direta e imediata do scrcpy na rede local (porta 5555).
 #
-# Uso manual / imediato:
-#   sh /data/adb/service.d/99-adb-insecure.sh now
-#   sh /data/adb/service.d/99-adb-insecure.sh status
+# Modos de uso:
+#   sh /data/adb/service.d/99-adb-insecure.sh props   (aplica propriedades sem reiniciar adbd — seguro para provisionamento)
+#   sh /data/adb/service.d/99-adb-insecure.sh now     (aplica e reinicia adbd em background desacoplado)
+#   sh /data/adb/service.d/99-adb-insecure.sh status  (exibe status atual das propriedades)
+#   sh /data/adb/service.d/99-adb-insecure.sh boot    (executado pelo Magisk no boot: espera boot_completed)
 
 LOG="/data/local/tmp/adb-insecure.log"
 
@@ -41,7 +43,8 @@ find_resetprop() {
 }
 
 apply_props() {
-    log "Aplicando configuracoes de ADB inseguro..."
+    DO_RESTART="${1:-0}"
+    log "Aplicando configuracoes de ADB inseguro (restart=$DO_RESTART)..."
 
     RP=$(find_resetprop)
     if [ -n "$RP" ]; then
@@ -63,25 +66,20 @@ apply_props() {
     setprop service.adb.tcp.port 5555
     setprop persist.adb.tcp.port 5555
 
-    # Reinicia o daemon adbd para recarregar as novas propriedades
-    log "Reiniciando daemon adbd..."
-    setprop ctl.restart adbd 2>/dev/null || {
-        stop adbd 2>/dev/null
-        sleep 1
-        start adbd 2>/dev/null
-    }
-
-    # Aguarda o adbd subir novamente
-    sleep 2
-
     SECURE=$(getprop ro.adb.secure)
     PORT=$(getprop service.adb.tcp.port)
     log "Status final: ro.adb.secure=$SECURE, service.adb.tcp.port=$PORT"
 
-    if [ "$SECURE" = "0" ]; then
-        log "SUCESSO: ADB inseguro ativo. Scrcpy liberado sem popup RSA."
-    else
-        log "ALERTA: ro.adb.secure reporta '$SECURE' (esperado: 0)."
+    if [ "$DO_RESTART" = "1" ]; then
+        log "Agendando reinicio do adbd em background desacoplado..."
+        (
+            sleep 2
+            setprop ctl.restart adbd 2>/dev/null || {
+                stop adbd 2>/dev/null
+                sleep 1
+                start adbd 2>/dev/null
+            }
+        ) >/dev/null 2>&1 &
     fi
 }
 
@@ -109,9 +107,14 @@ case "$MODE" in
         show_status
         exit 0
         ;;
+    props)
+        log "Modo props solicitado (sem reiniciar adbd)"
+        apply_props 0
+        exit 0
+        ;;
     now|apply)
         log "Execucao imediata solicitada ($MODE)"
-        apply_props
+        apply_props 1
         exit 0
         ;;
     boot|*)
@@ -126,7 +129,7 @@ case "$MODE" in
         # 2. Pequena pausa para estabilizacao de servicos de rede
         sleep 3
 
-        apply_props
+        apply_props 1
         exit 0
         ;;
 esac

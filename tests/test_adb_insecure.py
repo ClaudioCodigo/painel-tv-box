@@ -96,4 +96,5 @@ async def test_provision_deploys_and_activates_insecure_magisk(monkeypatch, tmp_
     assert "99-adb-insecure.sh" in magisk_cmd
     assert "/data/adb/service.d/99-adb-insecure.sh" in magisk_cmd
     assert "chmod 755" in magisk_cmd
-    assert "sh /data/adb/service.d/99-adb-insecure.sh now" in magisk_cmd
+    assert "mkdir -p /data/adb/service.d" in magisk_cmd
+    assert "99-adb-insecure.sh props" in magisk_cmd
