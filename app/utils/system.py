@@ -212,6 +212,7 @@ def resolve_binary(name: str) -> str | None:
     local_app_data = os.environ.get("LOCALAPPDATA")
     if local_app_data:
         candidates.append(Path(local_app_data) / "Programs" / base_name / f"{base_name}.exe")
+        candidates.append(Path(local_app_data) / "Android" / "Sdk" / "platform-tools" / f"{base_name}.exe")
         if base_name == "git":
             candidates.append(Path(local_app_data) / "Programs" / "Git" / "cmd" / "git.exe")
             candidates.append(Path(local_app_data) / "Programs" / "Git" / "bin" / "git.exe")

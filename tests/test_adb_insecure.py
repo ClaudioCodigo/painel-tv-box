@@ -49,10 +49,27 @@ def test_setup_adb_insecure_script_exists_and_format():
     assert "su" in content
 
 
+def test_fix_eth_boot_script_exists_and_format():
+    """Valida existência, formato POSIX e ausência de CRLF em fix_eth_boot.sh."""
+    script_path = ANDROID_SCRIPTS_DIR / "fix_eth_boot.sh"
+    assert script_path.is_file(), "scripts/android/fix_eth_boot.sh deve existir"
+
+    raw = script_path.read_bytes()
+    assert b"\r\n" not in raw, "Script Android não pode conter quebras de linha Windows CRLF"
+    assert raw.startswith(b"#!/system/bin/sh\n"), "Script deve iniciar com #!/system/bin/sh"
+
+    content = raw.decode("utf-8")
+    assert "sunxi-gmac" in content
+    assert "unbind" in content and "bind" in content
+    assert "eth0" in content
+    assert "carrier" in content
+
+
 def test_manifest_includes_insecure_scripts():
-    """Garante que os scripts de ADB inseguro estão no MANIFEST de provisionamento."""
+    """Garante que os scripts de ADB inseguro e eth-fix estão no MANIFEST de provisionamento."""
     assert "99-adb-insecure.sh" in MANIFEST
     assert "setup_adb_insecure.sh" in MANIFEST
+    assert "fix_eth_boot.sh" in MANIFEST
 
 
 @pytest.mark.asyncio

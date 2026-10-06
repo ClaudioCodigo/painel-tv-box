@@ -29,6 +29,7 @@ MANIFEST = [
     "boot_hook.sh",  # religa heartbeat/netwatch no boot (só instala com root)
     "99-adb-insecure.sh",  # bypass permanente de chave RSA via Magisk (docs/12)
     "setup_adb_insecure.sh",  # instalador/ativador imediato do ADB inseguro
+    "fix_eth_boot.sh",  # autocura de Ethernet e unbind/bind no boot (Allwinner)
 ]
 
 HEARTBEAT_INTERVAL = 20  # s entre batidas
@@ -132,6 +133,8 @@ class ProvisionService:
                     magisk_cmd = (
                         "if [ -x /sbin/su ]; then /sbin/su -c "
                         f"'mkdir -p /data/adb/service.d && "
+                        f"cp {REMOTE_DIR}/fix_eth_boot.sh /data/adb/service.d/01-eth-fix.sh && "
+                        f"chmod 755 /data/adb/service.d/01-eth-fix.sh && "
                         f"cp {REMOTE_DIR}/boot_hook.sh /data/adb/service.d/99panel.sh && "
                         f"chmod 755 /data/adb/service.d/99panel.sh && "
                         f"cp {REMOTE_DIR}/99-adb-insecure.sh /data/adb/service.d/99-adb-insecure.sh && "
@@ -139,6 +142,8 @@ class ProvisionService:
                         f"sh /data/adb/service.d/99-adb-insecure.sh props'; "
                         "else su -c "
                         f"'mkdir -p /data/adb/service.d && "
+                        f"cp {REMOTE_DIR}/fix_eth_boot.sh /data/adb/service.d/01-eth-fix.sh && "
+                        f"chmod 755 /data/adb/service.d/01-eth-fix.sh && "
                         f"cp {REMOTE_DIR}/boot_hook.sh /data/adb/service.d/99panel.sh && "
                         f"chmod 755 /data/adb/service.d/99panel.sh && "
                         f"cp {REMOTE_DIR}/99-adb-insecure.sh /data/adb/service.d/99-adb-insecure.sh && "
@@ -149,6 +154,7 @@ class ProvisionService:
                     if code == 0 and "not found" not in output.lower():
                         results.append("boot_hook_magisk")
                         results.append("adb_insecure_magisk")
+                        results.append("eth_fix_magisk")
                     else:
                         err_detail = output.strip() or f"falha na execução (código {code})"
                         errors.append(f"boot hook magisk: {err_detail}")
