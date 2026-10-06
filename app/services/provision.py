@@ -27,6 +27,8 @@ MANIFEST = [
     "heartbeat.sh",  # batida HTTP device→servidor (docs/09)
     "diag.sh",  # diagnóstico do link fantasma (snapshot + captura de boot)
     "boot_hook.sh",  # religa heartbeat/netwatch no boot (só instala com root)
+    "99-adb-insecure.sh",  # bypass permanente de chave RSA via Magisk (docs/12)
+    "setup_adb_insecure.sh",  # instalador/ativador imediato do ADB inseguro
 ]
 
 HEARTBEAT_INTERVAL = 20  # s entre batidas
@@ -131,15 +133,24 @@ class ProvisionService:
                         "if [ -x /sbin/su ]; then /sbin/su -c "
                         f"'cp {REMOTE_DIR}/boot_hook.sh "
                         f"/data/adb/service.d/99panel.sh && "
-                        f"chmod 755 /data/adb/service.d/99panel.sh'; "
+                        f"chmod 755 /data/adb/service.d/99panel.sh && "
+                        f"cp {REMOTE_DIR}/99-adb-insecure.sh "
+                        f"/data/adb/service.d/99-adb-insecure.sh && "
+                        f"chmod 755 /data/adb/service.d/99-adb-insecure.sh && "
+                        f"sh /data/adb/service.d/99-adb-insecure.sh now'; "
                         "else su -c "
                         f"'cp {REMOTE_DIR}/boot_hook.sh "
                         f"/data/adb/service.d/99panel.sh && "
-                        f"chmod 755 /data/adb/service.d/99panel.sh'; fi"
+                        f"chmod 755 /data/adb/service.d/99panel.sh && "
+                        f"cp {REMOTE_DIR}/99-adb-insecure.sh "
+                        f"/data/adb/service.d/99-adb-insecure.sh && "
+                        f"chmod 755 /data/adb/service.d/99-adb-insecure.sh && "
+                        f"sh /data/adb/service.d/99-adb-insecure.sh now'; fi"
                     )
                     output, code = await self.adb.shell(ip, magisk_cmd, port=port, timeout=15)
                     if code == 0 and "not found" not in output.lower():
                         results.append("boot_hook_magisk")
+                        results.append("adb_insecure_magisk")
                     else:
                         errors.append(f"boot hook magisk: {output.strip()}")
                 else:

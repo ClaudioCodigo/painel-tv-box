@@ -140,7 +140,7 @@ Integraremos o acesso remoto em dois modos no Painel TV Box:
 ### Fase 1: Motor de Injeção de Chave RSA via Magisk
 * [ ] **Tarefa 1.1:** Criar helper em [`app/managers/adb_enrollment.py`](file:///c:/Users/claudio.lima/Documents/Trabalho/PainelTVBox/app/managers/adb_enrollment.py) para gerar e gerenciar a **Chave Mestra do Painel** (`master_adbkey` / `master_adbkey.pub`).
 * [ ] **Tarefa 1.2:** Implementar rota de fallback no provisionador de chaves: se o `adb push` falhar por `unauthorized`, o comando de gravação em `/data/misc/adb/adb_keys` é automaticamente redirecionado para a fila de comandos do **Heartbeat** ([`CommandQueueService`](file:///c:/Users/claudio.lima/Documents/Trabalho/PainelTVBox/app/services/command_queue.py)).
-* [ ] **Tarefa 1.3:** Adicionar script Android `setup_magisk_adb.sh` em `scripts/android/` para desativar `ro.adb.secure` e persistir em `/data/adb/service.d/`.
+* [x] **Tarefa 1.3:** Adicionar scripts Android [`scripts/android/99-adb-insecure.sh`](file:///c:/Users/claudio.lima/Documents/Trabalho/PainelTVBox/scripts/android/99-adb-insecure.sh) e [`scripts/android/setup_adb_insecure.sh`](file:///c:/Users/claudio.lima/Documents/Trabalho/PainelTVBox/scripts/android/setup_adb_insecure.sh) para desativar `ro.adb.secure` permanentemente via Magisk `service.d` com suporte a execução imediata sem reboot. Integrado ao [`ProvisionService`](file:///c:/Users/claudio.lima/Documents/Trabalho/PainelTVBox/app/services/provision.py).
 
 ### Fase 2: Configuração e Launcher do scrcpy
 * [ ] **Tarefa 2.1:** Atualizar [`app/api/client_bundle.py`](file:///c:/Users/claudio.lima/Documents/Trabalho/PainelTVBox/app/api/client_bundle.py) para incluir a chave privada mestra no pacote de inicialização do operador, configurando `ADB_VENDOR_KEYS`.
