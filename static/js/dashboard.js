@@ -161,6 +161,9 @@ const DASHBOARD = (() => {
         const reason = d.state?.reason || '';
         const icon = UI.statusIcon(status); const sClass = UI.statusClass(status);
         const groupChip = d.group ? UI.groupChip(groupNames[d.group] || d.group, d.group) : '';
+        const isWeb = (d.mode || 'web') === 'web';
+        const browserLabel = d.web_browser === 'chrome' ? 'Chrome' : (d.web_browser === 'browser' ? 'Browser Padrão' : 'Free Kiosk');
+        const appLabel = isWeb ? browserLabel : (d.player?.toUpperCase() || 'VLC');
 
         card.innerHTML = `
             <div class="card-header dcard-header">
@@ -170,13 +173,13 @@ const DASHBOARD = (() => {
                     <div class="dropdown-wrap">
                         <button class="dropdown-btn" onclick="DASHBOARD.toggleMenu(event,'${d.id}')" title="Ações" aria-label="Ações">${UI.icon('chevron-down')}</button>
                         <div class="dropdown-menu" id="menu-${d.id}">
-                            <button class="dropdown-item" onclick="DASHBOARD.cmd('${d.id}','reboot')">${UI.icon('reboot')} Reboot</button>
+                            <button class="dropdown-item" onclick="DASHBOARD.openScrcpy('${d.id}')">${UI.icon('monitor')} Acesso Remoto (Scrcpy)</button>
+                            <button class="dropdown-item" onclick="DASHBOARD.reloadKiosk('${d.id}')">${UI.icon('refresh')} Recarregar Kiosk</button>
                             <button class="dropdown-item" onclick="DASHBOARD.captureScreenshot('${d.id}')">📸 Capturar Tela</button>
-                            <button class="dropdown-item" onclick="DASHBOARD.toggleMode('${d.id}','${d.mode || 'stream'}')">${d.mode === 'web' ? '🎬 Alternar p/ RTSP' : '🌐 Alternar p/ Signage'}</button>
+                            <button class="dropdown-item" onclick="DASHBOARD.cmd('${d.id}','reboot')">${UI.icon('reboot')} Reboot</button>
+                            <button class="dropdown-item" onclick="DASHBOARD.configureKiosk('${d.id}')">⚙️ Configurar Kiosk / URL</button>
                             <div class="dropdown-divider"></div>
                             <button class="dropdown-item" onclick="DASHBOARD.rename('${d.id}','${UI.escAttr(d.name)}')">${UI.icon('edit')} Renomear</button>
-                            <button class="dropdown-item" onclick="DASHBOARD.renameStream('${d.id}','${UI.escAttr(d.rtsp_path)}')">${UI.icon('file-text')} Alterar Path RTSP</button>
-                            <button class="dropdown-item" onclick="DASHBOARD.createGroup('${d.id}')">${UI.icon('plus')} Criar Grupo</button>
                             <button class="dropdown-item" onclick="DASHBOARD.moveGroup('${d.id}','${UI.escAttr(d.group)}')">${UI.icon('users')} Mover para Grupo</button>
                             <div class="dropdown-divider"></div>
                             <button class="dropdown-item danger" onclick="DASHBOARD.deleteDevice('${d.id}')">${UI.icon('trash')} Excluir TV Box</button>
@@ -201,25 +204,19 @@ const DASHBOARD = (() => {
             </div>
             <div class="card-info dcard-meta">
                 <div class="card-info-item"><span class="card-info-key">IP</span><span class="card-info-val">${UI.escapeHtml(d.ip || '--')}</span></div>
-                <div class="card-info-item"><span class="card-info-key">Modo</span><span class="card-info-val">${d.mode === 'web' ? '🌐 Signage' : '🎬 RTSP'}</span></div>
+                <div class="card-info-item"><span class="card-info-key">App</span><span class="card-info-val" title="${UI.escapeHtml(appLabel)}">${UI.escapeHtml(appLabel)}</span></div>
                 <div class="card-info-item"><span class="card-info-key">Grupo</span><span class="card-info-val">${UI.escapeHtml(groupNames[d.group] || d.group || '--')}</span></div>
+                ${d.target_url ? `<div class="card-info-item" style="grid-column:span 2"><span class="card-info-key">URL</span><span class="card-info-val" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px" title="${UI.escapeHtml(d.target_url)}">${UI.escapeHtml(d.target_url)}</span></div>` : ''}
             </div>
             <div class="dcard-life">
                 <span class="dcard-fresh" title="Último health check / heartbeat">${freshness(d)}</span>
                 <span class="dcard-watchdog" data-watchdog="${d.id}">${watchdogInfo(d.id, d)}</span>
             </div>
-            <div class="card-actions dcard-actions">
-                <button class="btn btn-sm btn-success cmd-btn" data-action="start-stream" data-device="${d.id}">${UI.icon('play')} Start</button>
-                <button class="btn btn-sm btn-secondary cmd-btn" data-action="stop-stream" data-device="${d.id}">${UI.icon('stop')} Stop</button>
+            <div class="card-actions dcard-actions" style="display:flex;gap:6px">
+                <button class="btn btn-sm btn-primary" style="flex:1" onclick="DASHBOARD.openScrcpy('${d.id}')" title="Acesso Remoto 1-clique via scrcpy">${UI.icon('monitor')} Scrcpy</button>
+                <button class="btn btn-sm btn-secondary" style="flex:1" onclick="DASHBOARD.reloadKiosk('${d.id}')" title="Recarregar aplicação Kiosk no TV Box">${UI.icon('refresh')} Kiosk</button>
             </div>
         `;
-
-        card.querySelectorAll('.cmd-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                runCommand(btn.dataset.device, btn.dataset.action, btn);
-            });
-        });
 
         return card;
     }
@@ -587,8 +584,6 @@ const DASHBOARD = (() => {
                 UI.createToast(`❌ ${e.message}`, 'error');
             }
         }
-    }
-
     async function captureScreenshot(deviceId) {
         UI.createToast('📸 Solicitando captura de tela...', 'info', 2000);
         try {
@@ -604,5 +599,70 @@ const DASHBOARD = (() => {
         }
     }
 
-    return { render, destroy, toggleMenu, rename, renameStream, createGroup, moveGroup, cmd, deleteDevice, deleteGroup, toggleMode, captureScreenshot, addEvent, clearEvents, viewLog, downloadLog };
+    async function openScrcpy(deviceId) {
+        const dev = devicesCache.find(d => d.id === deviceId);
+        const name = dev?.name || deviceId;
+        UI.createToast(`Iniciando Scrcpy para ${name}...`, 'info', 2000);
+        try {
+            const res = await API.post(`/scrcpy/start/${encodeURIComponent(deviceId)}`);
+            if (res.success) {
+                UI.createToast(`🖥️ Janela Scrcpy aberta para ${name} (PID ${res.pid})!`, 'success');
+            } else {
+                UI.createToast(res.error || 'Falha ao iniciar Scrcpy', 'error');
+            }
+        } catch (e) {
+            UI.createToast(e.message || 'Erro ao conectar ao Scrcpy', 'error');
+        }
+    }
+
+    async function reloadKiosk(deviceId) {
+        const dev = devicesCache.find(d => d.id === deviceId);
+        const name = dev?.name || deviceId;
+        UI.createToast(`Recarregando Kiosk em ${name}...`, 'info', 2000);
+        try {
+            const res = await API.post(`/devices/${encodeURIComponent(deviceId)}/start-stream`);
+            if (res.success) {
+                UI.createToast(`🔄 Kiosk recarregado em ${name}!`, 'success');
+                setTimeout(loadDevices, 1500);
+            } else {
+                UI.createToast(res.error || res.output || 'Falha ao recarregar Kiosk', 'error');
+            }
+        } catch (e) {
+            UI.createToast(e.message || 'Erro ao recarregar Kiosk', 'error');
+        }
+    }
+
+    async function configureKiosk(deviceId) {
+        const dev = devicesCache.find(d => d.id === deviceId);
+        const currentUrl = dev?.target_url || '';
+        const currentBrowser = dev?.web_browser || 'freekiosk';
+        UI.showModal('Configurar Kiosk / Aplicação', `
+            <div class="form-group">
+                <label class="form-label" for="cfg-browser">Navegador / App Kiosk:</label>
+                <select id="cfg-browser" class="form-input">
+                    <option value="freekiosk" ${currentBrowser === 'freekiosk' ? 'selected' : ''}>Free Kiosk Browser (Recomendado)</option>
+                    <option value="chrome" ${currentBrowser === 'chrome' ? 'selected' : ''}>Google Chrome</option>
+                    <option value="browser" ${currentBrowser === 'browser' ? 'selected' : ''}>Browser Padrão</option>
+                </select>
+            </div>
+            <div class="form-group mt-sm">
+                <label class="form-label" for="cfg-target-url">URL da Página / Aplicação:</label>
+                <input type="url" id="cfg-target-url" class="form-input" value="${UI.escAttr(currentUrl)}" placeholder="https://app.exemplo.com">
+                <small class="text-muted" style="display:block;margin-top:4px">URL que o TV Box exibirá ao recarregar ou iniciar.</small>
+            </div>
+        `, async () => {
+            const webBrowser = document.getElementById('cfg-browser')?.value || 'freekiosk';
+            const targetUrl = document.getElementById('cfg-target-url')?.value.trim() || '';
+            try {
+                await API.put(`/devices/${deviceId}`, { mode: 'web', web_browser: webBrowser, target_url: targetUrl });
+                UI.createToast('⚙️ Configuração salva com sucesso', 'success');
+                await reloadKiosk(deviceId);
+                loadDevices();
+            } catch (e) {
+                UI.createToast(`❌ ${e.message}`, 'error');
+            }
+        });
+    }
+
+    return { render, destroy, toggleMenu, rename, renameStream, createGroup, moveGroup, cmd, deleteDevice, deleteGroup, toggleMode, captureScreenshot, addEvent, clearEvents, viewLog, downloadLog, openScrcpy, reloadKiosk, configureKiosk };
 })();

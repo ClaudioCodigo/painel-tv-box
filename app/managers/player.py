@@ -14,15 +14,23 @@ _q = shlex.quote
 
 
 BROWSERS = {
+    "freekiosk": {
+        "package": "com.freekiosk",
+        "activity": "com.freekiosk.MainActivity",
+        "force_stop": "com.freekiosk",
+        "label": "Free Kiosk Browser",
+    },
     "chrome": {
         "package": "com.android.chrome",
         "activity": "com.google.android.apps.chrome.Main",
         "force_stop": "com.android.chrome",
+        "label": "Google Chrome",
     },
     "browser": {
         "package": "com.android.browser",
         "activity": "com.android.browser.BrowserActivity",
         "force_stop": "com.android.browser",
+        "label": "Browser Padrão",
     },
 }
 
@@ -86,16 +94,19 @@ class PlayerManager:
             return f"{panel_url.rstrip('/')}/signage/{device.id}"
         return f"http://{self.host_ip}:{self.panel_port}/signage/{device.id}"
 
-    def _get_browser_def(self, browser_name: str = "chrome") -> dict:
+    def _get_browser_def(self, browser_name: str = "freekiosk") -> dict:
         """Retorna os dados do browser selecionado."""
-        return BROWSERS.get(browser_name, BROWSERS["chrome"])
+        return BROWSERS.get(browser_name, BROWSERS.get("freekiosk", BROWSERS["chrome"]))
 
     def build_start_web_cmd(self, device: DeviceConfig, panel_url: str = "") -> str:
         """Retorna comando shell para abrir o browser em Web Signage."""
         browser = self._get_browser_def(device.web_browser)
-        signage_url = self._build_signage_url(device, panel_url)
+        if device.web_browser == "freekiosk" and device.target_url:
+            url = device.target_url
+        else:
+            url = self._build_signage_url(device, panel_url)
         return (
-            f"am start -a android.intent.action.VIEW -d {_q(signage_url)} "
+            f"am start -a android.intent.action.VIEW -d {_q(url)} "
             f"-n {_q(browser['package'])}/{_q(browser['activity'])} --activity-clear-task"
         )
 
@@ -122,17 +133,20 @@ class PlayerManager:
             return {"success": False, "error": "ADBManager não configurado"}
 
         browser = self._get_browser_def(device.web_browser)
-        signage_url = self._build_signage_url(device, panel_url)
+        if device.web_browser == "freekiosk" and device.target_url:
+            url = device.target_url
+        else:
+            url = self._build_signage_url(device, panel_url)
         cmd = (
-            f"am start -a android.intent.action.VIEW -d {_q(signage_url)} "
+            f"am start -a android.intent.action.VIEW -d {_q(url)} "
             f"-n {_q(browser['package'])}/{_q(browser['activity'])} --activity-clear-task"
         )
         output, code = await self.adb.shell(device.ip, cmd, port=device.adb_port)
-        logger.info("Web Signage started: %s -> %s (code=%d)", device.id, signage_url, code)
+        logger.info("Web Kiosk started: %s -> %s (code=%d)", device.id, url, code)
         return {
             "success": code == 0,
             "method": "web_intent",
-            "url": signage_url,
+            "url": url,
             "browser": browser["package"],
             "output": output.strip(),
             "exit_code": code,

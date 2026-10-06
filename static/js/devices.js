@@ -138,6 +138,9 @@ const DEVICES = (() => {
         const sIcon = UI.statusIcon(status); const sClass = UI.statusClass(status);
         const groupChip = d.group ? UI.groupChip(groupNames[d.group] || d.group, d.group) : '';
         const loc = d.location || '';
+        const isWeb = (d.mode || 'web') === 'web';
+        const browserLabel = d.web_browser === 'chrome' ? 'Chrome' : (d.web_browser === 'browser' ? 'Browser Padrão' : 'Free Kiosk Browser');
+        const appLabel = isWeb ? browserLabel : (d.player?.toUpperCase() || 'VLC');
 
         card.innerHTML = `
             <div class="card-header dcard-header">
@@ -149,14 +152,17 @@ const DEVICES = (() => {
             </div>
             <div class="card-info dcard-meta">
                 <div class="card-info-item"><span class="card-info-key">IP</span><span class="card-info-val">${UI.escapeHtml(d.ip || '--')}</span></div>
-                <div class="card-info-item"><span class="card-info-key">Exibição</span><span class="card-info-val">${(d.mode === 'web') ? '🌐 Web Kiosk' : UI.escapeHtml(d.player || 'vlc')}</span></div>
+                <div class="card-info-item"><span class="card-info-key">App</span><span class="card-info-val" title="${UI.escapeHtml(appLabel)}">${UI.escapeHtml(appLabel)}</span></div>
                 <div class="card-info-item"><span class="card-info-key">Grupo</span><span class="card-info-val">${UI.escapeHtml(groupNames[d.group] || d.group || '--')}</span></div>
                 ${loc ? `<div class="card-info-item"><span class="card-info-key">Local</span><span class="card-info-val">${UI.escapeHtml(loc)}</span></div>` : ''}
+                ${d.target_url ? `<div class="card-info-item" style="grid-column:span 2"><span class="card-info-key">URL</span><span class="card-info-val" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px" title="${UI.escapeHtml(d.target_url)}">${UI.escapeHtml(d.target_url)}</span></div>` : ''}
             </div>
             <div class="dcard-life">
                 <span class="dcard-fresh" title="Último health check / heartbeat">${freshness(d)}</span>
             </div>
-            <div class="card-actions dcard-actions">
+            <div class="card-actions dcard-actions" style="display:flex;gap:6px;flex-wrap:wrap">
+                <button class="btn btn-sm btn-primary" onclick="DEVICES.openScrcpy('${d.id}')" title="Acesso Remoto 1-clique via scrcpy">${UI.icon('monitor')} Scrcpy</button>
+                <button class="btn btn-sm btn-secondary" onclick="DEVICES.reloadKiosk('${d.id}')" title="Recarregar aplicação Kiosk">${UI.icon('refresh')} Kiosk</button>
                 <button class="btn btn-sm btn-secondary" onclick="DEVICES.renameDialog('${d.id}','${UI.escAttr(d.name)}')">${UI.icon('edit')} Renomear</button>
                 <button class="btn btn-sm btn-secondary" onclick="DEVICES.groupDialog('${d.id}','${UI.escAttr(d.group)}')">${UI.icon('users')} Grupo</button>
                 <button class="btn btn-sm btn-danger" onclick="DEVICES.remove('${d.id}')">${UI.icon('trash')}</button>
@@ -225,10 +231,16 @@ const DEVICES = (() => {
                 <div class="form-group"><label class="form-label">Nome *</label><input type="text" id="d-name" class="form-input" placeholder="Ex: TV Box Portaria"></div>
                 <div class="form-group"><label class="form-label">IP *</label><input type="text" id="d-ip" class="form-input" placeholder="Ex: 192.168.254.219"></div>
                 <div class="form-group"><label class="form-label">Porta ADB</label><input type="text" id="d-port" class="form-input" value="5555"></div>
-                <div class="form-group"><label class="form-label">Localização</label><input type="text" id="d-loc" class="form-input" placeholder="Ex: Armazém 1B"></div>
-                <div class="form-group"><label class="form-label">Descrição</label><input type="text" id="d-desc" class="form-input" placeholder="Stream câmera frontal"></div>
-                <div class="form-group"><label class="form-label">Player</label><select id="d-player" class="form-input"><option value="vlc">VLC</option><option value="mpv">MPV</option></select></div>
-                <div class="form-group"><label class="form-label">Path RTSP</label><input type="text" id="d-rtsp" class="form-input" placeholder="Ex: TV_BOX_PORTARIA"></div>
+                <div class="form-group"><label class="form-label">App / Navegador Kiosk</label>
+                    <select id="d-browser" class="form-input">
+                        <option value="freekiosk">Free Kiosk Browser (Recomendado)</option>
+                        <option value="chrome">Google Chrome</option>
+                        <option value="browser">Browser Padrão</option>
+                    </select>
+                </div>
+                <div class="form-group"><label class="form-label">URL da Aplicação</label><input type="url" id="d-url" class="form-input" placeholder="https://app.exemplo.com"></div>
+                <div class="form-group"><label class="form-label">Localização</label><input type="text" id="d-loc" class="form-input" placeholder="Ex: Recepção"></div>
+                <div class="form-group"><label class="form-label">Descrição</label><input type="text" id="d-desc" class="form-input" placeholder="Painel de Atendimento"></div>
             `,
             async () => {
                 const name = (document.getElementById('d-name')?.value || '').trim();
@@ -242,8 +254,11 @@ const DEVICES = (() => {
                     adb_port: parseInt(document.getElementById('d-port')?.value || '5555'),
                     location: (document.getElementById('d-loc')?.value || '').trim(),
                     description: (document.getElementById('d-desc')?.value || '').trim(),
-                    player: document.getElementById('d-player')?.value || 'vlc',
-                    rtsp_path: (document.getElementById('d-rtsp')?.value || '').trim() || slug.toUpperCase(),
+                    mode: 'web',
+                    web_browser: document.getElementById('d-browser')?.value || 'freekiosk',
+                    target_url: (document.getElementById('d-url')?.value || '').trim(),
+                    player: 'vlc',
+                    rtsp_path: slug.toUpperCase(),
                 };
                 try {
                     await API.post('/devices', data);
@@ -313,5 +328,38 @@ const DEVICES = (() => {
         }
     }
 
-    return { render, destroy, showAddDialog, renameDialog, groupDialog, remove, provisionAll };
+    async function openScrcpy(deviceId) {
+        const dev = devicesCache.find(d => d.id === deviceId);
+        const name = dev?.name || deviceId;
+        UI.createToast(`Iniciando Scrcpy para ${name}...`, 'info', 2000);
+        try {
+            const res = await API.post(`/scrcpy/start/${encodeURIComponent(deviceId)}`);
+            if (res.success) {
+                UI.createToast(`🖥️ Janela Scrcpy aberta para ${name} (PID ${res.pid})!`, 'success');
+            } else {
+                UI.createToast(res.error || 'Falha ao iniciar Scrcpy', 'error');
+            }
+        } catch (e) {
+            UI.createToast(e.message || 'Erro ao conectar ao Scrcpy', 'error');
+        }
+    }
+
+    async function reloadKiosk(deviceId) {
+        const dev = devicesCache.find(d => d.id === deviceId);
+        const name = dev?.name || deviceId;
+        UI.createToast(`Recarregando Kiosk em ${name}...`, 'info', 2000);
+        try {
+            const res = await API.post(`/devices/${encodeURIComponent(deviceId)}/start-stream`);
+            if (res.success) {
+                UI.createToast(`🔄 Kiosk recarregado em ${name}!`, 'success');
+                setTimeout(loadDevices, 1500);
+            } else {
+                UI.createToast(res.error || res.output || 'Falha ao recarregar Kiosk', 'error');
+            }
+        } catch (e) {
+            UI.createToast(e.message || 'Erro ao recarregar Kiosk', 'error');
+        }
+    }
+
+    return { render, destroy, showAddDialog, renameDialog, groupDialog, remove, provisionAll, openScrcpy, reloadKiosk };
 })();

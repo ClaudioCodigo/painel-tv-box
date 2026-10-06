@@ -67,10 +67,9 @@ const DEVICE_PAGE = (() => {
                 </div>
 
                 <div class="device-actions" style="margin-top:var(--space-4)">
-                    <button class="btn btn-primary btn-sm" onclick="DEVICE_PAGE.action('start-stream')">${UI.icon('play')} Start</button>
-                    <button class="btn btn-secondary btn-sm" onclick="DEVICE_PAGE.action('stop-stream')">${UI.icon('stop')} Stop</button>
+                    <button class="btn btn-primary btn-sm" onclick="DEVICE_PAGE.openScrcpy()">${UI.icon('monitor')} Scrcpy (1-Clique)</button>
+                    <button class="btn btn-secondary btn-sm" onclick="DEVICE_PAGE.reloadKiosk()">${UI.icon('refresh')} Recarregar Kiosk</button>
                     <button class="btn btn-secondary btn-sm" onclick="DEVICE_PAGE.action('reboot')">${UI.icon('reboot')} Reboot</button>
-                    <button class="btn btn-secondary btn-sm" onclick="DEVICE_PAGE.openScrcpy()">${UI.icon('monitor')} Scrcpy</button>
                     <button class="btn btn-secondary btn-sm" onclick="DEVICE_PAGE.refreshStatus()">${UI.icon('refresh')} Atualizar</button>
                     <button class="btn btn-secondary btn-sm" onclick="DEVICE_PAGE.provisionScripts()">${UI.icon('upload')} Scripts</button>
                     <button class="btn btn-danger btn-sm" onclick="DEVICE_PAGE.deleteDevice()">${UI.icon('trash')} Remover</button>
@@ -147,7 +146,7 @@ const DEVICE_PAGE = (() => {
                     <div class="info-row"><span class="info-key">Modo</span><span class="info-val">${isWeb ? '🌐 Página Web (Kiosk)' : '📺 Stream RTSP'}</span></div>
                     ${isWeb ? `
                     <div class="info-row"><span class="info-key">URL Alvo</span><span class="info-val" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${UI.escapeHtml(device.target_url || '')}">${UI.escapeHtml(device.target_url || '--')}</span></div>
-                    <div class="info-row"><span class="info-key">Browser</span><span class="info-val">${UI.escapeHtml(device.web_browser || 'chrome')}</span></div>
+                    <div class="info-row"><span class="info-key">Browser</span><span class="info-val">${UI.escapeHtml(device.web_browser === 'chrome' ? 'Google Chrome' : (device.web_browser === 'browser' ? 'Browser Padrão' : 'Free Kiosk Browser'))}</span></div>
                     ` : `
                     <div class="info-row"><span class="info-key">Path RTSP</span><span class="info-val">${UI.escapeHtml(device.rtsp_path || '--')}</span></div>
                     <div class="info-row"><span class="info-key">Player</span><span class="info-val">${UI.escapeHtml(device.player || 'vlc')}</span></div>
@@ -191,6 +190,7 @@ const DEVICE_PAGE = (() => {
                         <div style="display:flex;gap:8px;align-items:center">
                             <label style="font-size:12px">Browser:</label>
                             <select id="d-web-browser" class="input-field" style="padding:4px 8px">
+                                <option value="freekiosk" ${(!device.web_browser || device.web_browser === 'freekiosk') ? 'selected' : ''}>Free Kiosk Browser (Recomendado)</option>
                                 <option value="chrome" ${device.web_browser === 'chrome' ? 'selected' : ''}>Google Chrome</option>
                                 <option value="browser" ${device.web_browser === 'browser' ? 'selected' : ''}>Navegador Padrão</option>
                             </select>
@@ -553,7 +553,7 @@ const DEVICE_PAGE = (() => {
             return;
         }
 
-        const web_browser = browserSelect ? browserSelect.value : 'chrome';
+        const web_browser = browserSelect ? browserSelect.value : 'freekiosk';
         try {
             await API.put(`/devices/${deviceId}`, {
                 mode: 'web',
@@ -566,5 +566,20 @@ const DEVICE_PAGE = (() => {
         }
     }
 
-    return { render, destroy, switchTab, refreshStatus, action, openScrcpy, captureScreenshot, installApp, loadApps, uninstallApp, provisionScripts, deleteDevice, runShell, clearShell, toggleRecovery, setMode, saveWebConfig };
+    async function reloadKiosk() {
+        UI.createToast('Recarregando Kiosk no TV Box...', 'info', 2000);
+        try {
+            const res = await API.post(`/devices/${encodeURIComponent(deviceId)}/start-stream`);
+            if (res.success) {
+                UI.createToast('🔄 Kiosk recarregado com sucesso!', 'success');
+                refreshStatus();
+            } else {
+                UI.createToast(res.error || res.output || 'Falha ao recarregar Kiosk', 'error');
+            }
+        } catch (e) {
+            UI.createToast(e.message || 'Erro ao recarregar Kiosk', 'error');
+        }
+    }
+
+    return { render, destroy, switchTab, refreshStatus, action, openScrcpy, reloadKiosk, captureScreenshot, installApp, loadApps, uninstallApp, provisionScripts, deleteDevice, runShell, clearShell, toggleRecovery, setMode, saveWebConfig };
 })();

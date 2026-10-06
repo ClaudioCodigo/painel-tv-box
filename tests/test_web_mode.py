@@ -57,6 +57,33 @@ async def test_player_start_web():
 
 
 @pytest.mark.asyncio
+async def test_player_start_web_freekiosk():
+    """PlayerManager.start_web com freekiosk abre target_url diretamente."""
+    adb_mock = AsyncMock()
+    adb_mock.shell.return_value = ("Events injected: 1", 0)
+
+    player = PlayerManager(adb_manager=adb_mock, host_ip="192.168.1.10", panel_port=8080)
+    dev = DeviceConfig(
+        id="box-kiosk",
+        ip="192.168.1.55",
+        mode="web",
+        target_url="https://painel.local/dashboard",
+        web_browser="freekiosk",
+    )
+
+    res = await player.start(dev, panel_url="http://192.168.1.10:8080")
+    assert res["success"] is True
+    assert res["method"] == "web_intent"
+    assert res["url"] == "https://painel.local/dashboard"
+    assert res["browser"] == "com.freekiosk"
+
+    adb_mock.shell.assert_called_once()
+    called_cmd = adb_mock.shell.call_args[0][1]
+    assert "com.freekiosk" in called_cmd
+    assert "https://painel.local/dashboard" in called_cmd
+
+
+@pytest.mark.asyncio
 async def test_player_stop_web():
     """PlayerManager.stop_web executa am force-stop no pacote do browser."""
     adb_mock = AsyncMock()
