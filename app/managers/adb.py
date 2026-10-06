@@ -16,6 +16,10 @@ class ADBManager:
     """Gerencia conexões ADB com TV Boxes via TCP."""
 
     def __init__(self, binary: str = "adb", connect_timeout: int = 10, server_port: int | None = None):
+        if binary == "adb":
+            from app.utils.system import resolve_binary
+
+            binary = resolve_binary("adb") or "adb"
         self.binary = binary
         self.connect_timeout = connect_timeout
         # Servidor ADB do painel: porta isolada (env PANEL_ADB_SERVER_PORT ou
