@@ -269,6 +269,12 @@ const UI = (() => {
         return icon(map[status] || 'help');
     }
 
+    function setPageTitle(title) {
+        const el = document.getElementById('page-title');
+        if (el) el.textContent = title;
+        document.title = `${title} — Painel TV Box`;
+    }
+
     function launchScrcpy(device) {
         if (!device || !device.ip) {
             createToast('Dispositivo sem endereço IP configurado', 'error');
