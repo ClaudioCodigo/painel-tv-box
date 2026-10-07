@@ -584,6 +584,8 @@ const DASHBOARD = (() => {
                 UI.createToast(`❌ ${e.message}`, 'error');
             }
         }
+    }
+
     async function captureScreenshot(deviceId) {
         UI.createToast('📸 Solicitando captura de tela...', 'info', 2000);
         try {
