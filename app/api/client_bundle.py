@@ -167,7 +167,7 @@ try {{
         $Port = if ($CleanUri -match 'port=([0-9]+)') {{ $Matches[1] }} else {{ '5555' }}
         $Serial = $Ip + ':' + $Port
         if ($CleanUri -match 'name=([^&]+)') {{ $BoxTitle = [System.Uri]::UnescapeDataString($Matches[1]) }} else {{ $BoxTitle = $Serial }}
-    }} elseif ($CleanUri -match '^paineltvbox://scrcpy/?\\?ticket=([A-Za-z0-9_-]{{20,200}})$') {{
+    }} elseif ($CleanUri -match '^paineltvbox://scrcpy/?\\?ticket=([A-Za-z0-9_-]{{20,200}})/?$') {{
         # 2. Modo legado com ticket
         $Ticket = $Matches[1]
         if (-not (Test-Path $KeyPath)) {{
@@ -184,6 +184,10 @@ try {{
         $env:ADB_VENDOR_KEYS = $KeyPath
     }} else {{
         throw 'Link de abertura invalido.'
+    }}
+
+    if (Test-Path $KeyPath) {{
+        $env:ADB_VENDOR_KEYS = $KeyPath
     }}
 
     $env:ADB_SERVER_PORT = '5037'
@@ -259,25 +263,23 @@ Add-Type -AssemblyName PresentationFramework -ErrorAction SilentlyContinue
 def _generate_station_readme() -> str:
     return """PAINEL TV BOX - CLIENTE SCRCPY
 
-INSTALACAO RECOMENDADA
-1. No painel, abra a pagina scrcpy.
-2. Clique em "Instalar cliente neste PC".
-3. Execute o arquivo instalar-scrcpy.cmd baixado pelo navegador.
-4. Volte ao painel, escolha o TV Box e pressione Start.
+INSTALACAO RECOMENDADA (SEM ADMINISTRADOR / SEM UAC)
+1. Extraia todo o conteudo deste arquivo ZIP em uma pasta do seu computador.
+2. De um duplo-clique no arquivo "INSTALAR-1-CLIQUE.bat" (ou "instalar-cliente.bat").
+3. Pronto! O protocolo paineltvbox:// sera registrado no seu usuario local.
+4. Volte ao painel web e clique no botao "Scrcpy" ou "1-Clique" de qualquer TV Box.
 
-Este ZIP normalmente e baixado e instalado automaticamente pelo script acima.
-Se voce recebeu o ZIP manualmente, extraia tudo e execute instalar-cliente.bat.
+DETALHES TECNICOS:
+- O cliente fica em %LOCALAPPDATA%\\PainelTVBox\\ScrcpyClient.
+- Registrado em HKCU (HKEY_CURRENT_USER) — 100% livre de privilegios de Administrador.
+- A chave privada permanece somente nesse computador.
+- Nao ha servico ou processo residente em segundo plano.
 
-O cliente fica em %LOCALAPPDATA%\\PainelTVBox\\ScrcpyClient.
-A chave privada permanece somente nesse computador.
-Nao ha servico ou processo residente em segundo plano.
-
-SOLUCAO DE PROBLEMAS
+SOLUCAO DE PROBLEMAS:
 - Se o navegador perguntar, permita abrir o protocolo paineltvbox://.
-- Se aparecer "Link de abertura invalido", reinstale o cliente pelo painel para
-  atualizar o launcher local.
-- A primeira abertura de cada TV Box pode levar alguns segundos enquanto a
-  chave publica desta estacao e autorizada pelo Magisk.
+- Se aparecer "Link de abertura invalido", execute "INSTALAR-1-CLIQUE.bat" novamente
+  para atualizar o launcher local para a versao mais recente.
+- A pasta Atalhos/ contem arquivos .bat para conexao direta sem navegador.
 """
 
 
@@ -289,6 +291,7 @@ title Painel TV Box - Instalar cliente scrcpy
 cd /d "%~dp0"
 echo ========================================================
 echo    Painel TV Box - Instalando Cliente Scrcpy
+echo    (Instalacao 100%% sem necessidade de Administrador)
 echo ========================================================
 echo.
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0instalar-cliente.ps1"
@@ -306,6 +309,14 @@ if errorlevel 1 (
     reg add "HKCU\Software\Classes\paineltvbox\shell\open\command" /ve /t REG_SZ /d "\"powershell.exe\" -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"%DEST%\PainelScrcpy.ps1\" \"%%1\"" /f >nul 2>&1
     echo Protocolo registrado com sucesso!
     pause
+) else (
+    echo.
+    echo ========================================================
+    echo    Instalacao concluida com sucesso!
+    echo    Agora voce ja pode abrir os TV Boxes no painel.
+    echo ========================================================
+    echo.
+    timeout /t 5 >nul 2>&1
 )
 """
 
@@ -332,6 +343,7 @@ def _build_station_bundle(scrcpy_dir: Path, panel_url: str) -> bytes:
         zf.writestr("PainelScrcpy.ps1", _generate_station_launcher(panel_url).encode("utf-8-sig"))
         zf.writestr("instalar-cliente.ps1", _generate_station_installer().encode("utf-8-sig"))
         zf.writestr("instalar-cliente.bat", _generate_station_bootstrap().encode("utf-8"))
+        zf.writestr("INSTALAR-1-CLIQUE.bat", _generate_station_bootstrap().encode("utf-8"))
         zf.writestr("README.txt", _generate_station_readme().encode("utf-8"))
 
         # Atalhos rápidos de duplo clique para cada TV Box cadastrado

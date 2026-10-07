@@ -275,20 +275,30 @@ const UI = (() => {
         document.title = `${title} — Painel TV Box`;
     }
 
-    function launchScrcpy(device) {
+    async function launchScrcpy(device) {
         if (!device || !device.ip) {
             createToast('Dispositivo sem endereço IP configurado', 'error');
             return;
         }
         const name = device.name || device.id;
+        createToast(`🖥️ Abrindo Scrcpy para ${escapeHtml(name)}... (Se não abrir, instale o cliente na aba Scrcpy)`, 'info', 4000);
+
+        // 1. Tenta obter launch ticket no servidor (compatível com estações antigas e novas)
+        try {
+            const ticketRes = await API.post(`/scrcpy/client/launch-ticket/${encodeURIComponent(device.id)}`);
+            if (ticketRes && ticketRes.protocol_url) {
+                window.location.href = ticketRes.protocol_url;
+                return;
+            }
+        } catch (e) {
+            // Se offline ou sem emissão de ticket, faz fallback para link direto
+        }
+
+        // 2. Fallback direto
         const ip = device.ip;
         const port = device.adb_port || 5555;
         const protoUrl = `paineltvbox://${ip}:${port}/?name=${encodeURIComponent(name)}`;
-
-        // Tenta acionar o protocolo do cliente local no Windows
         window.location.href = protoUrl;
-
-        createToast(`🖥️ Abrindo Scrcpy para ${escapeHtml(name)}... (Se não abrir, instale o cliente na aba Scrcpy)`, 'info', 5000);
     }
 
     async function launchScrcpyHost(deviceId, name) {
