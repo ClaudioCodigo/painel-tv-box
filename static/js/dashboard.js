@@ -173,7 +173,8 @@ const DASHBOARD = (() => {
                     <div class="dropdown-wrap">
                         <button class="dropdown-btn" onclick="DASHBOARD.toggleMenu(event,'${d.id}')" title="Ações" aria-label="Ações">${UI.icon('chevron-down')}</button>
                         <div class="dropdown-menu" id="menu-${d.id}">
-                            <button class="dropdown-item" onclick="DASHBOARD.openScrcpy('${d.id}')">${UI.icon('monitor')} Acesso Remoto (Scrcpy)</button>
+                            <button class="dropdown-item" onclick="DASHBOARD.openScrcpy('${d.id}')">${UI.icon('monitor')} Acesso Remoto (1-Clique)</button>
+                            <button class="dropdown-item" onclick="DASHBOARD.openScrcpyHost('${d.id}')">🖥️ Abrir no Servidor (Host)</button>
                             <button class="dropdown-item" onclick="DASHBOARD.reloadKiosk('${d.id}')">${UI.icon('refresh')} Recarregar Kiosk</button>
                             <button class="dropdown-item" onclick="DASHBOARD.captureScreenshot('${d.id}')">📸 Capturar Tela</button>
                             <button class="dropdown-item" onclick="DASHBOARD.cmd('${d.id}','reboot')">${UI.icon('reboot')} Reboot</button>
@@ -601,20 +602,18 @@ const DASHBOARD = (() => {
         }
     }
 
-    async function openScrcpy(deviceId) {
+    function openScrcpy(deviceId) {
         const dev = devicesCache.find(d => d.id === deviceId);
-        const name = dev?.name || deviceId;
-        UI.createToast(`Iniciando Scrcpy para ${name}...`, 'info', 2000);
-        try {
-            const res = await API.post(`/scrcpy/start/${encodeURIComponent(deviceId)}`);
-            if (res.success) {
-                UI.createToast(`🖥️ Janela Scrcpy aberta para ${name} (PID ${res.pid})!`, 'success');
-            } else {
-                UI.createToast(res.error || 'Falha ao iniciar Scrcpy', 'error');
-            }
-        } catch (e) {
-            UI.createToast(e.message || 'Erro ao conectar ao Scrcpy', 'error');
+        if (dev) {
+            UI.launchScrcpy(dev);
+        } else {
+            UI.launchScrcpy({ id: deviceId, ip: deviceId });
         }
+    }
+
+    function openScrcpyHost(deviceId) {
+        const dev = devicesCache.find(d => d.id === deviceId);
+        UI.launchScrcpyHost(deviceId, dev?.name || deviceId);
     }
 
     async function reloadKiosk(deviceId) {
@@ -666,5 +665,5 @@ const DASHBOARD = (() => {
         });
     }
 
-    return { render, destroy, toggleMenu, rename, renameStream, createGroup, moveGroup, cmd, deleteDevice, deleteGroup, toggleMode, captureScreenshot, addEvent, clearEvents, viewLog, downloadLog, openScrcpy, reloadKiosk, configureKiosk };
+    return { render, destroy, toggleMenu, rename, renameStream, createGroup, moveGroup, cmd, deleteDevice, deleteGroup, toggleMode, captureScreenshot, addEvent, clearEvents, viewLog, downloadLog, openScrcpy, openScrcpyHost, reloadKiosk, configureKiosk };
 })();

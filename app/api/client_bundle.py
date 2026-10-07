@@ -138,37 +138,59 @@ Start-Sleep -Seconds 4
 
 
 def _generate_station_launcher(panel_url: str) -> str:
-    """Launcher instalado que resolve um ticket e abre o scrcpy local."""
+    """Launcher instalado que resolve um ticket ou conecta diretamente via protocolo."""
     endpoint = f"{panel_url.rstrip('/')}/api/scrcpy/client/launch/resolve"
     return f"""param([Parameter(Mandatory=$true)][string]$ProtocolUri)
 $ErrorActionPreference = 'Stop'
 
 try {{
-    if ($ProtocolUri -notmatch '^paineltvbox://scrcpy/?\\?ticket=([A-Za-z0-9_-]{{20,200}})$') {{
-        throw 'Link de abertura invalido.'
-    }}
-    $Ticket = $Matches[1]
+    $CleanUri = $ProtocolUri.Trim().Trim('"').Trim("'")
     $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
     $Adb = Join-Path $Root 'scrcpy\\adb.exe'
     $Scrcpy = Join-Path $Root 'scrcpy\\scrcpy.exe'
     $KeyPath = Join-Path $Root 'credencial\\adbkey'
-    if (-not (Test-Path $Adb) -or -not (Test-Path $Scrcpy) -or -not (Test-Path $KeyPath)) {{
+    if (-not (Test-Path $Adb) -or -not (Test-Path $Scrcpy)) {{
         throw 'Cliente incompleto. Execute novamente o instalador do Painel TV Box.'
     }}
 
-    $Payload = @{{
-        token = $Ticket
-        client_name = $(if ($env:COMPUTERNAME) {{ $env:COMPUTERNAME }} else {{ 'Windows-PC' }})
-        public_key = (Get-Content -Raw -Encoding UTF8 ($KeyPath + '.pub')).Trim()
-    }} | ConvertTo-Json
-    $Target = Invoke-RestMethod -Method Post -Uri {_ps_literal(endpoint)} -ContentType 'application/json' -Body $Payload
-    $env:ADB_VENDOR_KEYS = $KeyPath
+    $Serial = ''
+    $BoxTitle = 'TV Box'
+
+    # 1. Modo Direto: paineltvbox://IP:PORT/?name=... ou ip=...
+    if ($CleanUri -match '^paineltvbox://([0-9]{{1,3}}\\.[0-9]{{1,3}}\\.[0-9]{{1,3}}\\.[0-9]{{1,3}}):?([0-9]*)/?(?:\\?.*name=([^&]+))?') {{
+        $Ip = $Matches[1]
+        $Port = if ($Matches[2]) {{ $Matches[2] }} else {{ '5555' }}
+        $Serial = $Ip + ':' + $Port
+        if ($Matches[3]) {{ $BoxTitle = [System.Uri]::UnescapeDataString($Matches[3]) }} else {{ $BoxTitle = $Serial }}
+    }} elseif ($CleanUri -match 'ip=([0-9]{{1,3}}\\.[0-9]{{1,3}}\\.[0-9]{{1,3}}\\.[0-9]{{1,3}})') {{
+        $Ip = $Matches[1]
+        $Port = if ($CleanUri -match 'port=([0-9]+)') {{ $Matches[1] }} else {{ '5555' }}
+        $Serial = $Ip + ':' + $Port
+        if ($CleanUri -match 'name=([^&]+)') {{ $BoxTitle = [System.Uri]::UnescapeDataString($Matches[1]) }} else {{ $BoxTitle = $Serial }}
+    }} elseif ($CleanUri -match '^paineltvbox://scrcpy/?\\?ticket=([A-Za-z0-9_-]{{20,200}})$') {{
+        # 2. Modo legado com ticket
+        $Ticket = $Matches[1]
+        if (-not (Test-Path $KeyPath)) {{
+            throw 'Chave do cliente nao encontrada. Reinstale o cliente.'
+        }}
+        $Payload = @{{
+            token = $Ticket
+            client_name = $(if ($env:COMPUTERNAME) {{ $env:COMPUTERNAME }} else {{ 'Windows-PC' }})
+            public_key = (Get-Content -Raw -Encoding UTF8 ($KeyPath + '.pub')).Trim()
+        }} | ConvertTo-Json
+        $Target = Invoke-RestMethod -Method Post -Uri {_ps_literal(endpoint)} -ContentType 'application/json' -Body $Payload
+        $Serial = $Target.ip + ':' + $Target.adb_port
+        $BoxTitle = if ($Target.name) {{ $Target.name }} else {{ $Serial }}
+        $env:ADB_VENDOR_KEYS = $KeyPath
+    }} else {{
+        throw 'Link de abertura invalido.'
+    }}
+
     $env:ADB_SERVER_PORT = '5037'
     # Windows PowerShell 5.1 transforma stderr de executáveis nativos em
     # ErrorRecord. O ADB escreve mensagens normais do daemon em stderr.
     $ErrorActionPreference = 'Continue'
     & $Adb kill-server 2>$null | Out-Null
-    $Serial = $Target.ip + ':' + $Target.adb_port
     $Connected = $false
     $LastConnect = ''
     for ($Attempt = 1; $Attempt -le 8; $Attempt++) {{
@@ -188,7 +210,7 @@ try {{
     }}
 
     $ErrorActionPreference = 'Continue'
-    & $Scrcpy -s $Serial --max-size=1024
+    & $Scrcpy -s $Serial --window-title ('Painel TV Box: ' + $BoxTitle) --max-size=1280
     $ScrcpyExit = $LASTEXITCODE
     $ErrorActionPreference = 'Stop'
     if ($ScrcpyExit -ne 0) {{ throw ('scrcpy encerrou com codigo ' + $ScrcpyExit) }}
@@ -260,14 +282,29 @@ SOLUCAO DE PROBLEMAS
 
 
 def _generate_station_bootstrap() -> str:
-    """Atalho de duplo clique para o instalador PowerShell."""
+    """Atalho de duplo clique para o instalador PowerShell com fallback seguro."""
     return r"""@echo off
 chcp 65001 >nul
 title Painel TV Box - Instalar cliente scrcpy
+cd /d "%~dp0"
+echo ========================================================
+echo    Painel TV Box - Instalando Cliente Scrcpy
+echo ========================================================
+echo.
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0instalar-cliente.ps1"
 if errorlevel 1 (
     echo.
-    echo [ERRO] Nao foi possivel instalar o cliente.
+    echo [AVISO] Falha ao executar via PowerShell. Registrando protocolo diretamente...
+    set "DEST=%LOCALAPPDATA%\PainelTVBox\ScrcpyClient"
+    if not exist "%DEST%" mkdir "%DEST%"
+    if not exist "%DEST%\scrcpy" mkdir "%DEST%\scrcpy"
+    xcopy "%~dp0scrcpy\*" "%DEST%\scrcpy\" /E /I /Y /Q >nul 2>&1
+    copy /Y "%~dp0PainelScrcpy.ps1" "%DEST%\" >nul 2>&1
+    copy /Y "%~dp0README.txt" "%DEST%\" >nul 2>&1
+    reg add "HKCU\Software\Classes\paineltvbox" /ve /t REG_SZ /d "URL:Painel TV Box Protocol" /f >nul 2>&1
+    reg add "HKCU\Software\Classes\paineltvbox" /v "URL Protocol" /t REG_SZ /d "" /f >nul 2>&1
+    reg add "HKCU\Software\Classes\paineltvbox\shell\open\command" /ve /t REG_SZ /d "\"powershell.exe\" -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"%DEST%\PainelScrcpy.ps1\" \"%%1\"" /f >nul 2>&1
+    echo Protocolo registrado com sucesso!
     pause
 )
 """
@@ -296,6 +333,28 @@ def _build_station_bundle(scrcpy_dir: Path, panel_url: str) -> bytes:
         zf.writestr("instalar-cliente.ps1", _generate_station_installer().encode("utf-8-sig"))
         zf.writestr("instalar-cliente.bat", _generate_station_bootstrap().encode("utf-8"))
         zf.writestr("README.txt", _generate_station_readme().encode("utf-8"))
+
+        # Atalhos rápidos de duplo clique para cada TV Box cadastrado
+        try:
+            import app.main
+            cfg = getattr(app.main, "config", None)
+            if cfg:
+                devices = cfg.list_devices()
+                for dev in devices:
+                    if dev.ip:
+                        safe_name = _safe_filename(dev.name or dev.id)
+                        bat_shortcut = f"""@echo off
+chcp 65001 >nul
+title Conectando a {dev.name or dev.id}...
+cd /d "%~dp0"
+echo Conectando ao TV Box {dev.name or dev.id} ({dev.ip}:{dev.adb_port})...
+scrcpy\\adb.exe connect {dev.ip}:{dev.adb_port}
+scrcpy\\scrcpy.exe -s {dev.ip}:{dev.adb_port} --window-title "Painel TV Box: {dev.name or dev.id}" --max-size=1280
+"""
+                        zf.writestr(f"Atalhos/Conectar - {safe_name}.bat", bat_shortcut.encode("utf-8"))
+        except Exception:
+            pass
+
     return zip_buffer.getvalue()
 
 

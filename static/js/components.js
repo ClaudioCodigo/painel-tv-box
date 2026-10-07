@@ -269,11 +269,35 @@ const UI = (() => {
         return icon(map[status] || 'help');
     }
 
-    function setPageTitle(title) {
-        const el = document.getElementById('page-title');
-        if (el) el.textContent = title;
-        document.title = `${title} — Painel TV Box`;
+    function launchScrcpy(device) {
+        if (!device || !device.ip) {
+            createToast('Dispositivo sem endereço IP configurado', 'error');
+            return;
+        }
+        const name = device.name || device.id;
+        const ip = device.ip;
+        const port = device.adb_port || 5555;
+        const protoUrl = `paineltvbox://${ip}:${port}/?name=${encodeURIComponent(name)}`;
+
+        // Tenta acionar o protocolo do cliente local no Windows
+        window.location.href = protoUrl;
+
+        createToast(`🖥️ Abrindo Scrcpy para ${escapeHtml(name)}... (Se não abrir, instale o cliente na aba Scrcpy)`, 'info', 5000);
     }
 
-    return { createStatCard, createCard, createToast, showModal, hideModal, createBadge, statusClass, statusIcon, setPageTitle, escapeHtml, escJs, escAttr, icon, skeletons, timeAgo, stateView, bindStateRetry, toolbarCounters, groupChip, statusBar, confirmStopScrcpy };
+    async function launchScrcpyHost(deviceId, name) {
+        createToast(`Iniciando Scrcpy no servidor para ${name || deviceId}...`, 'info', 2000);
+        try {
+            const res = await API.post(`/scrcpy/start/${encodeURIComponent(deviceId)}`);
+            if (res.success) {
+                createToast(`🖥️ Janela Scrcpy aberta no servidor (PID ${res.pid})!`, 'success');
+            } else {
+                createToast(res.error || 'Falha ao iniciar Scrcpy no servidor', 'error');
+            }
+        } catch (e) {
+            createToast(e.message || 'Erro ao conectar ao Scrcpy no servidor', 'error');
+        }
+    }
+
+    return { createStatCard, createCard, createToast, showModal, hideModal, createBadge, statusClass, statusIcon, setPageTitle, escapeHtml, escJs, escAttr, icon, skeletons, timeAgo, stateView, bindStateRetry, toolbarCounters, groupChip, statusBar, confirmStopScrcpy, launchScrcpy, launchScrcpyHost };
 })();

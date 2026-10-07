@@ -422,6 +422,20 @@ class ScrcpyManager:
         # 1. Limpeza de resíduos
         await self._cleanup_server(target, adb)
 
+        # Garante que o servidor ADB padrão (porta 5037, usado pelo scrcpy)
+        # também esteja conectado ao dispositivo antes de abrir a janela.
+        conn_adb_cmd = [str(adb_bin) if adb_bin.is_file() else "adb", "connect", target]
+        try:
+            p_conn = await asyncio.create_subprocess_exec(
+                *conn_adb_cmd,
+                env=_env_default_adb(),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            await asyncio.wait_for(p_conn.wait(), timeout=10)
+        except Exception as e:
+            logger.warning("Falha ao pré-conectar adb 5037 em %s: %s", target, e)
+
         cmd = [str(scrcpy_bin), "-s", target]
         if "--window-title" not in extra_args:
             cmd.extend(["--window-title", f"Painel TV Box: {target}"])
@@ -434,6 +448,19 @@ class ScrcpyManager:
 
         for attempt in range(1, max_attempts + 1):
             try:
+                # Re-conecta no adb 5037 antes de cada tentativa
+                if attempt > 1:
+                    try:
+                        p_retry_conn = await asyncio.create_subprocess_exec(
+                            *conn_adb_cmd,
+                            env=_env_default_adb(),
+                            stdout=asyncio.subprocess.PIPE,
+                            stderr=asyncio.subprocess.PIPE,
+                        )
+                        await asyncio.wait_for(p_retry_conn.wait(), timeout=10)
+                    except Exception:
+                        pass
+
                 self._metrics["starts"] += 1
                 logger.info("scrcpy tentativa %d/%d target=%s cmd=%s", attempt, max_attempts, target, " ".join(cmd))
                 proc = await asyncio.create_subprocess_exec(

@@ -328,20 +328,18 @@ const DEVICES = (() => {
         }
     }
 
-    async function openScrcpy(deviceId) {
+    function openScrcpy(deviceId) {
         const dev = devicesCache.find(d => d.id === deviceId);
-        const name = dev?.name || deviceId;
-        UI.createToast(`Iniciando Scrcpy para ${name}...`, 'info', 2000);
-        try {
-            const res = await API.post(`/scrcpy/start/${encodeURIComponent(deviceId)}`);
-            if (res.success) {
-                UI.createToast(`🖥️ Janela Scrcpy aberta para ${name} (PID ${res.pid})!`, 'success');
-            } else {
-                UI.createToast(res.error || 'Falha ao iniciar Scrcpy', 'error');
-            }
-        } catch (e) {
-            UI.createToast(e.message || 'Erro ao conectar ao Scrcpy', 'error');
+        if (dev) {
+            UI.launchScrcpy(dev);
+        } else {
+            UI.launchScrcpy({ id: deviceId, ip: deviceId });
         }
+    }
+
+    function openScrcpyHost(deviceId) {
+        const dev = devicesCache.find(d => d.id === deviceId);
+        UI.launchScrcpyHost(deviceId, dev?.name || deviceId);
     }
 
     async function reloadKiosk(deviceId) {
@@ -361,5 +359,5 @@ const DEVICES = (() => {
         }
     }
 
-    return { render, destroy, showAddDialog, renameDialog, groupDialog, remove, provisionAll, openScrcpy, reloadKiosk };
+    return { render, destroy, showAddDialog, renameDialog, groupDialog, remove, provisionAll, openScrcpy, openScrcpyHost, reloadKiosk };
 })();

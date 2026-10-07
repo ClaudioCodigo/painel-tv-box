@@ -4,6 +4,7 @@
 const SCRCPY = (() => {
     let refreshTimer = null;
     let deviceNames = new Map();
+    let devicesList = [];
     let enrollmentClients = [];
 
     const PRESET_ARGS = [
@@ -42,6 +43,7 @@ const SCRCPY = (() => {
         } catch (e) {
             // Se falhar, a lista ficará vazia
         }
+        devicesList = devices;
         deviceNames = new Map(devices.map(d => [d.id, d.name || d.id]));
 
         const deviceOptions = devices.map(d =>
@@ -96,19 +98,21 @@ const SCRCPY = (() => {
   </details>
 
   <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;align-items:center">
-   <button class="btn btn-primary" onclick="SCRCPY.startHost()">${UI.icon('play')} Abrir Janela no Host (1-clique)</button>
+   <button class="btn btn-primary" onclick="SCRCPY.startLocal()">${UI.icon('monitor')} 🚀 Abrir neste PC (1-Clique)</button>
+   <button class="btn btn-secondary" onclick="SCRCPY.downloadStationZip()">${UI.icon('download')} 📥 Baixar Pacote Portátil (.zip)</button>
+   <button class="btn btn-secondary" onclick="SCRCPY.downloadStationBundle()">${UI.icon('download')} ⚡ Instalador Rápido (.cmd)</button>
+   <button class="btn btn-secondary" onclick="SCRCPY.downloadLauncher()">${UI.icon('download')} 📄 Atalho .BAT deste Box</button>
+   <button class="btn btn-secondary" onclick="SCRCPY.startHost()">${UI.icon('play')} Abrir no Servidor</button>
    <button class="btn btn-danger" onclick="SCRCPY.stopMirroring()">${UI.icon('stop')} Fechar Janela</button>
-   <button class="btn btn-secondary" onclick="SCRCPY.startLocal()">${UI.icon('monitor')} Abrir via Protocolo</button>
-   <button class="btn btn-secondary" onclick="SCRCPY.downloadLauncher()">${UI.icon('download')} Baixar Launcher (.bat)</button>
-   <button class="btn btn-secondary" onclick="SCRCPY.downloadStationBundle()">${UI.icon('download')} Instalar cliente</button>
   </div>
 
   <div style="margin-top:14px;padding:12px;background:var(--bg-secondary,#1e293b);border-radius:6px;font-size:12px;color:var(--text-muted)">
-    <strong style="color:var(--text-primary)">💡 Como usar:</strong>
+    <strong style="color:var(--text-primary)">💡 Como usar o Acesso Remoto:</strong>
     <ul style="margin:6px 0 0 18px;padding:0;line-height:1.6">
-      <li><strong>Abrir Janela no Host:</strong> Se você está acessando o painel no próprio PC servidor, abre a janela instantaneamente na sua tela com 1 clique.</li>
-      <li><strong>Baixar Launcher (.bat):</strong> Baixa um script executável com duplo clique para qualquer computador na rede local.</li>
-      <li><strong>Abrir via Protocolo:</strong> Se você instalou o cliente neste PC (botão "Instalar cliente"), abre o scrcpy direto pelo navegador via link <code>paineltvbox://</code>.</li>
+      <li><strong>Abrir neste PC (1-Clique):</strong> Abre a tela do TV Box instantaneamente no monitor do seu computador atual via link direto.</li>
+      <li><strong>Baixar Pacote Portátil (.zip):</strong> Pacote completo com Scrcpy + script de instalação rápida + atalhos de duplo-clique para cada TV Box. Não precisa de permissão de administrador.</li>
+      <li><strong>Instalador Rápido (.cmd):</strong> Baixa o pacote e registra o protocolo <code>paineltvbox://</code> automaticamente.</li>
+      <li><strong>Abrir no Servidor:</strong> Abre a janela na tela do servidor (para quem está usando o PC host).</li>
     </ul>
   </div>
  </div>
@@ -267,9 +271,24 @@ const SCRCPY = (() => {
         }
     }
 
+    function downloadStationZip() {
+        UI.createToast('Baixando pacote portátil do cliente (.zip)...', 'info');
+        const url = API.authUrl('/scrcpy/client/station-bundle');
+        const a = document.createElement('a');
+        a.href = `/api${url}`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    }
+
     async function startLocal() {
         const deviceId = document.getElementById('scrcpy-device')?.value;
         if (!deviceId) { UI.createToast('Selecione um dispositivo primeiro', 'warning'); return; }
+        const dev = devicesList.find(d => d.id === deviceId);
+        if (dev && dev.ip) {
+            UI.launchScrcpy(dev);
+            return;
+        }
         try {
             const result = await API.post(`/scrcpy/client/launch-ticket/${encodeURIComponent(deviceId)}`);
             UI.createToast('Abrindo o cliente scrcpy...', 'info');
@@ -452,5 +471,5 @@ const SCRCPY = (() => {
         });
     }
 
-    return { render, startHost, downloadBundle, downloadLauncher, downloadStationBundle, startLocal, loadEnrollments, revokeEnrollment, revokeAll, startMirroring, startStreaming, stopMirroring, startLive, stopLive, checkUpdates, installLatest, activateVersion, deleteVersion };
+    return { render, startHost, downloadBundle, downloadLauncher, downloadStationBundle, downloadStationZip, startLocal, loadEnrollments, revokeEnrollment, revokeAll, startMirroring, startStreaming, stopMirroring, startLive, stopLive, checkUpdates, installLatest, activateVersion, deleteVersion };
 })();
