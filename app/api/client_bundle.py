@@ -167,18 +167,23 @@ try {{
         $Port = if ($CleanUri -match 'port=([0-9]+)') {{ $Matches[1] }} else {{ '5555' }}
         $Serial = $Ip + ':' + $Port
         if ($CleanUri -match 'name=([^&]+)') {{ $BoxTitle = [System.Uri]::UnescapeDataString($Matches[1]) }} else {{ $BoxTitle = $Serial }}
-    }} elseif ($CleanUri -match '^paineltvbox://scrcpy/?\\?ticket=([A-Za-z0-9_-]{{20,200}})/?$') {{
+    }} elseif ($CleanUri -match '^paineltvbox://scrcpy/?\\?ticket=([A-Za-z0-9_-]{{20,200}})/?') {{
         # 2. Modo legado com ticket
         $Ticket = $Matches[1]
         if (-not (Test-Path $KeyPath)) {{
             throw 'Chave do cliente nao encontrada. Reinstale o cliente.'
+        }}
+        $Endpoint = {_ps_literal(endpoint)}
+        if ($CleanUri -match 'server=([^&]+)') {{
+            $Base = [System.Uri]::UnescapeDataString($Matches[1]).TrimEnd('/')
+            $Endpoint = $Base + '/api/scrcpy/client/launch/resolve'
         }}
         $Payload = @{{
             token = $Ticket
             client_name = $(if ($env:COMPUTERNAME) {{ $env:COMPUTERNAME }} else {{ 'Windows-PC' }})
             public_key = (Get-Content -Raw -Encoding UTF8 ($KeyPath + '.pub')).Trim()
         }} | ConvertTo-Json
-        $Target = Invoke-RestMethod -Method Post -Uri {_ps_literal(endpoint)} -ContentType 'application/json' -Body $Payload
+        $Target = Invoke-RestMethod -Method Post -Uri $Endpoint -ContentType 'application/json' -Body $Payload
         $Serial = $Target.ip + ':' + $Target.adb_port
         $BoxTitle = if ($Target.name) {{ $Target.name }} else {{ $Serial }}
         $env:ADB_VENDOR_KEYS = $KeyPath
@@ -374,12 +379,21 @@ def _generate_online_installer(panel_url: str, token: str) -> str:
     """Gera .cmd pequeno que baixa e instala o cliente atual do painel."""
     package_url = f"{panel_url.rstrip('/')}/api/scrcpy/client/station-bundle-download/{token}"
     powershell = f"""$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
 $Work = Join-Path $env:TEMP ('PainelTVBox-' + [guid]::NewGuid().ToString('N'))
 $Zip = $Work + '.zip'
 try {{
     New-Item -ItemType Directory -Force -Path $Work | Out-Null
+    Write-Host '[1/3] Baixando pacote do Scrcpy...' -ForegroundColor Cyan
     Invoke-WebRequest -UseBasicParsing -Uri {_ps_literal(package_url)} -OutFile $Zip
-    Expand-Archive -Path $Zip -DestinationPath $Work -Force
+    Write-Host '[2/3] Extraindo arquivos...' -ForegroundColor Cyan
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    try {{
+        [System.IO.Compression.ZipFile]::ExtractToDirectory($Zip, $Work)
+    }} catch {{
+        Expand-Archive -Path $Zip -DestinationPath $Work -Force
+    }}
+    Write-Host '[3/3] Registrando protocolo no Windows...' -ForegroundColor Cyan
     & (Join-Path $Work 'instalar-cliente.ps1')
     if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) {{ throw 'O instalador retornou erro.' }}
 }} finally {{
@@ -391,6 +405,11 @@ try {{
     return f"""@echo off
 chcp 65001 >nul
 title Painel TV Box - Instalar cliente scrcpy
+echo ========================================================
+echo    Painel TV Box - Instalando Cliente Scrcpy
+echo    (Instalacao 100%% sem necessidade de Administrador)
+echo ========================================================
+echo.
 powershell.exe -NoProfile -ExecutionPolicy Bypass -EncodedCommand {encoded}
 if errorlevel 1 (
     echo.
