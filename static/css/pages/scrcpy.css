@@ -129,6 +129,106 @@
     padding: 6px 0;
 }
 
+/* ── Bloco de ajuda "Como usar o Acesso Remoto" ── */
+.scrcpy-help {
+    margin-top: var(--space-4);
+    padding: var(--space-3) var(--space-4);
+    background: var(--bg-inset);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    font-size: 0.8em;
+    color: var(--text-muted);
+}
+
+.scrcpy-help-title {
+    font-size: 1.05em;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.scrcpy-help-lead {
+    margin: 6px 0 0;
+    line-height: 1.6;
+}
+
+.scrcpy-help-lead strong {
+    color: var(--text-secondary);
+}
+
+.scrcpy-help-group {
+    margin-top: var(--space-3);
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--border-subtle);
+}
+
+.scrcpy-help-group-title {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-bottom: var(--space-2);
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.scrcpy-help-tag,
+.scrcpy-help-rec {
+    font-size: 0.85em;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 1px 7px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.scrcpy-help-rec {
+    border-color: var(--text-primary);
+    color: var(--text-primary);
+}
+
+.scrcpy-help-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.scrcpy-help-list li {
+    margin-bottom: var(--space-2);
+    padding: var(--space-1) 0 var(--space-1) var(--space-3);
+    border-left: 2px solid var(--border-strong);
+    line-height: 1.6;
+}
+
+.scrcpy-help-list li:last-child {
+    margin-bottom: 0;
+}
+
+.scrcpy-help-list strong {
+    color: var(--text-primary);
+}
+
+.scrcpy-help code {
+    font-family: var(--font-mono);
+    font-size: 0.95em;
+    color: var(--text-secondary);
+    word-break: break-word;
+}
+
+.scrcpy-help-note {
+    margin: var(--space-3) 0 0;
+    padding: var(--space-2) var(--space-3);
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--radius-sm);
+    line-height: 1.6;
+}
+
+.scrcpy-help-note strong {
+    color: var(--text-secondary);
+}
+
 @media (max-width: 560px) {
     .scrcpy-enrollment-heading,
     .scrcpy-enrollment-summary {

@@ -86,7 +86,7 @@ const SCRCPY = (() => {
    </select>
   </div>
 
-  <details style="margin-top:12px;background:var(--bg-secondary,#1e293b);border-radius:6px;padding:10px">
+  <details style="margin-top:12px;background:var(--bg-inset);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);padding:10px">
     <summary style="cursor:pointer;font-weight:600;font-size:13px;color:var(--text-secondary)">⚙️ Opções avançadas do scrcpy (Bitrate, FPS, Codec)</summary>
     <div style="margin-top:10px">
       ${cb}
@@ -106,14 +106,60 @@ const SCRCPY = (() => {
    <button class="btn btn-danger" onclick="SCRCPY.stopMirroring()">${UI.icon('stop')} Fechar Janela</button>
   </div>
 
-  <div style="margin-top:14px;padding:12px;background:var(--bg-secondary,#1e293b);border-radius:6px;font-size:12px;color:var(--text-muted)">
-    <strong style="color:var(--text-primary)">💡 Como usar o Acesso Remoto:</strong>
-    <ul style="margin:6px 0 0 18px;padding:0;line-height:1.6">
-      <li><strong>Abrir neste PC (1-Clique):</strong> Abre a tela do TV Box instantaneamente no monitor do seu computador atual via link direto.</li>
-      <li><strong>Baixar Pacote Portátil (.zip):</strong> Pacote completo com Scrcpy + script de instalação rápida + atalhos de duplo-clique para cada TV Box. Não precisa de permissão de administrador.</li>
-      <li><strong>Instalador Rápido (.cmd):</strong> Baixa o pacote e registra o protocolo <code>paineltvbox://</code> automaticamente.</li>
-      <li><strong>Abrir no Servidor:</strong> Abre a janela na tela do servidor (para quem está usando o PC host).</li>
-    </ul>
+  <div class="scrcpy-help">
+    <div class="scrcpy-help-title">💡 Como usar o Acesso Remoto</div>
+    <p class="scrcpy-help-lead">
+      A tela do TV Box é uma só: ela abre em <strong>um lugar por vez</strong>. Escolha abaixo onde ela deve aparecer.
+    </p>
+
+    <div class="scrcpy-help-group">
+      <div class="scrcpy-help-group-title">1ª vez em cada computador <span class="scrcpy-help-tag">sem senha de administrador</span></div>
+      <ul class="scrcpy-help-list">
+        <li>
+          <strong>⚡ Instalador Rápido (.cmd)</strong> <span class="scrcpy-help-rec">recomendado</span><br>
+          Baixe e dê duplo-clique — não precisa extrair nada. Ele baixa o Scrcpy, cria a chave ADB
+          deste PC e registra o protocolo <code>paineltvbox://</code> sozinho. É o que faz o botão
+          <strong>Abrir neste PC</strong> passar a funcionar.
+        </li>
+        <li>
+          <strong>📥 Baixar Pacote Portátil (.zip)</strong><br>
+          A mesma instalação, feita à mão: extraia o ZIP e execute <code>INSTALAR-1-CLIQUE.bat</code>.
+          Use quando o navegador ou o antivírus bloquear o <code>.cmd</code>. O pacote também traz um
+          atalho de duplo-clique para cada TV Box cadastrado.
+        </li>
+      </ul>
+    </div>
+
+    <div class="scrcpy-help-group">
+      <div class="scrcpy-help-group-title">No dia a dia</div>
+      <ul class="scrcpy-help-list">
+        <li>
+          <strong>🚀 Abrir neste PC (1-Clique)</strong><br>
+          Abre a tela do TV Box no monitor <strong>deste</strong> computador, pelo protocolo
+          <code>paineltvbox://</code>. Requer o cliente instalado aqui uma vez (passo acima).
+        </li>
+        <li>
+          <strong>🖥️ Abrir no Servidor</strong><br>
+          Abre a janela no desktop do <strong>próprio servidor</strong> do painel e não instala nada na
+          sua máquina. É a opção de quem já está no PC host ou precisa ver a tela sem instalar o cliente.
+        </li>
+        <li>
+          <strong>📄 Atalho .BAT deste Box</strong><br>
+          Baixa um <code>.bat</code> que conecta direto no TV Box selecionado, sem passar pelo navegador.
+          Guarde-o dentro da pasta extraída do Pacote Portátil, ao lado de <code>scrcpy\</code> e
+          <code>credencial\</code>.
+        </li>
+        <li>
+          <strong>⏹ Fechar Janela</strong><br>
+          Encerra a sessão de scrcpy aberta no servidor (a janela aberta no seu PC fecha no próprio PC).
+        </li>
+      </ul>
+    </div>
+
+    <p class="scrcpy-help-note">
+      ⚠️ Clicou em <strong>Abrir neste PC</strong> e nada abriu? O cliente ainda não está instalado nesta
+      máquina: rode o <strong>Instalador Rápido (.cmd)</strong> uma única vez e clique de novo.
+    </p>
   </div>
  </div>
 
@@ -145,7 +191,7 @@ const SCRCPY = (() => {
    <span class="text-muted text-sm" id="scrcpy-live-status"></span>
   </div>
   <div id="scrcpy-live-box" style="display:none">
-   <img id="scrcpy-live-img" alt="Tela do dispositivo" style="width:100%;max-width:960px;border:1px solid var(--border-color);border-radius:8px;background:#000">
+   <img id="scrcpy-live-img" alt="Tela do dispositivo" style="width:100%;max-width:960px;border:1px solid var(--border-subtle);border-radius:var(--radius-sm);background:#000">
   </div>
  </div>
  <div class="section-title mt-md">${UI.icon('archive')} Versões</div>
