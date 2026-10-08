@@ -241,9 +241,62 @@ $KeyDir = Join-Path $Dest 'credencial'
 $KeyPath = Join-Path $KeyDir 'adbkey'
 
 New-Item -ItemType Directory -Force -Path $ScrcpyDest, $KeyDir | Out-Null
-Copy-Item (Join-Path $Source 'scrcpy\*') $ScrcpyDest -Recurse -Force
-Copy-Item (Join-Path $Source 'PainelScrcpy.ps1') $Dest -Force
-Copy-Item (Join-Path $Source 'README.txt') $Dest -Force
+
+# Reinstalar com o cliente em uso (daemon adb da porta 5037 ou uma sessao
+# scrcpy aberta) deixa os arquivos travados no Windows e o Copy-Item falha
+# com IOException. Encerramos apenas os processos que rodam a partir desta
+# pasta (%LOCALAPPDATA%\PainelTVBox\ScrcpyClient).
+function Stop-ClientProcess {
+    param([string]$Root)
+    $Stopped = 0
+    foreach ($Proc in @(Get-Process -ErrorAction SilentlyContinue)) {
+        $ExePath = $null
+        try { $ExePath = $Proc.Path } catch { $ExePath = $null }
+        if ($ExePath -and $ExePath.StartsWith($Root, [System.StringComparison]::OrdinalIgnoreCase)) {
+            Stop-Process -Id $Proc.Id -Force -ErrorAction SilentlyContinue
+            $Stopped++
+        }
+    }
+    # O launcher roda por 'powershell.exe -File' e mantem o .ps1 aberto.
+    $Launchers = @(Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" -ErrorAction SilentlyContinue |
+        Where-Object { $_.CommandLine -and $_.CommandLine.IndexOf($Root, [System.StringComparison]::OrdinalIgnoreCase) -ge 0 })
+    foreach ($Launcher in $Launchers) {
+        if ($Launcher.ProcessId -ne $PID) {
+            Stop-Process -Id $Launcher.ProcessId -Force -ErrorAction SilentlyContinue
+            $Stopped++
+        }
+    }
+    if ($Stopped -gt 0) { Start-Sleep -Milliseconds 800 }
+    return $Stopped
+}
+
+$InstalledAdb = Join-Path $ScrcpyDest 'adb.exe'
+if (Test-Path $InstalledAdb) {
+    # Derruba somente o daemon do cliente (porta padrao 5037). O servidor ADB
+    # do painel usa PANEL_ADB_SERVER_PORT e nao e afetado.
+    $PreviousPort = $env:ADB_SERVER_PORT
+    $env:ADB_SERVER_PORT = '5037'
+    & $InstalledAdb kill-server 2>$null | Out-Null
+    if ($PreviousPort) { $env:ADB_SERVER_PORT = $PreviousPort }
+    else { Remove-Item Env:\ADB_SERVER_PORT -ErrorAction SilentlyContinue }
+}
+
+$Attempt = 0
+while ($true) {
+    $Attempt++
+    try {
+        Copy-Item -Path (Join-Path $Source 'scrcpy\*') -Destination $ScrcpyDest -Recurse -Force -ErrorAction Stop
+        Copy-Item -Path (Join-Path $Source 'PainelScrcpy.ps1') -Destination $Dest -Force -ErrorAction Stop
+        Copy-Item -Path (Join-Path $Source 'README.txt') -Destination $Dest -Force -ErrorAction Stop
+        break
+    } catch {
+        if ($Attempt -ge 5) { throw }
+        Write-Host ('Arquivos do cliente em uso: ' + $_.Exception.Message) -ForegroundColor Yellow
+        Write-Host ('Encerrando scrcpy/adb desta pasta e tentando novamente ' + $Attempt + '/5...') -ForegroundColor Yellow
+        Stop-ClientProcess -Root $Dest | Out-Null
+        Start-Sleep -Seconds 1
+    }
+}
 
 $Adb = Join-Path $ScrcpyDest 'adb.exe'
 if (-not (Test-Path $KeyPath) -or -not (Test-Path ($KeyPath + '.pub'))) {
@@ -302,16 +355,21 @@ echo.
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0instalar-cliente.ps1"
 if errorlevel 1 (
     echo.
-    echo [AVISO] Falha ao executar via PowerShell. Registrando protocolo diretamente...
-    set "DEST=%LOCALAPPDATA%\PainelTVBox\ScrcpyClient"
-    if not exist "%DEST%" mkdir "%DEST%"
-    if not exist "%DEST%\scrcpy" mkdir "%DEST%\scrcpy"
-    xcopy "%~dp0scrcpy\*" "%DEST%\scrcpy\" /E /I /Y /Q >nul 2>&1
-    copy /Y "%~dp0PainelScrcpy.ps1" "%DEST%\" >nul 2>&1
-    copy /Y "%~dp0README.txt" "%DEST%\" >nul 2>&1
+    echo [AVISO] Falha ao executar via PowerShell. Tentando instalacao direta...
+    if not exist "%LOCALAPPDATA%\PainelTVBox\ScrcpyClient\scrcpy" mkdir "%LOCALAPPDATA%\PainelTVBox\ScrcpyClient\scrcpy"
+    if exist "%LOCALAPPDATA%\PainelTVBox\ScrcpyClient\scrcpy\adb.exe" "%LOCALAPPDATA%\PainelTVBox\ScrcpyClient\scrcpy\adb.exe" kill-server >nul 2>&1
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Path -like ($env:LOCALAPPDATA + '\PainelTVBox\ScrcpyClient*') } | Stop-Process -Force -ErrorAction SilentlyContinue" >nul 2>&1
+    xcopy "%~dp0scrcpy\*" "%LOCALAPPDATA%\PainelTVBox\ScrcpyClient\scrcpy\" /E /I /Y /Q >nul 2>&1
+    if errorlevel 1 (
+        echo Encerrando processos do cliente e tentando novamente...
+        timeout /t 1 >nul 2>&1
+        xcopy "%~dp0scrcpy\*" "%LOCALAPPDATA%\PainelTVBox\ScrcpyClient\scrcpy\" /E /I /Y /Q >nul 2>&1
+    )
+    copy /Y "%~dp0PainelScrcpy.ps1" "%LOCALAPPDATA%\PainelTVBox\ScrcpyClient\" >nul 2>&1
+    copy /Y "%~dp0README.txt" "%LOCALAPPDATA%\PainelTVBox\ScrcpyClient\" >nul 2>&1
     reg add "HKCU\Software\Classes\paineltvbox" /ve /t REG_SZ /d "URL:Painel TV Box Protocol" /f >nul 2>&1
     reg add "HKCU\Software\Classes\paineltvbox" /v "URL Protocol" /t REG_SZ /d "" /f >nul 2>&1
-    reg add "HKCU\Software\Classes\paineltvbox\shell\open\command" /ve /t REG_SZ /d "\"powershell.exe\" -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"%DEST%\PainelScrcpy.ps1\" \"%%1\"" /f >nul 2>&1
+    reg add "HKCU\Software\Classes\paineltvbox\shell\open\command" /ve /t REG_SZ /d "\"powershell.exe\" -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"%LOCALAPPDATA%\PainelTVBox\ScrcpyClient\PainelScrcpy.ps1\" \"%%1\"" /f >nul 2>&1
     echo Protocolo registrado com sucesso!
     pause
 ) else (
@@ -414,6 +472,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -EncodedCommand {encoded}
 if errorlevel 1 (
     echo.
     echo [ERRO] Nao foi possivel baixar ou instalar o cliente pelo painel.
+    echo Feche as janelas do scrcpy abertas neste computador e tente novamente.
     pause
 )
 """
