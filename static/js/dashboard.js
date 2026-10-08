@@ -191,7 +191,7 @@ const DASHBOARD = (() => {
             <div class="dcard-status ${sClass}" id="status-${d.id}">
                 ${renderStatusBar(status, reason)}
             </div>
-            <div class="dcard-thumb-wrap" style="position:relative;margin:8px 0 4px 0;background:var(--bg-deep,#111);border-radius:var(--radius-xs,4px);height:100px;display:flex;align-items:center;justify-content:center;overflow:hidden;border:1px solid var(--border-subtle)">
+            <div class="dcard-thumb-wrap" style="position:relative;margin:8px 0 4px 0;background:var(--bg-inset);border-radius:var(--radius-sm);height:100px;display:flex;align-items:center;justify-content:center;overflow:hidden;border:1px solid var(--border-subtle)">
                 <img src="${API.authUrl('/devices/' + encodeURIComponent(d.id) + '/screenshot')}" 
                      alt="Preview da TV" 
                      loading="lazy"

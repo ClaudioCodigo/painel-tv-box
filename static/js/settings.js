@@ -216,7 +216,7 @@ const SETTINGS = (() => {
                 let clHtml = '';
                 if (Array.isArray(res.changelog) && res.changelog.length > 0) {
                     const items = res.changelog.map(c => `<li>${UI.escapeHtml(c)}</li>`).join('');
-                    clHtml = `<div style="margin-top:8px;padding:8px;background:var(--bg-secondary,#1e293b);border-radius:6px;max-height:140px;overflow-y:auto">
+                    clHtml = `<div style="margin-top:8px;padding:8px;background:var(--bg-inset);border-radius:var(--radius-sm);max-height:140px;overflow-y:auto">
                         <strong style="font-size:12px;color:var(--text-muted)">Commits a aplicar:</strong>
                         <ul style="margin:4px 0 0 16px;padding:0;font-family:monospace;font-size:11px">${items}</ul>
                     </div>`;

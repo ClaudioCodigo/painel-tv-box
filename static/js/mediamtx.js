@@ -60,7 +60,7 @@ const MEDIAMTX = (() => {
 
             if (streams.length === 0) {
                 el.innerHTML = `
-                    <div class="empty-state" style="padding:var(--space-4);background:var(--bg-surface);border:1px dashed var(--border-subtle);border-radius:var(--radius-md);text-align:center">
+                    <div class="empty-state" style="padding:var(--space-4);background:var(--bg-surface);border:1px dashed var(--border-subtle);border-radius:var(--radius);text-align:center">
                         <span class="text-muted text-sm">Nenhuma janela sendo transmitida no momento.</span>
                         <div style="margin-top:var(--space-2)">
                             <button class="btn btn-sm btn-secondary" onclick="MEDIAMTX.openStartHostStreamModal()">Iniciar transmissão do PowerPoint ou Janela</button>
@@ -119,7 +119,7 @@ const MEDIAMTX = (() => {
 
             let devCheckboxes = '';
             if (devices.length > 0) {
-                devCheckboxes = `<div class="form-group mt-sm"><label class="form-label text-sm">Reproduzir automaticamente nos TV Boxes:</label><div style="max-height:120px;overflow-y:auto;background:var(--bg-deep);padding:6px;border-radius:var(--radius-xs)">`;
+                devCheckboxes = `<div class="form-group mt-sm"><label class="form-label text-sm">Reproduzir automaticamente nos TV Boxes:</label><div style="max-height:120px;overflow-y:auto;background:var(--bg-inset);padding:6px;border-radius:var(--radius-sm)">`;
                 devices.forEach(d => {
                     devCheckboxes += `
                         <label style="display:flex;align-items:center;gap:6px;font-size:0.85em;padding:2px 0">

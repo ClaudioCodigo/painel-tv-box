@@ -46,7 +46,7 @@
 .host-stream-card {
     background: var(--bg-surface);
     border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-md);
+    border-radius: var(--radius);
     padding: var(--space-4);
     display: flex;
     flex-direction: column;
@@ -79,8 +79,8 @@
     font-family: var(--font-mono);
     font-size: 0.8em;
     padding: 4px 8px;
-    background: var(--bg-deep, #111);
-    border-radius: var(--radius-xs, 4px);
+    background: var(--bg-inset);
+    border-radius: var(--radius-sm);
     color: var(--text-muted);
     word-break: break-all;
 }
