@@ -952,3 +952,182 @@ tbody tr:last-child td { border-bottom: none; }
     outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
 }
+
+/* ============================================================
+   Componentes UI v2 — "Sala de Controle"
+   ============================================================ */
+
+/* ── Pastilha de Estado (forma + rótulo + tempo) ── */
+.state {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    border: 1px solid var(--state-ok-bd);
+    color: var(--state-ok-fg);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    white-space: nowrap;
+}
+.state .shape { font-size: 11px; }
+.state .age { font-weight: 600; letter-spacing: 0; text-transform: none; opacity: .85; }
+.state.ok { border-color: var(--state-ok-bd); color: var(--state-ok-fg); background: var(--state-ok-bg); }
+.state.warn { border-color: var(--state-warn-bd); color: var(--state-warn-fg); background: var(--state-warn-bg); }
+.state.bad { border-color: var(--state-bad-bd); background: var(--state-bad-bg); color: var(--state-bad-fg); }
+.state.unknown { border-style: dashed; color: var(--state-unknown-fg); border-color: var(--state-unknown-bd); background: var(--state-unknown-bg); }
+
+/* ── Chip sutil ── */
+.chip {
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--text-muted);
+    border: 1px solid var(--border-subtle);
+    border-radius: 999px;
+    padding: 1px 7px;
+}
+
+/* ── Faixa de incidente no topo ── */
+.incident {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: var(--space-4);
+    padding: 10px 14px;
+    border: 1px solid var(--text-primary);
+    border-radius: var(--radius);
+    background: var(--bg-surface);
+}
+.incident .glyph {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--text-primary);
+    color: var(--text-inverse);
+    display: grid;
+    place-items: center;
+    font-size: 12px;
+    font-weight: 800;
+    flex: none;
+}
+.incident-txt { font-size: 12.5px; color: var(--text-secondary); }
+.incident-txt b { color: var(--text-primary); }
+.incident .sp { flex: 1; }
+
+/* ── KPIs de Frota ── */
+.kpis {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 10px;
+    margin-bottom: var(--space-4);
+}
+.kpi {
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-surface);
+    border-radius: var(--radius);
+    padding: 11px 13px;
+}
+.kpi-top {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    color: var(--text-muted);
+    font-weight: 700;
+}
+.kpi-val {
+    font-size: 27px;
+    font-weight: 700;
+    letter-spacing: -.02em;
+    margin-top: 5px;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+}
+.kpi-val small {
+    font-size: 13px;
+    color: var(--text-muted);
+    font-weight: 600;
+    letter-spacing: 0;
+}
+.kpi-foot {
+    margin-top: 7px;
+    font-size: 11.5px;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.kpi.attention { border-color: var(--text-primary); }
+.spark { display: flex; align-items: flex-end; gap: 2px; height: 16px; }
+.spark i { display: block; width: 3px; background: var(--border-strong); border-radius: 1px; }
+.kpi.attention .spark i { background: var(--text-primary); }
+
+/* ── Barra de ações em lote ── */
+.bulk {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 14px;
+    border-top: 1px solid var(--border-subtle);
+    background: var(--bg-raised);
+    position: sticky;
+    bottom: 0;
+    z-index: 10;
+}
+.bulk.on { display: flex; }
+.bulk b { font-size: 12.5px; }
+.bulk .sp { flex: 1; }
+
+/* ── Mini controle D-Pad ── */
+.dpad { display: grid; grid-template-columns: repeat(3, 32px); gap: 4px; justify-content: start; }
+.dpad button {
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    height: 28px;
+    font-size: 12px;
+    background: var(--bg-inset);
+    color: var(--text-secondary);
+}
+.dpad button:hover { background: var(--control-hover); color: var(--text-primary); }
+.dpad-row { display: flex; gap: 4px; margin-top: 6px; }
+.dpad-row button {
+    flex: 1;
+    height: 28px;
+    font-size: 11.5px;
+    font-weight: 600;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--bg-inset);
+    color: var(--text-secondary);
+}
+.dpad-row button:hover { background: var(--control-hover); color: var(--text-primary); }
+
+/* ── Legenda de Teclas de Atalho ── */
+.kbd-legend {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    padding: 10px 0;
+    margin-top: var(--space-4);
+    border-top: 1px solid var(--border-subtle);
+    color: var(--text-muted);
+    font-size: 11.5px;
+    flex-wrap: wrap;
+}
+kbd {
+    font-family: inherit;
+    font-size: 10.5px;
+    padding: 1px 5px;
+    border: 1px solid var(--border-strong);
+    border-bottom-width: 2px;
+    border-radius: 4px;
+    color: var(--text-secondary);
+    background: var(--bg-surface);
+}
+

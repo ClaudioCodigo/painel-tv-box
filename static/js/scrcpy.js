@@ -34,7 +34,7 @@ const SCRCPY = (() => {
 
     // Renderização principal (agora async para carregar dispositivos)
     async function render(el) {
-        UI.setPageTitle('scrcpy');
+        UI.setPageTitle('Telas & Sessões');
 
         // 1. Buscar dispositivos cadastrados
         let devices = [];
@@ -68,7 +68,7 @@ const SCRCPY = (() => {
         // 3. Montar HTML completo com <select> em vez de <input>
         el.innerHTML = `
 <div class="scrcpy-page">
- <div class="section-title">📱 scrcpy <span class="badge badge-warning">⚠️ BETA</span></div>
+ <div class="section-title">🖥️ Telas & Sessões (scrcpy)</div>
  <div class="settings-card" id="scrcpy-status-card"><div class="loading">Carregando...</div></div>
 
  <div class="settings-card full">
@@ -93,6 +93,32 @@ const SCRCPY = (() => {
       <div style="margin-top:8px">
         <label class="text-muted text-sm" style="display:block;margin-bottom:4px">Argumentos adicionais:</label>
         <input type="text" id="scrcpy-args" class="form-input text-sm mono" placeholder="ex: --max-size=1280 --stay-awake">
+      </div>
+    </div>
+  </details>
+
+  <details style="margin-top:10px;background:var(--bg-inset);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);padding:10px">
+    <summary style="cursor:pointer;font-weight:600;font-size:13px;color:var(--text-secondary)">🎮 Mini Controle Remoto Virtual (sem abrir janela)</summary>
+    <div style="margin-top:12px;display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start">
+      <div>
+        <div class="dpad" role="group" aria-label="Controle direcional">
+          <span></span><button type="button" title="Cima" onclick="SCRCPY.sendKey(19)">▲</button><span></span>
+          <button type="button" title="Esquerda" onclick="SCRCPY.sendKey(21)">◀</button><button type="button" title="OK / Enter" onclick="SCRCPY.sendKey(66)">●</button><button type="button" title="Direita" onclick="SCRCPY.sendKey(22)">▶</button>
+          <span></span><button type="button" title="Baixo" onclick="SCRCPY.sendKey(20)">▼</button><span></span>
+        </div>
+        <div class="dpad-row">
+          <button type="button" title="Voltar" onclick="SCRCPY.sendKey(4)">↩ Voltar</button>
+          <button type="button" title="Home" onclick="SCRCPY.sendKey(3)">⌂ Home</button>
+          <button type="button" title="Atualizar página" onclick="SCRCPY.sendKey(131)">↻ F5</button>
+        </div>
+      </div>
+      <div style="flex:1;min-width:240px">
+        <label class="text-muted text-sm" style="display:block;margin-bottom:4px">Digitar texto direto no TV Box:</label>
+        <div style="display:flex;gap:6px">
+          <input type="text" id="scrcpy-inject-text" class="form-input text-sm" placeholder="Texto para digitar..." onkeydown="if(event.key==='Enter')SCRCPY.sendInputText()">
+          <button type="button" class="btn btn-sm btn-primary" onclick="SCRCPY.sendInputText()">Enviar</button>
+        </div>
+        <small class="text-muted" style="display:block;margin-top:4px">Injeta texto no campo atualmente focado no TV Box via ADB.</small>
       </div>
     </div>
   </details>
@@ -517,5 +543,37 @@ const SCRCPY = (() => {
         });
     }
 
-    return { render, startHost, downloadBundle, downloadLauncher, downloadStationBundle, downloadStationZip, startLocal, loadEnrollments, revokeEnrollment, revokeAll, startMirroring, startStreaming, stopMirroring, startLive, stopLive, checkUpdates, installLatest, activateVersion, deleteVersion };
+    async function sendKey(keycode) {
+        const deviceId = document.getElementById('scrcpy-device')?.value;
+        if (!deviceId) {
+            UI.createToast('Selecione um TV Box primeiro', 'warning');
+            return;
+        }
+        try {
+            await API.post(`/devices/${encodeURIComponent(deviceId)}/shell`, { command: `input keyevent ${keycode}` });
+        } catch (e) {
+            UI.createToast(`Erro ao enviar comando: ${e.message}`, 'error');
+        }
+    }
+
+    async function sendInputText() {
+        const deviceId = document.getElementById('scrcpy-device')?.value;
+        const input = document.getElementById('scrcpy-inject-text');
+        const text = input?.value || '';
+        if (!deviceId) {
+            UI.createToast('Selecione um TV Box primeiro', 'warning');
+            return;
+        }
+        if (!text.trim()) return;
+        try {
+            const escaped = text.replace(/'/g, "\\'");
+            await API.post(`/devices/${encodeURIComponent(deviceId)}/shell`, { command: `input text '${escaped}'` });
+            UI.createToast('Texto enviado ao TV Box!', 'success');
+            if (input) input.value = '';
+        } catch (e) {
+            UI.createToast(`Erro ao enviar texto: ${e.message}`, 'error');
+        }
+    }
+
+    return { render, startHost, downloadBundle, downloadLauncher, downloadStationBundle, downloadStationZip, startLocal, loadEnrollments, revokeEnrollment, revokeAll, startMirroring, startStreaming, stopMirroring, startLive, stopLive, checkUpdates, installLatest, activateVersion, deleteVersion, sendKey, sendInputText };
 })();

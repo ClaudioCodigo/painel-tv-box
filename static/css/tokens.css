@@ -83,6 +83,21 @@
     --status-warning: #A3A3A3;
     --status-offline: #737373;
     --status-unknown: #525252;
+
+    /* v2 — semânticos de estado (forma + tom, nunca cor sozinha) */
+    --state-ok-fg: var(--text-muted);
+    --state-ok-bg: transparent;
+    --state-ok-bd: var(--border-strong);
+    --state-warn-fg: var(--text-primary);
+    --state-warn-bg: var(--bg-raised);
+    --state-warn-bd: var(--text-secondary);
+    --state-bad-fg: var(--text-inverse);
+    --state-bad-bg: var(--text-primary);
+    --state-bad-bd: var(--text-primary);
+    --state-unknown-fg: var(--text-muted);
+    --state-unknown-bg: transparent;
+    --state-unknown-bd: var(--border-subtle);
+    --row-h: 64px;
 }
 
 /* ── Tema claro ── */
@@ -111,4 +126,18 @@
     --status-warning: #737373;
     --status-offline: #A3A3A3;
     --status-unknown: #D4D4D4;
+
+    /* v2 — semânticos de estado (tema claro) */
+    --state-ok-fg: #404040;
+    --state-ok-bg: transparent;
+    --state-ok-bd: #D4D4D4;
+    --state-warn-fg: #0A0A0A;
+    --state-warn-bg: #FFFFFF;
+    --state-warn-bd: #0A0A0A;
+    --state-bad-fg: #FFFFFF;
+    --state-bad-bg: #0A0A0A;
+    --state-bad-bd: #0A0A0A;
+    --state-unknown-fg: #737373;
+    --state-unknown-bg: transparent;
+    --state-unknown-bd: #E5E5E5;
 }

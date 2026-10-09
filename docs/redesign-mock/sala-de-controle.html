@@ -1,0 +1,865 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mock piloto — Sala de Controle | Painel TV Box v2</title>
+<style>
+/* ============================================================
+   MOCK PILOTO (dados fictícios) — visão v2 "Sala de Controle"
+   Tokens idênticos aos do painel atual (static/css/tokens.css)
+   + tokens semânticos novos propostos no plano (v2).
+   Sem CDN, sem build, sem dependência externa — igual ao app.
+   ============================================================ */
+
+:root, [data-theme="dark"] {
+    color-scheme: dark;
+    --bg-base:#0A0A0A; --bg-surface:#171717; --bg-raised:#262626; --bg-inset:#000000;
+    --border-subtle:#262626; --border-strong:#404040;
+    --text-primary:#FAFAFA; --text-secondary:#D4D4D4; --text-muted:#737373; --text-inverse:#0A0A0A;
+    --control-hover:#262626; --focus-ring:#FAFAFA;
+    --radius-sm:6px; --radius:10px; --radius-lg:14px;
+    --shadow:0 4px 16px rgba(0,0,0,.10);
+    /* v2 — semânticos de estado (forma + tom, nunca cor sozinha) */
+    --state-ok-fg:var(--text-muted);      --state-ok-bg:transparent;      --state-ok-bd:var(--border-strong);
+    --state-warn-fg:var(--text-primary);  --state-warn-bg:var(--bg-raised);--state-warn-bd:var(--text-secondary);
+    --state-bad-fg:var(--text-inverse);   --state-bad-bg:var(--text-primary);--state-bad-bd:var(--text-primary);
+    --state-unknown-fg:var(--text-muted); --state-unknown-bg:transparent;--state-unknown-bd:var(--border-subtle);
+    --row-h:64px;
+}
+[data-theme="light"] {
+    color-scheme: light;
+    --bg-base:#FFFFFF; --bg-surface:#FAFAFA; --bg-raised:#FFFFFF; --bg-inset:#F5F5F5;
+    --border-subtle:#E5E5E5; --border-strong:#D4D4D4;
+    --text-primary:#0A0A0A; --text-secondary:#404040; --text-muted:#737373; --text-inverse:#FFFFFF;
+    --control-hover:#F5F5F5; --focus-ring:#0A0A0A;
+    --state-ok-fg:#404040;      --state-ok-bd:#D4D4D4;
+    --state-warn-fg:#0A0A0A;    --state-warn-bg:#FFFFFF; --state-warn-bd:#0A0A0A;
+    --state-bad-fg:#FFFFFF;     --state-bad-bg:#0A0A0A;  --state-bad-bd:#0A0A0A;
+    --state-unknown-fg:#737373; --state-unknown-bd:#E5E5E5;
+}
+
+* { box-sizing:border-box; }
+html,body { margin:0; padding:0; }
+body {
+    background:var(--bg-base); color:var(--text-primary);
+    font:14px/1.45 'Segoe UI', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing:antialiased;
+}
+button,input,select { font:inherit; color:inherit; }
+button { cursor:pointer; background:none; border:0; }
+:focus-visible { outline:2px solid var(--focus-ring); outline-offset:2px; border-radius:var(--radius-sm); }
+.mono { font-family:'Cascadia Code','Consolas',monospace; font-size:.92em; }
+.num { font-variant-numeric:tabular-nums; }
+.sr { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); }
+
+/* ── Aviso de que é um mock ─────────────────────────────── */
+.mockbar {
+    display:flex; align-items:center; gap:10px; padding:6px 16px; font-size:11.5px;
+    background:var(--text-primary); color:var(--text-inverse); letter-spacing:.03em;
+}
+.mockbar b { letter-spacing:.08em; text-transform:uppercase; }
+.mockbar .sp { flex:1; }
+.mockbar kbd { background:rgba(127,127,127,.35); border-radius:4px; padding:1px 5px; font-size:11px; }
+
+/* ── Shell: rail + main ─────────────────────────────────── */
+.app { display:grid; grid-template-columns:214px minmax(0,1fr); min-height:calc(100vh - 27px); }
+.rail {
+    background:var(--bg-surface); border-right:1px solid var(--border-subtle);
+    display:flex; flex-direction:column; gap:2px; padding:12px 10px;
+}
+.brand { display:flex; align-items:center; gap:9px; padding:2px 6px 12px; }
+.brand-mark {
+    width:26px; height:26px; border-radius:7px; background:var(--text-primary); color:var(--text-inverse);
+    display:grid; place-items:center; font-size:11px; font-weight:800; letter-spacing:.02em;
+}
+.brand-txt { font-size:13.5px; font-weight:700; }
+.brand-sub { font-size:10.5px; color:var(--text-muted); }
+.rail-group { padding:12px 8px 4px; font-size:10px; font-weight:700; letter-spacing:.09em; text-transform:uppercase; color:var(--text-muted); }
+.rail-item {
+    display:flex; align-items:center; gap:9px; width:100%; text-align:left;
+    padding:7px 9px; border-radius:var(--radius-sm); color:var(--text-secondary); font-size:13px;
+}
+.rail-item:hover { background:var(--control-hover); color:var(--text-primary); }
+.rail-item.active { background:var(--text-primary); color:var(--text-inverse); font-weight:600; }
+.rail-item.active .rail-count { color:var(--text-inverse); border-color:currentColor; }
+.rail-ico { width:16px; display:grid; place-items:center; font-size:13px; }
+.rail-count {
+    margin-left:auto; font-size:10.5px; padding:0 6px; border:1px solid var(--border-strong);
+    border-radius:999px; color:var(--text-muted);
+}
+.rail-count.alert { border-color:var(--text-primary); color:var(--text-primary); font-weight:700; }
+.rail-foot { margin-top:auto; padding-top:12px; border-top:1px solid var(--border-subtle); display:flex; flex-direction:column; gap:8px; }
+.rail-user { display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-muted); }
+.avatar { width:22px; height:22px; border-radius:50%; background:var(--bg-raised); border:1px solid var(--border-strong); display:grid; place-items:center; font-size:10px; color:var(--text-secondary); }
+
+.main { display:flex; flex-direction:column; min-width:0; }
+
+/* ── Topbar ─────────────────────────────────────────────── */
+.topbar {
+    display:flex; align-items:center; gap:14px; padding:11px 20px;
+    border-bottom:1px solid var(--border-subtle); background:var(--bg-surface);
+}
+.page-title { font-size:15px; font-weight:700; margin:0; }
+.page-sub { font-size:11.5px; color:var(--text-muted); }
+.topbar .sp { flex:1; }
+.search {
+    display:flex; align-items:center; gap:8px; min-width:300px; padding:6px 10px;
+    background:var(--bg-inset); border:1px solid var(--border-subtle); border-radius:var(--radius-sm);
+}
+.search input { flex:1; background:none; border:0; outline:none; font-size:12.5px; }
+.search kbd {
+    font-size:10px; color:var(--text-muted); border:1px solid var(--border-strong);
+    border-radius:4px; padding:1px 5px; background:var(--bg-surface);
+}
+.live { display:flex; align-items:center; gap:7px; font-size:11.5px; color:var(--text-muted); }
+.pulse { width:7px; height:7px; border-radius:50%; background:var(--text-primary); animation:pulse 2s ease-in-out infinite; }
+@keyframes pulse { 0%,100%{opacity:1; transform:scale(1)} 50%{opacity:.35; transform:scale(.8)} }
+
+/* ── Botões ─────────────────────────────────────────────── */
+.btn {
+    display:inline-flex; align-items:center; gap:6px; padding:6px 11px; border-radius:var(--radius-sm);
+    border:1px solid var(--border-strong); background:var(--bg-surface); color:var(--text-secondary);
+    font-size:12px; font-weight:600; white-space:nowrap;
+}
+.btn:hover { background:var(--control-hover); color:var(--text-primary); }
+.btn-primary { background:var(--text-primary); color:var(--text-inverse); border-color:var(--text-primary); }
+.btn-primary:hover { background:var(--text-primary); color:var(--text-inverse); opacity:.88; }
+.btn-ghost { border-color:transparent; background:none; color:var(--text-muted); }
+.btn-ghost:hover { background:var(--control-hover); color:var(--text-primary); }
+.btn-sm { padding:4px 8px; font-size:11.5px; }
+.btn-danger { border-color:var(--text-primary); color:var(--text-primary); }
+.btn-icon { padding:5px 7px; }
+
+/* ── Faixa de incidente (só aparece quando há exceção) ──── */
+.incident {
+    display:flex; align-items:center; gap:12px; margin:14px 20px 0;
+    padding:10px 14px; border:1px solid var(--text-primary); border-radius:var(--radius);
+    background:var(--bg-surface);
+}
+.incident .glyph {
+    width:22px; height:22px; border-radius:50%; background:var(--text-primary); color:var(--text-inverse);
+    display:grid; place-items:center; font-size:12px; font-weight:800; flex:none;
+}
+.incident-txt { font-size:12.5px; color:var(--text-secondary); }
+.incident-txt b { color:var(--text-primary); }
+.incident .sp { flex:1; }
+
+/* ── KPIs ───────────────────────────────────────────────── */
+.kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; padding:14px 20px 0; }
+.kpi { border:1px solid var(--border-subtle); background:var(--bg-surface); border-radius:var(--radius); padding:11px 13px; }
+.kpi-top { display:flex; align-items:center; gap:7px; font-size:11px; text-transform:uppercase; letter-spacing:.07em; color:var(--text-muted); font-weight:700; }
+.kpi-val { font-size:27px; font-weight:700; letter-spacing:-.02em; margin-top:5px; line-height:1; }
+.kpi-val small { font-size:13px; color:var(--text-muted); font-weight:600; letter-spacing:0; }
+.kpi-foot { margin-top:7px; font-size:11.5px; color:var(--text-muted); display:flex; align-items:center; gap:8px; }
+.kpi.attention { border-color:var(--text-primary); }
+.spark { display:flex; align-items:flex-end; gap:2px; height:16px; }
+.spark i { display:block; width:3px; background:var(--border-strong); border-radius:1px; }
+.kpi.attention .spark i { background:var(--text-primary); }
+
+/* ── Conteúdo: lista + rail direito ─────────────────────── */
+.body-grid { display:grid; grid-template-columns:minmax(0,1fr) 316px; gap:14px; padding:14px 20px 20px; align-items:start; }
+.panel { border:1px solid var(--border-subtle); background:var(--bg-surface); border-radius:var(--radius); }
+.panel-head { display:flex; align-items:center; gap:10px; padding:11px 14px; border-bottom:1px solid var(--border-subtle); }
+.panel-title { font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--text-secondary); }
+.panel-head .sp { flex:1; }
+
+.toolbar { display:flex; align-items:center; gap:8px; padding:10px 14px; border-bottom:1px solid var(--border-subtle); flex-wrap:wrap; }
+.toolbar .sp { flex:1; }
+.field {
+    display:flex; align-items:center; gap:7px; padding:5px 9px; font-size:12.5px;
+    background:var(--bg-inset); border:1px solid var(--border-subtle); border-radius:var(--radius-sm); color:var(--text-secondary);
+}
+.field select, .field input { background:none; border:0; outline:none; font-size:12.5px; }
+.field input { width:124px; }
+.seg { display:flex; border:1px solid var(--border-subtle); border-radius:var(--radius-sm); overflow:hidden; }
+.seg button { padding:5px 10px; font-size:11.5px; font-weight:600; color:var(--text-muted); background:var(--bg-inset); }
+.seg button.on { background:var(--text-primary); color:var(--text-inverse); }
+
+/* ── Linhas de TV Box (o coração da tela) ───────────────── */
+.rows { display:flex; flex-direction:column; }
+.row {
+    display:grid; grid-template-columns:26px 104px minmax(0,1fr) 152px 160px;
+    align-items:center; gap:12px; padding:9px 14px; border-bottom:1px solid var(--border-subtle);
+    position:relative; transition:background var(--dur,150ms) ease;
+}
+.row:last-child { border-bottom:0; }
+.row:hover { background:var(--control-hover); }
+.row.sel { background:var(--control-hover); }
+.row.sel::before, .row.expanded::before, .row.is-bad::before {
+    content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--text-primary);
+}
+.row.is-ok::before { content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:transparent; }
+.row.flash { animation:flash 1.1s ease-out; }
+@keyframes flash { 0% { background:var(--bg-raised); } 100% { background:transparent; } }
+.cbx { width:15px; height:15px; accent-color:var(--text-primary); }
+
+.thumb {
+    width:104px; height:58px; border-radius:var(--radius-sm); border:1px solid var(--border-strong);
+    background:var(--bg-inset); overflow:hidden; position:relative; flex:none;
+}
+.thumb .screen { position:absolute; inset:6px; display:grid; grid-template-rows:7px 1fr; gap:4px; opacity:.75; }
+.thumb .screen .bar { background:var(--border-strong); border-radius:2px; }
+.thumb .screen .cols { display:grid; grid-template-columns:1.4fr 1fr; gap:4px; }
+.thumb .screen .cols i { background:var(--border-subtle); border-radius:2px; display:block; }
+.thumb .screen .cols i:first-child { background:var(--border-strong); }
+.thumb.off .screen { opacity:.22; }
+.thumb .offmark {
+    position:absolute; inset:0; display:grid; place-items:center; font-size:17px; font-weight:800;
+    color:var(--text-primary); background:rgba(0,0,0,.35); letter-spacing:.06em;
+}
+[data-theme="light"] .thumb .offmark { background:rgba(255,255,255,.55); }
+
+.who { min-width:0; }
+.who-name { font-size:13.5px; font-weight:650; color:var(--text-primary); display:flex; align-items:center; gap:8px; min-width:0; }
+.who-nm { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.who-name .chip { flex:none; }
+.who-meta { font-size:11.5px; color:var(--text-muted); margin-top:2px; display:flex; gap:10px; overflow:hidden; white-space:nowrap; }
+.who-meta > span { min-width:0; overflow:hidden; text-overflow:ellipsis; flex:none; }
+.who-meta > span.url { flex:0 1 auto; }
+.who-meta .mono { color:var(--text-secondary); }
+
+/* Pastilha de estado: forma + rótulo + tempo (nunca só cor) */
+.state {
+    display:inline-flex; align-items:center; gap:7px; padding:3px 9px; border-radius:999px;
+    border:1px solid var(--state-ok-bd); color:var(--state-ok-fg); font-size:11px; font-weight:700;
+    text-transform:uppercase; letter-spacing:.05em; white-space:nowrap;
+}
+.state .shape { font-size:11px; }
+.state .age { font-weight:600; letter-spacing:0; text-transform:none; opacity:.85; }
+.state.ok { }
+.state.warn { border-color:var(--state-warn-bd); color:var(--state-warn-fg); background:var(--state-warn-bg); }
+.state.bad { border-color:var(--state-bad-bd); background:var(--state-bad-bg); color:var(--state-bad-fg); }
+.state.unknown { border-style:dashed; color:var(--state-unknown-fg); border-color:var(--state-unknown-bd); }
+.reason { font-size:11.5px; color:var(--text-secondary); margin-top:3px; }
+.chip {
+    font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted);
+    border:1px solid var(--border-subtle); border-radius:999px; padding:1px 7px;
+}
+.acts { display:flex; gap:5px; justify-content:flex-end; }
+
+/* ── Detalhe expandido da linha ─────────────────────────── */
+.detail { padding:2px 14px 14px 40px; border-bottom:1px solid var(--border-subtle); background:var(--bg-surface); }
+.detail-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(178px,1fr)); gap:14px 20px; }
+.detail-actions { display:flex; gap:6px; flex-wrap:wrap; }
+.detail h4 { margin:0 0 7px; font-size:10.5px; text-transform:uppercase; letter-spacing:.08em; color:var(--text-muted); }
+.kv { display:flex; justify-content:space-between; gap:10px; font-size:12px; padding:3px 0; border-bottom:1px dashed var(--border-subtle); }
+.kv:last-child { border-bottom:0; }
+.kv span:first-child { color:var(--text-muted); }
+.kv span:last-child { color:var(--text-secondary); }
+.timeline { display:flex; flex-direction:column; gap:6px; font-size:12px; }
+.tl { display:flex; gap:8px; align-items:baseline; }
+.tl time { color:var(--text-muted); font-size:11px; min-width:44px; }
+.dpad { display:grid; grid-template-columns:repeat(3,32px); gap:4px; justify-content:start; }
+.dpad button { border:1px solid var(--border-strong); border-radius:var(--radius-sm); height:28px; font-size:12px; background:var(--bg-inset); color:var(--text-secondary); }
+.dpad button:hover { background:var(--control-hover); color:var(--text-primary); }
+.dpad-row { display:flex; gap:4px; margin-top:6px; }
+.dpad-row button {
+    flex:1; height:28px; font-size:11.5px; font-weight:600; border:1px solid var(--border-strong);
+    border-radius:var(--radius-sm); background:var(--bg-inset); color:var(--text-secondary);
+}
+.dpad-row button:hover { background:var(--control-hover); color:var(--text-primary); }
+
+/* ── Rail direito: atividade + sistema ──────────────────── */
+.stack { display:flex; flex-direction:column; gap:14px; }
+.feed { padding:6px 0; max-height:342px; overflow:auto; }
+.feed-item { display:flex; gap:9px; padding:7px 14px; border-bottom:1px solid var(--border-subtle); }
+.feed-item:last-child { border-bottom:0; }
+.feed-dot { width:7px; height:7px; border-radius:50%; border:1.5px solid var(--text-muted); margin-top:5px; flex:none; }
+.feed-dot.bad { background:var(--text-primary); border-color:var(--text-primary); }
+.feed-dot.warn { border-color:var(--text-primary); }
+.feed-txt { font-size:12px; color:var(--text-secondary); min-width:0; }
+.feed-txt b { color:var(--text-primary); font-weight:650; }
+.feed-txt time { display:block; font-size:10.5px; color:var(--text-muted); margin-top:1px; }
+.sys { padding:11px 14px; display:flex; flex-direction:column; gap:9px; }
+.meter { font-size:11.5px; color:var(--text-muted); }
+.meter-top { display:flex; justify-content:space-between; margin-bottom:4px; }
+.meter-top b { color:var(--text-secondary); font-weight:650; }
+.track { height:4px; background:var(--bg-inset); border-radius:2px; overflow:hidden; }
+.track i { display:block; height:100%; background:var(--text-primary); }
+.svc { display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-secondary); }
+
+/* ── Barra de ações em lote ─────────────────────────────── */
+.bulk {
+    display:none; align-items:center; gap:10px; padding:9px 14px; border-top:1px solid var(--border-subtle);
+    background:var(--bg-raised); position:sticky; bottom:0;
+}
+.bulk.on { display:flex; }
+.bulk b { font-size:12.5px; }
+.bulk .sp { flex:1; }
+
+/* ── Mural NOC ──────────────────────────────────────────── */
+.mural { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; padding:14px; }
+.tile { border:1px solid var(--border-strong); border-radius:var(--radius-sm); overflow:hidden; background:var(--bg-inset); }
+.tile.bad { border-color:var(--text-primary); border-width:2px; }
+.tile-head { display:flex; align-items:center; gap:8px; padding:6px 9px; background:var(--bg-surface); border-bottom:1px solid var(--border-subtle); }
+.tile-name { font-size:12px; font-weight:650; }
+.tile-head .sp { flex:1; }
+.tile-screen { aspect-ratio:16/9; position:relative; display:grid; place-items:center; background:var(--bg-inset); }
+.tile-screen .fake { position:absolute; inset:8%; display:grid; grid-template-rows:9% 1fr; gap:5%; opacity:.8; }
+.tile-screen .fake .hdr { background:var(--border-strong); border-radius:2px; }
+.tile-screen .fake .grid2 { display:grid; grid-template-columns:repeat(3,1fr); gap:5%; }
+.tile-screen .fake .grid2 i { background:var(--border-subtle); border-radius:2px; }
+.tile-screen .fake .grid2 i:first-child { background:var(--border-strong); }
+.tile.off .tile-screen .fake { opacity:.2; }
+.tile-msg { position:absolute; inset:0; display:grid; place-items:center; text-align:center; padding:8px; }
+.tile-msg b { font-size:12px; letter-spacing:.05em; text-transform:uppercase; }
+.hint { font-size:11.5px; color:var(--text-muted); }
+
+/* ── Sessão / detalhe do TV Box ─────────────────────────── */
+.session { display:grid; grid-template-columns:minmax(0,1fr) 330px; gap:14px; padding:14px 20px 20px; align-items:start; }
+.screen-big { border:1px solid var(--border-strong); border-radius:var(--radius); overflow:hidden; background:var(--bg-inset); }
+.screen-big .canvas { aspect-ratio:16/9; position:relative; display:grid; place-items:center; }
+.screen-big .canvas .fake { position:absolute; inset:6%; display:grid; grid-template-rows:8% 1fr; gap:4%; opacity:.85; }
+.screen-big .fake .hdr { background:var(--border-strong); border-radius:3px; }
+.screen-big .fake .body3 { display:grid; grid-template-columns:repeat(4,1fr); gap:3%; }
+.screen-big .fake .body3 i { background:var(--border-subtle); border-radius:3px; }
+.screen-big .fake .body3 i:first-child { background:var(--border-strong); }
+.screen-bar { display:flex; align-items:center; gap:8px; padding:9px 12px; background:var(--bg-surface); border-top:1px solid var(--border-subtle); }
+.screen-bar .sp { flex:1; }
+.tabs { display:flex; gap:4px; padding:10px 12px 0; border-bottom:1px solid var(--border-subtle); }
+.tab { padding:7px 11px; font-size:12.5px; font-weight:600; color:var(--text-muted); border-bottom:2px solid transparent; }
+.tab.on { color:var(--text-primary); border-bottom-color:var(--text-primary); }
+.tabpane { padding:12px 14px; }
+.kbd-legend { display:flex; gap:14px; align-items:center; padding:8px 20px; border-top:1px solid var(--border-subtle); color:var(--text-muted); font-size:11.5px; }
+kbd {
+    font-family:inherit; font-size:10.5px; padding:1px 5px; border:1px solid var(--border-strong);
+    border-bottom-width:2px; border-radius:4px; color:var(--text-secondary); background:var(--bg-surface);
+}
+.view { display:none; }
+.view.on { display:block; }
+
+@media (prefers-reduced-motion: reduce) {
+    * { animation:none !important; transition:none !important; }
+}
+@media (max-width: 1180px) {
+    .body-grid, .session { grid-template-columns:minmax(0,1fr); }
+    .kpis { grid-template-columns:repeat(2,1fr); }
+    .mural { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .row { grid-template-columns:26px 104px minmax(0,1fr) auto; }
+}
+</style>
+</head>
+<body>
+
+<div class="mockbar">
+    <b>Mock piloto</b>
+    <span>dados fictícios · visão proposta para o Painel TV Box v2 — “Sala de Controle”</span>
+    <span class="sp"></span>
+    <span>alternar tela: <kbd>1</kbd> sala <kbd>2</kbd> mural <kbd>3</kbd> sessão</span>
+    <button class="btn btn-sm" id="theme-btn" style="border-color:currentColor;background:transparent;color:inherit">◐ tema claro/escuro</button>
+</div>
+
+<div class="app">
+    <!-- ══ RAIL ══ -->
+    <aside class="rail">
+        <div class="brand">
+            <div class="brand-mark">TV</div>
+            <div>
+                <div class="brand-txt">Painel TV Box</div>
+                <div class="brand-sub">MDM local · Piermauá</div>
+            </div>
+        </div>
+
+        <div class="rail-group">Operação</div>
+        <button class="rail-item active" data-go="sala"><span class="rail-ico">◧</span> Sala de Controle</button>
+        <button class="rail-item" data-go="mural"><span class="rail-ico">▦</span> Mural (NOC)</button>
+        <button class="rail-item" data-go="sessao"><span class="rail-ico">▣</span> Telas &amp; Sessões <span class="rail-count">2</span></button>
+        <button class="rail-item"><span class="rail-ico">◫</span> Áreas</button>
+
+        <div class="rail-group">Conteúdo</div>
+        <button class="rail-item"><span class="rail-ico">▤</span> Páginas &amp; URLs</button>
+        <button class="rail-item"><span class="rail-ico">◔</span> Agendamentos</button>
+
+        <div class="rail-group">Sistema</div>
+        <button class="rail-item"><span class="rail-ico">≡</span> Logs &amp; Auditoria</button>
+        <button class="rail-item"><span class="rail-ico">◰</span> Backup</button>
+        <button class="rail-item"><span class="rail-ico">⚙</span> Configurações</button>
+
+        <div class="rail-foot">
+            <div class="rail-user"><span class="avatar">CL</span> claudio.lima</div>
+            <button class="btn btn-sm">Sair</button>
+        </div>
+    </aside>
+
+    <!-- ══ MAIN ══ -->
+    <div class="main">
+        <header class="topbar">
+            <div>
+                <h1 class="page-title" id="ttl">Sala de Controle</h1>
+                <div class="page-sub" id="sub">12 TV Boxes · 3 áreas · atualizado <span id="age">há 3 s</span></div>
+            </div>
+            <span class="sp"></span>
+            <label class="search">
+                <span aria-hidden="true">⌕</span>
+                <input id="q" placeholder="Buscar TV, IP, URL ou área…" aria-label="Buscar">
+                <kbd>Ctrl K</kbd>
+            </label>
+            <div class="live"><span class="pulse" aria-hidden="true"></span> ao vivo</div>
+            <button class="btn btn-sm" id="sim">▶ simular evento</button>
+        </header>
+
+        <!-- ── VIEW 1: SALA DE CONTROLE ── -->
+        <section class="view on" id="v-sala">
+            <div class="incident" id="incident">
+                <span class="glyph" aria-hidden="true">!</span>
+                <div class="incident-txt">
+                    <b>4 de 12 precisam de atenção agora</b> — 2 fora do ar e 2 degradadas:
+                    <b>TV Sala 3</b> offline há 12 min (watchdog já tentou 2 recuperações) ·
+                    <b>TV Sala 2</b> recarregou o kiosk 3× hoje
+                </div>
+                <span class="sp"></span>
+                <button class="btn btn-sm">Ver fila de atenção</button>
+                <button class="btn btn-sm btn-ghost">silenciar 1 h</button>
+            </div>
+
+            <div class="kpis">
+                <div class="kpi">
+                    <div class="kpi-top"><span aria-hidden="true">●</span> No ar</div>
+                    <div class="kpi-val num">7<small> / 12</small></div>
+                    <div class="kpi-foot"><span class="spark" data-spark="ok"></span> 1 nunca conectou</div>
+                </div>
+                <div class="kpi attention">
+                    <div class="kpi-top"><span aria-hidden="true">◐</span> Atenção</div>
+                    <div class="kpi-val num">2</div>
+                    <div class="kpi-foot"><span class="spark" data-spark="warn"></span> kiosk · RAM</div>
+                </div>
+                <div class="kpi attention">
+                    <div class="kpi-top"><span aria-hidden="true">✕</span> Fora</div>
+                    <div class="kpi-val num">2</div>
+                    <div class="kpi-foot"><span class="spark" data-spark="bad"></span> 1 em recuperação</div>
+                </div>
+                <div class="kpi">
+                    <div class="kpi-top"><span aria-hidden="true">▣</span> Sessões scrcpy</div>
+                    <div class="kpi-val num">2</div>
+                    <div class="kpi-foot">Sala 1 · Auditório · host: servidor</div>
+                </div>
+            </div>
+
+            <div class="body-grid">
+                <div class="panel">
+                    <div class="toolbar">
+                        <span class="panel-title">TV Boxes</span>
+                        <span class="field"><input id="q2" placeholder="filtro rápido…" aria-label="Filtro rápido"></span>
+                        <span class="field"><select aria-label="Área"><option>Todas as áreas</option><option>Recepção</option><option>Salas de aula</option><option>Administrativo</option></select></span>
+                        <span class="field"><select aria-label="Ordenar"><option>Atenção primeiro</option><option>Nome</option><option>Última mudança</option></select></span>
+                        <span class="sp"></span>
+                        <span class="seg" role="group" aria-label="Modo de exibição">
+                            <button class="on">Lista</button><button data-go="mural">Mural</button>
+                        </span>
+                        <button class="btn btn-sm" data-go="mural">▦ Mosaico 2×2</button>
+                    </div>
+
+                    <div class="rows" id="rows"></div>
+
+                    <div class="bulk" id="bulk">
+                        <b><span id="bulk-n">0</span> selecionados</b>
+                        <button class="btn btn-sm">↻ Recarregar kiosk</button>
+                        <button class="btn btn-sm">⇄ Trocar URL</button>
+                        <button class="btn btn-sm btn-danger">⏻ Reiniciar</button>
+                        <button class="btn btn-sm">▣ Abrir telas</button>
+                        <span class="sp"></span>
+                        <button class="btn btn-sm btn-ghost" id="bulk-clear">limpar seleção</button>
+                    </div>
+                </div>
+
+                <div class="stack">
+                    <div class="panel">
+                        <div class="panel-head">
+                            <span class="panel-title">Atividade</span>
+                            <span class="sp"></span>
+                            <span class="live" style="font-size:11px"><span class="pulse" aria-hidden="true"></span> WS</span>
+                        </div>
+                        <div class="feed" id="feed"></div>
+                    </div>
+
+                    <div class="panel">
+                        <div class="panel-head"><span class="panel-title">Servidor</span></div>
+                        <div class="sys" id="sys"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ── VIEW 2: MURAL NOC ── -->
+        <section class="view" id="v-mural">
+            <div class="body-grid" style="grid-template-columns:minmax(0,1fr)">
+                <div class="panel">
+                    <div class="toolbar">
+                        <span class="panel-title">Mural em tempo real</span>
+                        <span class="hint">captura a cada 3 s via ADB · duplo-clique numa tela abre o scrcpy</span>
+                        <span class="sp"></span>
+                        <span class="field">Área: <b>Todas</b></span>
+                        <button class="btn btn-sm">▣ Abrir mosaico scrcpy 2×2</button>
+                        <button class="btn btn-sm btn-primary">▦ Tela cheia (parede)</button>
+                    </div>
+                    <div class="mural" id="mural"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ── VIEW 3: SESSÃO ── -->
+        <section class="view" id="v-sessao">
+            <div class="session">
+                <div class="panel">
+                    <div class="panel-head">
+                        <span class="panel-title">TV Sala 1</span>
+                        <span class="chip">scrcpy 4.1</span>
+                        <span class="chip">5037</span>
+                        <span class="sp"></span>
+                        <span class="live"><span class="pulse" aria-hidden="true"></span> 1280×720 · 12 fps</span>
+                    </div>
+                    <div class="screen-big">
+                        <div class="canvas">
+                            <div class="fake" aria-hidden="true">
+                                <div class="hdr"></div>
+                                <div class="body3"><i></i><i></i><i></i><i></i></div>
+                            </div>
+                            <span class="sr">Pré-visualização da tela do TV Box</span>
+                        </div>
+                        <div class="screen-bar">
+                            <button class="btn btn-sm btn-primary">⤢ Tela cheia</button>
+                            <button class="btn btn-sm">⌨ Teclado</button>
+                            <button class="btn btn-sm">📸 Capturar</button>
+                            <button class="btn btn-sm">↻ Recarregar kiosk</button>
+                            <span class="sp"></span>
+                            <span class="hint">Alt+F tela cheia · Alt+O desliga a tela física</span>
+                            <button class="btn btn-sm btn-danger">■ Encerrar sessão</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <div class="tabs">
+                        <button class="tab on">Visão geral</button>
+                        <button class="tab">Histórico</button>
+                        <button class="tab">Mini controle</button>
+                    </div>
+                    <div class="tabpane">
+                        <h4 style="margin:0 0 7px;font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted)">Saúde</h4>
+                        <div class="kv"><span>Estado</span><span>no ar · há 3 s</span></div>
+                        <div class="kv"><span>Uptime do kiosk</span><span class="num">4 d 07 h</span></div>
+                        <div class="kv"><span>Endereço</span><span class="mono">192.168.254.84:5555</span></div>
+                        <div class="kv"><span>App no topo</span><span>Chrome (kiosk)</span></div>
+                        <div class="kv"><span>Página</span><span>indicadores.pmaua.local</span></div>
+                        <div class="kv"><span>RAM livre</span><span class="num">612 MB</span></div>
+                        <div class="kv"><span>Watchdog 24 h</span><span>0 recuperações</span></div>
+
+                        <h4 style="margin:14px 0 7px;font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted)">Mini controle (sem abrir o scrcpy)</h4>
+                        <div class="dpad" role="group" aria-label="Mini controle">
+                            <span></span><button title="Cima">▲</button><span></span>
+                            <button title="Esquerda">◀</button><button title="OK">●</button><button title="Direita">▶</button>
+                            <span></span><button title="Baixo">▼</button><span></span>
+                        </div>
+                        <div class="dpad-row">
+                            <button title="Voltar">↩ Voltar</button>
+                            <button title="Home">⌂ Home</button>
+                            <button title="Atualizar página">↻ F5</button>
+                        </div>
+                        <div class="field" style="margin-top:9px">
+                            <input placeholder="Digitar texto no TV Box…" aria-label="Texto para injetar">
+                            <button class="btn btn-sm">enviar</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <div class="kbd-legend">
+            <span><kbd>/</kbd> buscar</span>
+            <span><kbd>j</kbd><kbd>k</kbd> navegar</span>
+            <span><kbd>Enter</kbd> abrir tela</span>
+            <span><kbd>r</kbd> recarregar kiosk</span>
+            <span><kbd>R</kbd> reiniciar (confirma)</span>
+            <span><kbd>Esc</kbd> fechar detalhe</span>
+            <span class="sp" style="flex:1"></span>
+            <span>12 TV Boxes · 0 incidentes críticos · v2 mock</span>
+        </div>
+    </div>
+</div>
+
+<script>
+(() => {
+    'use strict';
+
+    /* ── Dados fictícios ────────────────────────────────── */
+    const DEVICES = [
+        { id:'sala-3',      name:'TV Sala 3',            area:'Salas de aula',  state:'bad',     age:'há 12 min', reason:'sem resposta · watchdog tentou 2 recuperações', ip:'192.168.254.86', app:'Chrome',     url:'indicadores.pmaua.local',     uptime:'—',        wd:'2 hoje' },
+        { id:'sala-4',      name:'TV Sala 4',            area:'Salas de aula',  state:'bad',     age:'há 4 min',  reason:'heartbeat perdido · reboot agendado',            ip:'192.168.254.87', app:'Free Kiosk', url:'agenda.pmaua.local',          uptime:'—',        wd:'1 hoje' },
+        { id:'sala-2',      name:'TV Sala 2',            area:'Salas de aula',  state:'warn',    age:'há 8 s',    reason:'kiosk recarregado 3× hoje',                      ip:'192.168.254.85', app:'Chrome',     url:'indicadores.pmaua.local',     uptime:'6 h 12 min', wd:'3 hoje' },
+        { id:'almox',       name:'TV Almoxarifado',      area:'Administrativo', state:'warn',    age:'há 22 s',   reason:'RAM em 94% · sugerido reboot noturno',           ip:'192.168.254.95', app:'Chrome',     url:'estoque.pmaua.local',         uptime:'11 d 02 h', wd:'0' },
+        { id:'recepcao',    name:'TV Recepção',          area:'Recepção',       state:'ok',      age:'há 3 s',    reason:'',                                               ip:'192.168.254.81', app:'Free Kiosk', url:'avisos.pmaua.local',          uptime:'2 d 03 h', wd:'0' },
+        { id:'sala-1',      name:'TV Sala 1',            area:'Salas de aula',  state:'ok',      age:'há 3 s',    reason:'',                                               ip:'192.168.254.84', app:'Chrome',     url:'indicadores.pmaua.local',     uptime:'4 d 07 h', wd:'0', session:true },
+        { id:'auditorio',   name:'TV Auditório',         area:'Administrativo', state:'ok',      age:'há 5 s',    reason:'',                                               ip:'192.168.254.94', app:'Chrome',     url:'agenda.pmaua.local',          uptime:'1 d 19 h', wd:'0', session:true },
+        { id:'protocolo',   name:'TV Protocolo',         area:'Recepção',       state:'ok',      age:'há 4 s',    reason:'',                                               ip:'192.168.254.82', app:'Free Kiosk', url:'avisos.pmaua.local',          uptime:'9 d 11 h', wd:'0' },
+        { id:'corredor-2',  name:'TV Corredor 2º andar', area:'Administrativo', state:'ok',      age:'há 6 s',    reason:'',                                               ip:'192.168.254.96', app:'Chrome',     url:'avisos.pmaua.local',          uptime:'7 d 22 h', wd:'0' },
+        { id:'copa',        name:'TV Copa',              area:'Administrativo', state:'ok',      age:'há 7 s',    reason:'',                                               ip:'192.168.254.97', app:'Free Kiosk', url:'avisos.pmaua.local',          uptime:'3 d 04 h', wd:'0' },
+        { id:'treinamento', name:'TV Treinamento',       area:'Salas de aula',  state:'ok',      age:'há 9 s',    reason:'',                                               ip:'192.168.254.98', app:'Chrome',     url:'treinamento.pmaua.local',     uptime:'5 d 15 h', wd:'0' },
+        { id:'ti',          name:'TV Suporte TI',        area:'Administrativo', state:'unknown', age:'—',         reason:'nunca conectou · aguardando primeiro heartbeat', ip:'192.168.254.99', app:'—',          url:'—',                           uptime:'—',        wd:'0' }
+    ];
+
+    const FEED = [
+        { t:'agora',       d:'bad',  txt:'<b>TV Sala 3</b> não responde ao ping (2ª tentativa)' },
+        { t:'há 2 min',    d:'warn', txt:'Watchdog reiniciou o kiosk em <b>TV Sala 2</b>' },
+        { t:'há 4 min',    d:'bad',  txt:'<b>TV Sala 4</b> perdeu heartbeat' },
+        { t:'há 11 min',   d:'',     txt:'<b>TV Recepção</b> voltou — 3 d de uptime' },
+        { t:'há 12 min',   d:'bad',  txt:'<b>TV Sala 3</b> caiu (último heartbeat)' },
+        { t:'há 26 min',   d:'warn', txt:'Média de RAM acima de 90% em 2 caixas' },
+        { t:'há 41 min',   d:'',     txt:'Reboot noturno concluído em 9 caixas' }
+    ];
+
+    const SYS = [ { k:'CPU do servidor', v:12 }, { k:'RAM', v:38 }, { k:'Disco (logs+backup)', v:61 } ];
+    const SERVICES = [ { n:'API do painel :8080', ok:true }, { n:'MediaMTX (legado) :8554', ok:false }, { n:'ADB do painel :5038', ok:true } ];
+
+    /* ── Utilidades ─────────────────────────────────────── */
+    const $  = (s, r=document) => r.querySelector(s);
+    const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+    const SHAPE = { ok:'●', warn:'◐', bad:'✕', unknown:'○' };
+    const LABEL = { ok:'no ar', warn:'atenção', bad:'fora', unknown:'novo' };
+    const RANK  = { bad:0, warn:1, unknown:2, ok:3 };
+
+    const statePill = (d) => `
+        <span class="state ${d.state}">
+            <span class="shape" aria-hidden="true">${SHAPE[d.state]}</span>${LABEL[d.state]}
+            <span class="age">${esc(d.age)}</span>
+        </span>`;
+
+    const thumb = (d) => `
+        <div class="thumb ${d.state === 'ok' || d.state === 'warn' ? '' : 'off'}" aria-hidden="true">
+            <div class="screen"><div class="bar"></div><div class="cols"><i></i><i></i></div></div>
+            ${d.state === 'bad' || d.state === 'unknown' ? `<div class="offmark">${d.state === 'bad' ? 'SEM SINAL' : 'NOVO'}</div>` : ''}
+        </div>`;
+
+    /* ── Linhas ─────────────────────────────────────────── */
+    function renderRows() {
+        const q = ($('#q').value + ' ' + ($('#q2').value || '')).trim().toLowerCase();
+        const list = DEVICES
+            .filter(d => !q || (d.name + ' ' + d.ip + ' ' + d.url + ' ' + d.area).toLowerCase().includes(q))
+            .slice().sort((a, b) => RANK[a.state] - RANK[b.state] || a.name.localeCompare(b.name));
+
+        $('#rows').innerHTML = list.map(d => `
+            <div class="row ${d.state === 'bad' ? 'is-bad' : 'is-ok'} ${d.id === 'sala-3' ? 'expanded' : ''}" data-id="${d.id}">
+                <input class="cbx" type="checkbox" aria-label="Selecionar ${esc(d.name)}">
+                ${thumb(d)}
+                <div class="who">
+                    <div class="who-name"><span class="who-nm">${esc(d.name)}</span> <span class="chip">${esc(d.area)}</span></div>
+                    <div class="who-meta">
+                        <span class="mono">${esc(d.ip)}</span><span class="mono url">${esc(d.url)}</span><span>${esc(d.app)}</span><span title="recuperações do watchdog nas últimas 24 h">wd ${d.wd === '0' ? 'ok' : esc(d.wd)}</span>
+                    </div>
+                    ${d.reason ? `<div class="reason">${esc(d.reason)}</div>` : ''}
+                </div>
+                <div>${statePill(d)}</div>
+                <div class="acts">
+                    <button class="btn btn-sm" data-act="abrir" data-id="${d.id}" title="Abrir a tela deste TV Box (scrcpy)">▣ abrir</button>
+                    <button class="btn btn-sm" data-act="kiosk" data-id="${d.id}" title="Recarregar a página no TV Box">↻</button>
+                    <button class="btn btn-sm btn-icon" title="Mais ações">⋯</button>
+                </div>
+            </div>
+            ${d.id === 'sala-3' ? detailRow(d) : ''}
+        `).join('');
+
+        bindRows();
+    }
+
+    function detailRow(d) {
+        return `
+        <div class="detail">
+            <div class="detail-grid">
+                <div>
+                    <h4>Identificação</h4>
+                    <div class="kv"><span>ID</span><span class="mono">${esc(d.id)}</span></div>
+                    <div class="kv"><span>IP / porta ADB</span><span class="mono">${esc(d.ip)}</span></div>
+                    <div class="kv"><span>Aplicativo</span><span>${esc(d.app)}</span></div>
+                    <div class="kv"><span>Uptime</span><span>${esc(d.uptime)}</span></div>
+                </div>
+                <div>
+                    <h4>Watchdog (24 h)</h4>
+                    <div class="kv"><span>Recuperações</span><span>${esc(d.wd)}</span></div>
+                    <div class="kv"><span>Última ação</span><span>reboot · 02:14</span></div>
+                    <div class="kv"><span>Próxima rotina</span><span>04:00 (limpeza)</span></div>
+                    <div class="kv"><span>Rede</span><span>Ethernet 100 Mb</span></div>
+                </div>
+                <div>
+                    <h4>Cascata de recuperação</h4>
+                    <div class="kv"><span>1. player retry</span><span>executado</span></div>
+                    <div class="kv"><span>2. Wi-Fi</span><span>pulado (Ethernet)</span></div>
+                    <div class="kv"><span>3. reboot</span><span>executado 02:14</span></div>
+                    <div class="kv"><span>4. alerta</span><span>aberto</span></div>
+                </div>
+                <div>
+                    <h4>Últimos eventos</h4>
+                    <div class="timeline">
+                        <div class="tl"><time>14:32</time><span>sem resposta ao ping</span></div>
+                        <div class="tl"><time>14:30</time><span>heartbeat perdido</span></div>
+                        <div class="tl"><time>14:26</time><span>kiosk no ar (ok)</span></div>
+                        <div class="tl"><time>02:14</time><span>reboot pelo watchdog</span></div>
+                    </div>
+                </div>
+                <div style="grid-column:1/-1">
+                    <h4>Ações</h4>
+                    <div class="detail-actions">
+                        <button class="btn btn-sm btn-primary">▣ Abrir tela agora</button>
+                        <button class="btn btn-sm">⌨ Mini controle</button>
+                        <button class="btn btn-sm">📸 Capturar tela</button>
+                        <button class="btn btn-sm">⇄ Trocar URL</button>
+                        <button class="btn btn-sm btn-danger">⏻ Reiniciar TV Box</button>
+                    </div>
+                </div>
+            </div>
+        </div>`;
+    }
+
+    /* ── Interações das linhas ──────────────────────────── */
+    function bindRows() {
+        $$('#rows .row .cbx').forEach(cb => cb.addEventListener('change', updateBulk));
+        $$('#rows [data-act="kiosk"]').forEach(b => b.addEventListener('click', (e) => {
+            e.stopPropagation();
+            toast(`Kiosk recarregado em ${nameOf(b.dataset.id)}`);
+        }));
+        $$('#rows [data-act="abrir"]').forEach(b => b.addEventListener('click', (e) => {
+            e.stopPropagation();
+            go('sessao');
+            toast(`Abrindo scrcpy em ${nameOf(b.dataset.id)}…`);
+        }));
+        updateBulk();
+    }
+    const nameOf = (id) => (DEVICES.find(d => d.id === id) || {}).name || id;
+
+    function updateBulk() {
+        const n = $$('#rows .cbx:checked').length;
+        $('#bulk-n').textContent = n;
+        $('#bulk').classList.toggle('on', n > 0);
+        $$('#rows .row').forEach(r => r.classList.toggle('sel', !!r.querySelector('.cbx')?.checked));
+    }
+    $('#bulk-clear').addEventListener('click', () => {
+        $$('#rows .cbx').forEach(c => c.checked = false);
+        updateBulk();
+    });
+
+    /* ── Mural ──────────────────────────────────────────── */
+    function renderMural() {
+        $('#mural').innerHTML = DEVICES.map(d => {
+            const ok = d.state === 'ok' || d.state === 'warn';
+            return `
+            <div class="tile ${d.state === 'bad' ? 'bad' : ''} ${ok ? '' : 'off'}" data-id="${d.id}" title="Duplo-clique abre o scrcpy">
+                <div class="tile-head">
+                    <span class="tile-name">${esc(d.name)}</span>
+                    <span class="sp"></span>
+                    <span class="state ${d.state}" style="font-size:10px;padding:1px 7px"><span class="shape" aria-hidden="true">${SHAPE[d.state]}</span>${LABEL[d.state]} · ${esc(d.age)}</span>
+                </div>
+                <div class="tile-screen">
+                    <div class="fake" aria-hidden="true"><div class="hdr"></div><div class="grid2"><i></i><i></i><i></i></div></div>
+                    ${ok ? '' : `<div class="tile-msg"><b>${d.state === 'bad' ? 'sem sinal' : 'aguardando'}</b></div>`}
+                </div>
+            </div>`;
+        }).join('');
+        $$('#mural .tile').forEach(t => t.addEventListener('dblclick', () => { go('sessao'); toast('Abrindo scrcpy…'); }));
+    }
+
+    /* ── Feed, sistema, sparklines ──────────────────────── */
+    function renderFeed() {
+        $('#feed').innerHTML = FEED.map(f => `
+            <div class="feed-item">
+                <span class="feed-dot ${f.d}" aria-hidden="true"></span>
+                <div class="feed-txt">${f.txt}<time>${esc(f.t)}</time></div>
+            </div>`).join('');
+    }
+    function renderSys() {
+        $('#sys').innerHTML = `
+            ${SYS.map(s => `
+                <div class="meter">
+                    <div class="meter-top"><span>${esc(s.k)}</span><b class="num">${s.v}%</b></div>
+                    <div class="track"><i style="width:${s.v}%"></i></div>
+                </div>`).join('')}
+            <div style="border-top:1px solid var(--border-subtle);padding-top:9px;display:flex;flex-direction:column;gap:6px">
+                ${SERVICES.map(s => `<div class="svc"><span aria-hidden="true">${s.ok ? '●' : '○'}</span> ${esc(s.n)}</div>`).join('')}
+            </div>`;
+    }
+    function renderSparks() {
+        const seq = { ok:[3,4,4,5,5,6,6,6,7,8,8,8], warn:[0,1,0,1,2,1,1,2,2,1,2,2], bad:[1,0,0,1,0,1,1,0,2,1,2,2] };
+        $$('[data-spark]').forEach(el => {
+            el.innerHTML = seq[el.dataset.spark].map(v => `<i style="height:${20 + v * 9}%"></i>`).join('');
+        });
+    }
+
+    /* ── Navegação, tema, toasts, atalhos ───────────────── */
+    const TITLES = { sala:['Sala de Controle','12 TV Boxes · 3 áreas'], mural:['Mural (NOC)','captura a cada 3 s · 12 telas'], sessao:['TV Sala 1 · sessão','scrcpy 4.1 · host: servidor'] };
+    function go(view) {
+        $$('.view').forEach(v => v.classList.toggle('on', v.id === 'v-' + view));
+        $$('.rail-item').forEach(r => r.classList.toggle('active', r.dataset.go === view));
+        $('#ttl').textContent = TITLES[view][0];
+        $('#sub').innerHTML = TITLES[view][1] + ' · atualizado <span id="age">há 3 s</span>';
+        const hash = '#' + document.documentElement.dataset.theme + ':' + view;
+        if (location.hash !== hash) history.replaceState(null, '', hash);
+        tick();
+    }
+    $$('[data-go]').forEach(b => b.addEventListener('click', () => go(b.dataset.go)));
+
+    $('#theme-btn').addEventListener('click', () => {
+        const el = document.documentElement;
+        el.dataset.theme = el.dataset.theme === 'dark' ? 'light' : 'dark';
+        const cur = ($$('.view.on')[0] || { id: 'v-sala' }).id.replace('v-', '');
+        history.replaceState(null, '', '#' + el.dataset.theme + ':' + cur);
+    });
+
+    let toastBox = null;
+    function toast(msg) {
+        if (!toastBox) {
+            toastBox = document.createElement('div');
+            toastBox.style.cssText = 'position:fixed;right:18px;bottom:18px;display:flex;flex-direction:column;gap:8px;z-index:9';
+            document.body.appendChild(toastBox);
+        }
+        const t = document.createElement('div');
+        t.className = 'panel';
+        t.style.cssText = 'padding:9px 13px;font-size:12.5px;box-shadow:var(--shadow);max-width:320px';
+        t.textContent = msg;
+        toastBox.appendChild(t);
+        setTimeout(() => t.remove(), 3200);
+    }
+
+    /* Contador "atualizado há N s" — simula o WS do painel real */
+    let age = 3;
+    function tick() {
+        const el = $('#age');
+        if (el) el.textContent = 'há ' + age + ' s';
+    }
+    setInterval(() => { age = age > 55 ? 3 : age + 1; tick(); }, 1000);
+
+    /* Simulação de evento ao vivo: destaca a linha e alimenta o feed */
+    let flip = 0;
+    $('#sim').addEventListener('click', () => {
+        const d = DEVICES[flip % DEVICES.length]; flip += 1;
+        const row = document.querySelector(`.row[data-id="${d.id}"]`);
+        if (row) { row.classList.add('flash'); setTimeout(() => row.classList.remove('flash'), 1200); }
+        FEED.unshift({ t:'agora', d: d.state === 'bad' ? 'bad' : '', txt:`<b>${esc(d.name)}</b> heartbeat recebido — estado recalculado` });
+        FEED.pop();
+        renderFeed(); age = 0; tick();
+    });
+
+    function search(q) { $('#q').value = q; renderRows(); }
+    $('#q').addEventListener('input', renderRows);
+    $('#q2') && $('#q2').addEventListener('input', renderRows);
+    document.addEventListener('keydown', (e) => {
+        if (e.key === '/' && document.activeElement.tagName !== 'INPUT') { e.preventDefault(); $('#q').focus(); }
+        if (e.key === 'Escape') { $('#q').blur(); }
+        if (document.activeElement.tagName === 'INPUT') return;
+        if (e.key === '1') go('sala');
+        if (e.key === '2') go('mural');
+        if (e.key === '3') go('sessao');
+    });
+
+    /* ── Boot ───────────────────────────────────────────── */
+    renderRows(); renderMural(); renderFeed(); renderSys(); renderSparks();
+    /* deep-link: #tema:tela (ex.: #light:mural, #dark:sessao) */
+    const rawHash = (location.hash || '').slice(1);
+    const parts = rawHash.split(':');
+    const wantTheme = parts.length > 1 ? parts[0] : 'dark';
+    const wantView = parts.length > 1 ? parts[1] : (rawHash || 'sala');
+    document.documentElement.dataset.theme = wantTheme === 'light' ? 'light' : 'dark';
+    go(TITLES[wantView] ? wantView : 'sala');
+})();
+</script>
+</body>
+</html>

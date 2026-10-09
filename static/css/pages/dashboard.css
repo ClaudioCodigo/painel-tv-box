@@ -196,3 +196,369 @@
     color: var(--text-secondary);
     text-decoration: underline;
 }
+
+/* ============================================================
+   UI v2 — "Sala de Controle" Layout & Linhas Densas
+   ============================================================ */
+
+/* ── Layout: lista + rail direito ─────────────────────── */
+.body-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 316px;
+    gap: 14px;
+    align-items: start;
+}
+.panel {
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-surface);
+    border-radius: var(--radius);
+}
+.panel-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--border-subtle);
+}
+.panel-title {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    color: var(--text-secondary);
+}
+.panel-head .sp,
+.toolbar .sp,
+.tile-head .sp {
+    flex: 1;
+}
+
+.toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border-subtle);
+    flex-wrap: wrap;
+}
+.field {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 9px;
+    font-size: 12.5px;
+    background: var(--bg-inset);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+}
+.field select,
+.field input {
+    background: none;
+    border: 0;
+    outline: none;
+    font-size: 12.5px;
+    color: inherit;
+}
+.field input { width: 140px; }
+.seg {
+    display: flex;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+.seg button {
+    padding: 5px 10px;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: var(--bg-inset);
+    border: 0;
+    cursor: pointer;
+}
+.seg button.on {
+    background: var(--text-primary);
+    color: var(--text-inverse);
+}
+
+/* ── Linhas de TV Box (o coração da tela) ───────────────── */
+.rows { display: flex; flex-direction: column; }
+.row {
+    display: grid;
+    grid-template-columns: 26px 104px minmax(0, 1fr) 152px 160px;
+    align-items: center;
+    gap: 12px;
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--border-subtle);
+    position: relative;
+    transition: background var(--dur-fast, 150ms) ease;
+}
+.row:last-child { border-bottom: 0; }
+.row:hover { background: var(--control-hover); }
+.row.sel { background: var(--control-hover); }
+.row.sel::before,
+.row.expanded::before,
+.row.is-bad::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: var(--text-primary);
+}
+.row.is-ok::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: transparent;
+}
+.row.flash { animation: flash 1.1s ease-out; }
+@keyframes flash {
+    0% { background: var(--bg-raised); }
+    100% { background: transparent; }
+}
+.cbx {
+    width: 15px;
+    height: 15px;
+    accent-color: var(--text-primary);
+    cursor: pointer;
+}
+
+.thumb {
+    width: 104px;
+    height: 58px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-strong);
+    background: var(--bg-inset);
+    overflow: hidden;
+    position: relative;
+    flex: none;
+    cursor: pointer;
+}
+.thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+.thumb .screen {
+    position: absolute;
+    inset: 6px;
+    display: grid;
+    grid-template-rows: 7px 1fr;
+    gap: 4px;
+    opacity: .75;
+}
+.thumb .screen .bar { background: var(--border-strong); border-radius: 2px; }
+.thumb .screen .cols { display: grid; grid-template-columns: 1.4fr 1fr; gap: 4px; }
+.thumb .screen .cols i { background: var(--border-subtle); border-radius: 2px; display: block; }
+.thumb .screen .cols i:first-child { background: var(--border-strong); }
+.thumb.off .screen { opacity: .22; }
+.thumb .offmark {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--text-primary);
+    background: rgba(0, 0, 0, .45);
+    letter-spacing: .06em;
+    text-transform: uppercase;
+}
+[data-theme="light"] .thumb .offmark { background: rgba(255, 255, 255, .65); }
+
+.who { min-width: 0; }
+.who-name {
+    font-size: 13.5px;
+    font-weight: 650;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+.who-nm {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-decoration: none;
+    color: inherit;
+    cursor: pointer;
+}
+.who-nm:hover { text-decoration: underline; }
+.who-name .chip { flex: none; }
+.who-meta {
+    font-size: 11.5px;
+    color: var(--text-muted);
+    margin-top: 2px;
+    display: flex;
+    gap: 10px;
+    overflow: hidden;
+    white-space: nowrap;
+}
+.who-meta > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: none;
+}
+.who-meta > span.url { flex: 0 1 auto; }
+.who-meta .mono {
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+}
+.reason { font-size: 11.5px; color: var(--text-secondary); margin-top: 3px; }
+.acts { display: flex; gap: 5px; justify-content: flex-end; }
+
+/* ── Detalhe expandido da linha ─────────────────────────── */
+.detail {
+    padding: 4px 14px 14px 40px;
+    border-bottom: 1px solid var(--border-subtle);
+    background: var(--bg-surface);
+}
+.detail-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(178px, 1fr));
+    gap: 14px 20px;
+}
+.detail-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 4px;
+}
+.detail h4 {
+    margin: 0 0 7px;
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: var(--text-muted);
+}
+.kv {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: 12px;
+    padding: 3px 0;
+    border-bottom: 1px dashed var(--border-subtle);
+}
+.kv:last-child { border-bottom: 0; }
+.kv span:first-child { color: var(--text-muted); }
+.kv span:last-child { color: var(--text-secondary); font-weight: 500; }
+.timeline { display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+.tl { display: flex; gap: 8px; align-items: baseline; }
+.tl time { color: var(--text-muted); font-size: 11px; min-width: 44px; }
+
+/* ── Rail direito: atividade + sistema ──────────────────── */
+.stack { display: flex; flex-direction: column; gap: 14px; }
+.feed { padding: 6px 0; max-height: 342px; overflow-y: auto; }
+.feed-item {
+    display: flex;
+    gap: 9px;
+    padding: 7px 14px;
+    border-bottom: 1px solid var(--border-subtle);
+}
+.feed-item:last-child { border-bottom: 0; }
+.feed-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    border: 1.5px solid var(--text-muted);
+    margin-top: 5px;
+    flex: none;
+}
+.feed-dot.bad { background: var(--text-primary); border-color: var(--text-primary); }
+.feed-dot.warn { border-color: var(--text-primary); }
+.feed-txt { font-size: 12px; color: var(--text-secondary); min-width: 0; }
+.feed-txt b { color: var(--text-primary); font-weight: 650; }
+.feed-txt time { display: block; font-size: 10.5px; color: var(--text-muted); margin-top: 1px; }
+
+.sys { padding: 11px 14px; display: flex; flex-direction: column; gap: 9px; }
+.meter { font-size: 11.5px; color: var(--text-muted); }
+.meter-top { display: flex; justify-content: space-between; margin-bottom: 4px; }
+.meter-top b {
+    color: var(--text-secondary);
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+}
+.track { height: 4px; background: var(--bg-inset); border-radius: 2px; overflow: hidden; }
+.track i { display: block; height: 100%; background: var(--text-primary); }
+.svc { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-secondary); }
+
+/* ── Mural NOC ──────────────────────────────────────────── */
+.mural {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    padding: 14px;
+}
+.tile {
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    background: var(--bg-inset);
+    cursor: pointer;
+    transition: transform var(--dur-fast, 150ms) ease;
+}
+.tile:hover {
+    border-color: var(--text-primary);
+}
+.tile.bad { border-color: var(--text-primary); border-width: 2px; }
+.tile-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 9px;
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border-subtle);
+}
+.tile-name { font-size: 12px; font-weight: 650; }
+.tile-screen {
+    aspect-ratio: 16/9;
+    position: relative;
+    display: grid;
+    place-items: center;
+    background: var(--bg-inset);
+    overflow: hidden;
+}
+.tile-screen img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+.tile-screen .fake {
+    position: absolute;
+    inset: 8%;
+    display: grid;
+    grid-template-rows: 9% 1fr;
+    gap: 5%;
+    opacity: .8;
+}
+.tile-screen .fake .hdr { background: var(--border-strong); border-radius: 2px; }
+.tile-screen .fake .grid2 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5%; }
+.tile-screen .fake .grid2 i { background: var(--border-subtle); border-radius: 2px; }
+.tile-screen .fake .grid2 i:first-child { background: var(--border-strong); }
+.tile.off .tile-screen .fake { opacity: .2; }
+.tile-msg {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    text-align: center;
+    padding: 8px;
+}
+.tile-msg b { font-size: 12px; letter-spacing: .05em; text-transform: uppercase; }
+
+@media (max-width: 1180px) {
+    .body-grid { grid-template-columns: minmax(0, 1fr); }
+    .kpis { grid-template-columns: repeat(2, 1fr); }
+    .mural { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .row { grid-template-columns: 26px 104px minmax(0, 1fr) auto; }
+}
+

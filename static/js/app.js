@@ -7,6 +7,7 @@ const APP = (() => {
 
     const routes = {
         '/': DASHBOARD,
+        '/mural': typeof MURAL !== 'undefined' ? MURAL : { render: () => {} },
         '/wizard': { render: WIZARD.render },
         '/devices': { render: DEVICES.render },
         '/device': null, // dinâmico: /device/{id}
@@ -32,8 +33,80 @@ const APP = (() => {
         // Navegação hash
         window.addEventListener('hashchange', navigate);
 
+        // Atalhos globais de teclado (v2)
+        initKeyboardShortcuts();
+
         // Boot: check wizard first, then navigate
         checkWizard().then(navigate);
+    }
+
+    function initKeyboardShortcuts() {
+        document.addEventListener('keydown', (e) => {
+            const activeTag = document.activeElement ? document.activeElement.tagName : '';
+            const isTyping = activeTag === 'INPUT' || activeTag === 'TEXTAREA' || activeTag === 'SELECT';
+
+            // Ctrl+K ou Cmd+K: foca a busca
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+                e.preventDefault();
+                const search = document.getElementById('dcard-search') || document.querySelector('input[type="text"]');
+                if (search) { search.focus(); search.select(); }
+                return;
+            }
+
+            // '/' foca a busca se não estiver digitando
+            if (e.key === '/' && !isTyping) {
+                e.preventDefault();
+                const search = document.getElementById('dcard-search') || document.querySelector('input[type="text"]');
+                if (search) { search.focus(); search.select(); }
+                return;
+            }
+
+            // Escape desfoque
+            if (e.key === 'Escape') {
+                if (isTyping && document.activeElement) document.activeElement.blur();
+                return;
+            }
+
+            if (isTyping) return;
+
+            // Navegação rápida numérica
+            if (e.key === '1') {
+                window.location.hash = '#/';
+            } else if (e.key === '2') {
+                window.location.hash = '#/mural';
+            } else if (e.key === '3') {
+                window.location.hash = '#/scrcpy';
+            } else if (e.key === 'j' || e.key === 'k') {
+                // Navega entre linhas da Sala de Controle
+                const rows = Array.from(document.querySelectorAll('#device-rows .row'));
+                if (!rows.length) return;
+                const curIdx = rows.findIndex(r => r.classList.contains('expanded') || r.classList.contains('sel'));
+                let nextIdx = curIdx;
+                if (e.key === 'j') nextIdx = (curIdx + 1) < rows.length ? curIdx + 1 : 0;
+                else if (e.key === 'k') nextIdx = (curIdx - 1) >= 0 ? curIdx - 1 : (rows.length - 1);
+                
+                const target = rows[nextIdx];
+                if (target) {
+                    const id = target.dataset.id;
+                    if (id && typeof DASHBOARD !== 'undefined' && DASHBOARD.toggleExpand) {
+                        DASHBOARD.toggleExpand(id);
+                        target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    }
+                }
+            } else if (e.key.toLowerCase() === 'r') {
+                // 'r': recarrega kiosk da linha expandida
+                const expanded = document.querySelector('#device-rows .row.expanded');
+                if (expanded && expanded.dataset.id && typeof DASHBOARD !== 'undefined') {
+                    DASHBOARD.reloadKiosk(expanded.dataset.id);
+                }
+            } else if (e.key === 'Enter') {
+                // Enter: abre scrcpy da linha expandida
+                const expanded = document.querySelector('#device-rows .row.expanded');
+                if (expanded && expanded.dataset.id && typeof DASHBOARD !== 'undefined') {
+                    DASHBOARD.openScrcpy(expanded.dataset.id);
+                }
+            }
+        });
     }
 
     async function checkWizard() {
