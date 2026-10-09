@@ -89,30 +89,48 @@ class PlayerManager:
         return f"rtsp://{self.host_ip}:{self.rtsp_port}/{path}"
 
     def _build_signage_url(self, device: DeviceConfig, panel_url: str = "") -> str:
-        """Monta a URL do wrapper de Web Signage servido pelo painel."""
+        """Monta a URL do wrapper de Web Signage servido pelo painel (usado como fallback se não houver target_url)."""
         if panel_url:
             return f"{panel_url.rstrip('/')}/signage/{device.id}"
         return f"http://{self.host_ip}:{self.panel_port}/signage/{device.id}"
+
+    def _resolve_target_url(self, device: DeviceConfig, panel_url: str = "") -> str:
+        """Resolve a URL a ser aberta no TV Box.
+        Se target_url estiver configurada, usa-a diretamente (adicionando http:// se scheme ausente).
+        Apenas se estiver vazia recorre ao wrapper do painel.
+        """
+        target = (device.target_url or "").strip()
+        if target:
+            if not target.startswith(("http://", "https://", "about:", "file://")):
+                return f"http://{target}"
+            return target
+        return self._build_signage_url(device, panel_url)
 
     def _get_browser_def(self, browser_name: str = "freekiosk") -> dict:
         """Retorna os dados do browser selecionado."""
         return BROWSERS.get(browser_name, BROWSERS.get("freekiosk", BROWSERS["chrome"]))
 
     def build_start_web_cmd(self, device: DeviceConfig, panel_url: str = "") -> str:
-        """Retorna comando shell para abrir o browser em Web Signage."""
+        """Retorna comando shell para abrir o browser em Web Kiosk com a URL direta."""
         browser = self._get_browser_def(device.web_browser)
-        if device.web_browser == "freekiosk" and device.target_url:
-            url = device.target_url
-        else:
-            url = self._build_signage_url(device, panel_url)
+        url = self._resolve_target_url(device, panel_url)
         return (
             f"am start -a android.intent.action.VIEW -d {_q(url)} "
             f"-n {_q(browser['package'])}/{_q(browser['activity'])} --activity-clear-task"
         )
 
+    def _is_web_mode(self, device: DeviceConfig) -> bool:
+        """Determina se o dispositivo deve operar em modo Web Kiosk."""
+        mode = getattr(device, "mode", "stream")
+        if mode == "web":
+            return True
+        if not getattr(device, "rtsp_path", "") and bool(getattr(device, "target_url", "")):
+            return True
+        return False
+
     def build_start_cmd(self, device: DeviceConfig, extra_args: str = "", panel_url: str = "") -> str:
-        """Retorna o comando shell para iniciar conteúdo (stream ou web) SEM executar ADB."""
-        if getattr(device, "mode", "stream") == "web":
+        """Retorna o comando shell para iniciar conteúdo (web padrão ou stream legado) SEM executar ADB."""
+        if self._is_web_mode(device):
             return self.build_start_web_cmd(device, panel_url)
 
         player_name = device.player or "vlc"
@@ -128,15 +146,12 @@ class PlayerManager:
         )
 
     async def start_web(self, device: DeviceConfig, panel_url: str = "") -> dict:
-        """Abre a página Web Signage no TV Box via browser."""
+        """Abre a página Web Kiosk no TV Box via browser com a URL configurada."""
         if not self.adb:
             return {"success": False, "error": "ADBManager não configurado"}
 
         browser = self._get_browser_def(device.web_browser)
-        if device.web_browser == "freekiosk" and device.target_url:
-            url = device.target_url
-        else:
-            url = self._build_signage_url(device, panel_url)
+        url = self._resolve_target_url(device, panel_url)
         cmd = (
             f"am start -a android.intent.action.VIEW -d {_q(url)} "
             f"-n {_q(browser['package'])}/{_q(browser['activity'])} --activity-clear-task"
@@ -164,14 +179,14 @@ class PlayerManager:
         return {"success": code == 0, "package": package, "output": output.strip(), "exit_code": code}
 
     async def start(self, device: DeviceConfig, extra_args: str = "", panel_url: str = "") -> dict:
-        """Inicia o conteúdo no TV Box despachando conforme device.mode ('stream' ou 'web')."""
-        if getattr(device, "mode", "stream") == "web":
+        """Inicia o conteúdo no TV Box despachando conforme device.mode ('web' padrão ou 'stream')."""
+        if self._is_web_mode(device):
             return await self.start_web(device, panel_url=panel_url)
         return await self.start_stream(device, extra_args=extra_args)
 
     async def stop(self, device: DeviceConfig) -> dict:
-        """Para o conteúdo no TV Box despachando conforme device.mode ('stream' ou 'web')."""
-        if getattr(device, "mode", "stream") == "web":
+        """Para o conteúdo no TV Box despachando conforme device.mode ('web' padrão ou 'stream')."""
+        if self._is_web_mode(device):
             return await self.stop_web(device)
         return await self.stop_stream(device)
 

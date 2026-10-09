@@ -9,6 +9,7 @@ from typing import Optional
 
 from app.models.device import DeviceConfig
 from app.managers.scrcpy import ScrcpyManager
+from app.managers.player import BROWSERS
 
 logger = logging.getLogger("health")
 
@@ -156,12 +157,13 @@ class HealthManager:
             except Exception:
                 results["activity"] = ""
 
-        # 5. MediaMTX path — readers indicam stream ativa (apenas se mode == "stream")
+        # 5. Modo de operação (Kiosk Web ou RTSP stream legado)
         device_mode = getattr(device, "mode", "stream")
-        results["mode"] = device_mode
+        is_web = (device_mode == "web") or (not getattr(device, "rtsp_path", "") and bool(getattr(device, "target_url", "")))
+        results["mode"] = "web" if is_web else device_mode
 
-        if device_mode == "web":
-            # Web Signage: verifica ping WebSocket do wrapper HTML
+        if is_web:
+            # Web Kiosk: verifica ping WebSocket (se wrapper) OU browser ativo em primeiro plano
             signage_fresh = False
             if device.state.last_signage_ping:
                 elapsed_signage = (datetime.now() - device.state.last_signage_ping).total_seconds()
@@ -170,7 +172,10 @@ class HealthManager:
 
             browser_pkg = getattr(device, "web_browser", "chrome")
             act_lower = (results["activity"] or "").lower()
-            results["player_ok"] = signage_fresh or ("chrome" in act_lower or "browser" in act_lower or browser_pkg in act_lower)
+            browser_def = BROWSERS.get(browser_pkg, {})
+            pkg_name = browser_def.get("package", "chrome").lower()
+            is_browser_active = "chrome" in act_lower or "browser" in act_lower or "freekiosk" in act_lower or pkg_name in act_lower
+            results["player_ok"] = bool(signage_fresh or is_browser_active)
         else:
             if self.mediamtx:
                 try:
@@ -199,7 +204,7 @@ class HealthManager:
 
     def _resolve_status(self, r: dict) -> tuple[str, str]:
         """Retorna (status, motivo).
-        Prioridade: Web Signage ping / readers MediaMTX > activity Android.
+        Prioridade: Web Kiosk (browser ativo/ping) / leitores MediaMTX > activity Android.
         """
         adb = r["adb"]
         if not adb:
@@ -208,8 +213,10 @@ class HealthManager:
         if r.get("mode") == "web":
             if r.get("signage_fresh"):
                 return ("online", "Página web ativa ✅")
+            if r.get("player_ok"):
+                return ("online", "Kiosk ativo ✅")
             if r.get("activity"):
-                return ("degraded", "Browser aberto mas página sem resposta")
+                return ("degraded", "Browser em segundo plano")
             return ("degraded", "Browser fechado")
 
         readers = r.get("readers", 0)

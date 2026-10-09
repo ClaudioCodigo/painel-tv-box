@@ -984,7 +984,7 @@ const DASHBOARD = (() => {
                 <p class="text-sm">O TV Box abrirá um navegador em tela cheia com a URL indicada.</p>
                 <div class="form-group mt-sm">
                     <label class="form-label" for="tg-web-url">URL da Página / Signage:</label>
-                    <input type="text" id="tg-web-url" class="form-control" value="${UI.escAttr(currentUrl)}" placeholder="http://${location.host}/signage?device_id=${encodeURIComponent(deviceId)}">
+                    <input type="text" id="tg-web-url" class="form-control" value="${UI.escAttr(currentUrl)}" placeholder="https://app.powerbi.com ou https://meupainel.local">
                 </div>
             `, async () => {
                 const targetUrl = document.getElementById('tg-web-url')?.value.trim() || '';

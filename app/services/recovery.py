@@ -143,7 +143,7 @@ class RecoveryService:
             return {"success": True, "method": "heartbeat_queue", "queued": item["id"]}
 
         if self.player:
-            if getattr(device, "mode", "stream") == "web":
+            if getattr(device, "mode", "stream") == "web" or (not getattr(device, "rtsp_path", "") and bool(getattr(device, "target_url", ""))):
                 return await self.player.start_web(device)
             return await self.player.start_stream(device)
         return {"success": False, "error": "player config ausente"}

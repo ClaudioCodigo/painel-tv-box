@@ -46,9 +46,9 @@ class DeviceConfig(BaseModel):
     group: str = ""
     rtsp_path: str = ""
     player: str = "vlc"
-    mode: str = "stream"  # "stream" | "web"
+    mode: str = "stream"  # "web" | "stream"
     target_url: str = ""  # URL exibida quando mode="web"
-    web_browser: str = "chrome"  # "chrome" | "webview"
+    web_browser: str = "chrome"  # "freekiosk" | "chrome" | "browser"
     root: bool = False
     recovery_enabled: bool = True  # watchdog reabre stream em degraded/offline
     capabilities: DeviceCapabilities = Field(default_factory=DeviceCapabilities)

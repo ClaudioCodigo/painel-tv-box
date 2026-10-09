@@ -30,7 +30,7 @@ async def test_device_config_web_mode_validation():
 
 @pytest.mark.asyncio
 async def test_player_start_web():
-    """PlayerManager.start_web executa intent do Chrome apontando para o wrapper."""
+    """PlayerManager.start_web executa intent do Chrome apontando diretamente para target_url."""
     adb_mock = AsyncMock()
     adb_mock.shell.return_value = ("Events injected: 1", 0)
 
@@ -46,14 +46,34 @@ async def test_player_start_web():
     res = await player.start(dev, panel_url="http://192.168.1.10:8080")
     assert res["success"] is True
     assert res["method"] == "web_intent"
-    assert res["url"] == "http://192.168.1.10:8080/signage/box-web"
+    assert res["url"] == "https://painel.local/dashboard"
     assert res["browser"] == "com.android.chrome"
 
-    # Confirma que adb.shell foi chamado com intent do chrome
+    # Confirma que adb.shell foi chamado com intent do chrome apontando para target_url direta
     adb_mock.shell.assert_called_once()
     called_cmd = adb_mock.shell.call_args[0][1]
     assert "com.android.chrome" in called_cmd
-    assert "signage/box-web" in called_cmd
+    assert "https://painel.local/dashboard" in called_cmd
+
+
+@pytest.mark.asyncio
+async def test_player_start_web_fallback_when_empty():
+    """PlayerManager.start_web usa URL do painel como fallback apenas quando target_url estiver vazia."""
+    adb_mock = AsyncMock()
+    adb_mock.shell.return_value = ("Events injected: 1", 0)
+
+    player = PlayerManager(adb_manager=adb_mock, host_ip="192.168.1.10", panel_port=8080)
+    dev = DeviceConfig(
+        id="box-web-empty",
+        ip="192.168.1.55",
+        mode="web",
+        target_url="",
+        web_browser="chrome",
+    )
+
+    res = await player.start(dev, panel_url="http://192.168.1.10:8080")
+    assert res["success"] is True
+    assert res["url"] == "http://192.168.1.10:8080/signage/box-web-empty"
 
 
 @pytest.mark.asyncio
@@ -136,8 +156,8 @@ async def test_health_check_web_mode_online():
 
 
 @pytest.mark.asyncio
-async def test_health_check_web_mode_degraded():
-    """HealthManager reporta 'degraded' para device em modo web sem ping de signage."""
+async def test_health_check_web_mode_online_browser_running():
+    """HealthManager reporta 'online' (Kiosk ativo) quando o browser está em primeiro plano, mesmo sem ping de signage."""
     adb_mock = AsyncMock()
     adb_mock.shell.return_value = (
         "mResumedActivity: ActivityRecord{123 u0 com.android.chrome/com.google.android.apps.chrome.Main}",
@@ -151,8 +171,6 @@ async def test_health_check_web_mode_degraded():
         mode="web",
         target_url="https://app.powerbi.com",
     )
-    # Ping antigo (> 30s)
-    dev.state.last_signage_ping = datetime.now() - timedelta(seconds=60)
     dev.state.current_activity = "com.android.chrome/com.google.android.apps.chrome.Main"
 
     async def mock_ping(*args, **kwargs):
@@ -164,9 +182,39 @@ async def test_health_check_web_mode_degraded():
         mp.setattr(asyncio, "create_subprocess_exec", mock_ping)
         res = await health.check(dev)
 
+    assert res["status"] == "online"
+    assert "Kiosk ativo" in res["reason"]
+
+
+@pytest.mark.asyncio
+async def test_health_check_web_mode_degraded_when_browser_closed():
+    """HealthManager reporta 'degraded' quando o browser não está em primeiro plano e não há ping."""
+    adb_mock = AsyncMock()
+    adb_mock.shell.return_value = (
+        "mResumedActivity: ActivityRecord{123 u0 com.android.launcher/com.android.launcher2.Launcher}",
+        0,
+    )
+    health = HealthManager(adb_manager=adb_mock)
+
+    dev = DeviceConfig(
+        id="box-signage",
+        ip="192.168.1.60",
+        mode="web",
+        target_url="https://app.powerbi.com",
+    )
+    dev.state.current_activity = "com.android.launcher/com.android.launcher2.Launcher"
+
+    async def mock_ping(*args, **kwargs):
+        mock_proc = MagicMock()
+        mock_proc.wait = AsyncMock(return_value=0)
+        return mock_proc
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(asyncio, "create_subprocess_exec", mock_ping)
+        res = await health.check(dev)
+
     assert res["status"] == "degraded"
-    assert "Browser aberto mas página sem resposta" in res["reason"]
-    assert res["signage_fresh"] is False
+    assert "Browser" in res["reason"]
 
 
 @pytest.mark.asyncio

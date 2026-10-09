@@ -650,27 +650,32 @@ async def device_command(device_id: str, data: dict):
     action = (data.get("action") or "").strip()
     if action == "reboot":
         cmd = "reboot"
-    elif action == "stop_stream":
+    elif action in ("stop_stream", "stop_web", "stop_kiosk"):
         pm = PlayerManager(
             adb_manager=None,
             players_config=config.players,
             host_ip=config.system.host.ip if config.system else "192.168.254.102",
         )
-        player_def = pm._get_player_def(device.player or "vlc")
-        pkg = player_def.force_stop if player_def else (device.player or "org.videolan.vlc")
+        if getattr(device, "mode", "web") == "web":
+            browser_def = pm._get_browser_def(device.web_browser)
+            pkg = browser_def["force_stop"]
+        else:
+            player_def = pm._get_player_def(device.player or "vlc")
+            pkg = player_def.force_stop if player_def else (device.player or "org.videolan.vlc")
         cmd = f"am force-stop {shlex.quote(pkg)}"
-    elif action == "start_stream":
+    elif action in ("start_stream", "start_web", "restart_player", "restart_kiosk"):
         pm = PlayerManager(
             adb_manager=None,
             players_config=config.players,
             host_ip=config.system.host.ip if config.system else "192.168.254.102",
             rtsp_port=config.mediamtx.server.rtsp_port if config.mediamtx and hasattr(config.mediamtx, "server") else 8554,
+            panel_port=config.system.server.port if config.system and hasattr(config.system, "server") else 8080,
         )
         cmd = pm.build_start_cmd(device)
         if not cmd:
-            raise HTTPException(400, f"Player '{device.player or 'vlc'}' não encontrado em players.yml")
+            raise HTTPException(400, f"Comando de inicialização para '{device.id}' não pôde ser gerado")
     else:
-        raise HTTPException(400, "Ação não suportada. Use: start_stream | stop_stream | reboot")
+        raise HTTPException(400, "Ação não suportada. Use: start_stream | stop_stream | restart_kiosk | reboot")
 
     item = await cq.enqueue(device_id, action, cmd)
     return {"queued": True, "id": item["id"], "action": action, "eta": "~20s (próximo heartbeat)"}
