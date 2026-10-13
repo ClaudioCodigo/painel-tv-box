@@ -21,14 +21,15 @@ except Exception:
 
 
 class DeviceFilter(logging.Filter):
-    """Filter que adiciona device_id ao registro de log."""
+    """Filter que garante device_id no registro de log se não foi fornecido."""
 
     def __init__(self, device_id: str = ""):
         super().__init__()
         self.device_id = device_id
 
     def filter(self, record):
-        record.device = self.device_id or "-"
+        if not getattr(record, "device", None) or record.device == "-":
+            record.device = self.device_id or "-"
         return True
 
 
@@ -111,6 +112,7 @@ class LogManager:
 
     def search(self, source: Optional[str] = None, level: Optional[str] = None,
                device_id: Optional[str] = None, q: Optional[str] = None,
+               date: Optional[str] = None,
                from_date: Optional[str] = None, to_date: Optional[str] = None,
                page: int = 1, per_page: int = 50) -> dict:
         """Busca logs com filtros. Paginação: 1-indexed."""
@@ -132,12 +134,17 @@ class LogManager:
         if level:
             filtered = [l for l in filtered if l.get("level", "").upper() == level.upper()]
         if device_id:
-            filtered = [l for l in filtered if device_id.lower() in l.get("device", "").lower()]
+            dev_norm = device_id.strip().lower()
+            filtered = [
+                l for l in filtered
+                if dev_norm in l.get("device", "").lower()
+                or dev_norm in l.get("message", "").lower()
+                or dev_norm in l.get("raw", "").lower()
+            ]
         if q:
             filtered = [l for l in filtered if q.lower() in l.get("message", "").lower()]
-        if from_date or to_date:
-            from_dt = self._parse_ts(from_date) if from_date else None
-            to_dt = self._parse_ts(to_date) if to_date else None
+        if date or from_date or to_date:
+            from_dt, to_dt = self._resolve_date_bounds(date, from_date, to_date)
             filtered = [l for l in filtered if self._date_in_range(l.get("timestamp", ""), from_dt, to_dt)]
 
         total = len(filtered)
@@ -210,16 +217,70 @@ class LogManager:
 
     @staticmethod
     def _parse_ts(value: str) -> Optional[datetime]:
-        """Converte timestamp de log (ou data 'YYYY-MM-DD') em datetime."""
+        """Converte timestamp de log (ou data 'YYYY-MM-DD' / 'DD/MM/YYYY') em datetime."""
         value = (value or "").strip()
         if not value:
             return None
-        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+        for fmt in (
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%d",
+            "%d/%m/%Y %H:%M:%S",
+            "%d/%m/%Y",
+            "%Y-%m-%dT%H:%M:%S",
+            "%Y-%m-%dT%H:%M:%SZ",
+        ):
             try:
                 return datetime.strptime(value, fmt)
             except ValueError:
                 continue
         return None
+
+    @classmethod
+    def _resolve_date_bounds(
+        cls, date: Optional[str] = None, from_date: Optional[str] = None, to_date: Optional[str] = None
+    ) -> tuple[Optional[datetime], Optional[datetime]]:
+        """Resolve limites inicial e final (from_dt, to_dt) para filtragem de logs."""
+        from_dt = None
+        to_dt = None
+
+        if date:
+            d_str = date.strip()
+            # Formato mês/ano: YYYY-MM ou MM/YYYY
+            m_match = re.match(r"^(\d{4})-(\d{2})$", d_str)
+            if not m_match:
+                m_match = re.match(r"^(\d{2})/(\d{4})$", d_str)
+                if m_match:
+                    month, year = int(m_match.group(1)), int(m_match.group(2))
+                else:
+                    month, year = None, None
+            else:
+                year, month = int(m_match.group(1)), int(m_match.group(2))
+
+            if year and month and 1 <= month <= 12:
+                import calendar
+                _, last_day = calendar.monthrange(year, month)
+                from_dt = datetime(year, month, 1, 0, 0, 0)
+                to_dt = datetime(year, month, last_day, 23, 59, 59)
+            else:
+                parsed = cls._parse_ts(d_str)
+                if parsed:
+                    from_dt = parsed.replace(hour=0, minute=0, second=0)
+                    to_dt = parsed.replace(hour=23, minute=59, second=59)
+
+        if from_date:
+            parsed_from = cls._parse_ts(from_date)
+            if parsed_from:
+                from_dt = parsed_from
+
+        if to_date:
+            parsed_to = cls._parse_ts(to_date)
+            if parsed_to:
+                if parsed_to.hour == 0 and parsed_to.minute == 0 and parsed_to.second == 0:
+                    to_dt = parsed_to.replace(hour=23, minute=59, second=59)
+                else:
+                    to_dt = parsed_to
+
+        return from_dt, to_dt
 
     @classmethod
     def _date_in_range(cls, ts_str: str, from_dt: Optional[datetime], to_dt: Optional[datetime]) -> bool:

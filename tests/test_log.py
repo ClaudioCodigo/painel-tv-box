@@ -88,3 +88,33 @@ class TestLogManager:
         assert path.is_file()
         content = path.read_text()
         assert "Sistema" in content
+
+    def test_search_by_device_id(self, log_mgr):
+        log_mgr.setup()
+        log_mgr.info("system", "Msg device explícito", device_id="box-sala-1")
+        log_mgr.info("adb", "Rebooting device box-sala-2 via adb")
+        log_mgr.info("system", "Outro log sem device")
+
+        res1 = log_mgr.search(device_id="box-sala-1")
+        assert res1["total"] == 1
+        assert "box-sala-1" in res1["items"][0]["device"]
+
+        res2 = log_mgr.search(device_id="box-sala-2")
+        assert res2["total"] == 1
+        assert "box-sala-2" in res2["items"][0]["message"]
+
+    def test_search_by_date_and_month(self, log_mgr):
+        from datetime import datetime
+        log_mgr.setup()
+        today = datetime.now().strftime("%Y-%m-%d")
+        month = datetime.now().strftime("%Y-%m")
+        log_mgr.info("system", "Log de hoje")
+
+        res_today = log_mgr.search(date=today)
+        assert res_today["total"] >= 1
+
+        res_month = log_mgr.search(date=month)
+        assert res_month["total"] >= 1
+
+        res_past = log_mgr.search(date="2020-01-01")
+        assert res_past["total"] == 0

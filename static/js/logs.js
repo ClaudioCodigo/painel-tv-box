@@ -1,14 +1,20 @@
 /**
- * Logs Page — busca, filtros, download, auto-refresh.
+ * Logs Page — busca, filtros avançados, download, auto-refresh.
+ * Permite filtrar por TV Box, dia/mês/ano, nível e fonte, além de
+ * exibir data e hora completas com timestamp relativo.
  */
 const LOGS = (() => {
     let refreshTimer = null;
     let currentQuery = {};
     let inflight = false;
     let autoRefresh = true;
+    let knownDevices = [];
 
     async function render(el) {
         UI.setPageTitle('Logs');
+
+        // Lê parâmetros da URL caso venha direcionado (ex: #/logs?device=box-1)
+        const urlParams = getUrlParams();
 
         el.innerHTML = `
             <div class="logs-page">
@@ -16,7 +22,7 @@ const LOGS = (() => {
                 <div class="logs-filters">
                     <div class="logs-filter-row">
                         <div class="form-group">
-                            <label>Fonte</label>
+                            <label for="log-source">Fonte</label>
                             <select id="log-source">
                                 <option value="">Todas</option>
                                 <option value="system">Sistema</option>
@@ -28,7 +34,7 @@ const LOGS = (() => {
                             </select>
                         </div>
                         <div class="form-group">
-                            <label>Nível</label>
+                            <label for="log-level">Nível</label>
                             <select id="log-level">
                                 <option value="">Todos</option>
                                 <option value="INFO">INFO</option>
@@ -38,25 +44,33 @@ const LOGS = (() => {
                                 <option value="CRITICAL">CRITICAL</option>
                             </select>
                         </div>
-                        <div class="form-group">
-                            <label>Buscar</label>
+                        <div class="form-group" style="min-width: 170px;">
+                            <label for="log-device">TV Box</label>
+                            <select id="log-device">
+                                <option value="">Todas as TVs</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="min-width: 220px;">
+                            <label for="log-date">Data (Dia / Mês / Ano)</label>
+                            <div class="log-date-wrap">
+                                <input type="date" id="log-date" title="Selecione um dia específico">
+                                <select id="log-date-preset" title="Atalho de período">
+                                    <option value="">Qualquer data</option>
+                                    <option value="today">Hoje</option>
+                                    <option value="yesterday">Ontem</option>
+                                    <option value="this_month">Este mês</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group form-group-grow">
+                            <label for="log-query">Buscar</label>
                             <input type="text" id="log-query" placeholder="Texto na mensagem...">
                         </div>
-                        <div class="form-group">
-                            <label>Device ID</label>
-                            <input type="text" id="log-device" placeholder="tv-box-pier">
-                        </div>
-                        <div class="form-group">
-                            <label>&nbsp;</label>
-                            <button class="btn btn-primary btn-sm" onclick="LOGS.search()">${UI.icon('search')} Buscar</button>
-                        </div>
-                        <div class="form-group">
-                            <label>&nbsp;</label>
+                        <div class="form-group form-actions">
+                            <button class="btn btn-primary btn-sm" onclick="LOGS.search(1)">${UI.icon('search')} Buscar</button>
+                            <button class="btn btn-ghost btn-sm" onclick="LOGS.clearFilters()" title="Limpar todos os filtros">✕ Limpar</button>
                             <button class="btn btn-secondary btn-sm" onclick="LOGS.download()">${UI.icon('download')} Download</button>
-                        </div>
-                        <div class="form-group">
-                            <label>&nbsp;</label>
-                            <button class="btn btn-ghost btn-sm" id="log-refresh-toggle" onclick="LOGS.toggleAutoRefresh()" title="Pausar/retomar atualização automática">${UI.icon('pause')} Auto</button>
+                            <button class="btn btn-ghost btn-sm" id="log-refresh-toggle" onclick="LOGS.toggleAutoRefresh()" title="Pausar/retomar atualização">${UI.icon('pause')} Auto</button>
                         </div>
                     </div>
                     <div class="logs-info" id="logs-info"></div>
@@ -65,6 +79,7 @@ const LOGS = (() => {
                         <button class="log-chip" data-level="INFO">INFO</button>
                         <button class="log-chip" data-level="WARNING">WARNING</button>
                         <button class="log-chip" data-level="ERROR">ERROR</button>
+                        <button class="log-chip" data-level="CRITICAL">CRITICAL</button>
                     </div>
                 </div>
 
@@ -80,8 +95,47 @@ const LOGS = (() => {
             </div>
         `;
 
-        // Auto-refresh a cada 5s
-        startAutoRefresh();
+        // Carrega lista de TV Boxes
+        await loadDeviceOptions(urlParams.device || urlParams.device_id || '');
+
+        // Aplica filtros vindos da URL caso existam
+        if (urlParams.level) {
+            const levelSel = document.getElementById('log-level');
+            if (levelSel) levelSel.value = urlParams.level;
+            updateLevelChips(urlParams.level);
+        }
+        if (urlParams.date) {
+            const dateInput = document.getElementById('log-date');
+            if (dateInput) dateInput.value = urlParams.date;
+        }
+
+        // Binds de data
+        const dateInput = document.getElementById('log-date');
+        const datePreset = document.getElementById('log-date-preset');
+        if (dateInput) {
+            dateInput.addEventListener('change', () => {
+                if (datePreset) datePreset.value = '';
+                search(1);
+            });
+        }
+        if (datePreset) {
+            datePreset.addEventListener('change', () => {
+                handleDatePresetChange(datePreset.value);
+            });
+        }
+
+        // Binds de inputs (mudança ou Enter aciona a busca)
+        ['log-query', 'log-source', 'log-level', 'log-device'].forEach(id => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            if (el.tagName === 'SELECT') {
+                el.addEventListener('change', () => search(1));
+            } else {
+                el.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') search(1);
+                });
+            }
+        });
 
         // Chips de nível
         document.querySelectorAll('.logs-level-chips .log-chip').forEach(chip => {
@@ -89,13 +143,76 @@ const LOGS = (() => {
                 const level = chip.dataset.level || '';
                 const sel = document.getElementById('log-level');
                 if (sel) sel.value = level;
-                document.querySelectorAll('.logs-level-chips .log-chip').forEach(c => c.classList.toggle('active', c === chip));
+                updateLevelChips(level);
                 search(1);
             });
         });
 
-        // Carrega dados iniciais
-        await search();
+        // Auto-refresh a cada 5s
+        startAutoRefresh();
+
+        // Carrega logs iniciais
+        await search(1);
+    }
+
+    function updateLevelChips(activeLevel) {
+        document.querySelectorAll('.logs-level-chips .log-chip').forEach(c => {
+            c.classList.toggle('active', (c.dataset.level || '') === (activeLevel || ''));
+        });
+    }
+
+    function handleDatePresetChange(val) {
+        const dateInput = document.getElementById('log-date');
+        const now = new Date();
+        if (val === 'today') {
+            const y = now.getFullYear();
+            const m = String(now.getMonth() + 1).padStart(2, '0');
+            const d = String(now.getDate()).padStart(2, '0');
+            if (dateInput) dateInput.value = `${y}-${m}-${d}`;
+        } else if (val === 'yesterday') {
+            const yest = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+            const y = yest.getFullYear();
+            const m = String(yest.getMonth() + 1).padStart(2, '0');
+            const d = String(yest.getDate()).padStart(2, '0');
+            if (dateInput) dateInput.value = `${y}-${m}-${d}`;
+        } else if (val === 'this_month') {
+            if (dateInput) dateInput.value = '';
+        } else {
+            if (dateInput) dateInput.value = '';
+        }
+        search(1);
+    }
+
+    async function loadDeviceOptions(preselect = '') {
+        const sel = document.getElementById('log-device');
+        if (!sel) return;
+        try {
+            const devs = await API.get('/devices');
+            knownDevices = Array.isArray(devs) ? devs : [];
+            let html = '<option value="">Todas as TVs</option>';
+            knownDevices.forEach(d => {
+                const label = `${d.name || d.id}${d.ip ? ' · ' + d.ip : ''}`;
+                html += `<option value="${UI.escAttr(d.id)}">${UI.escapeHtml(label)}</option>`;
+            });
+            sel.innerHTML = html;
+            if (preselect) {
+                sel.value = preselect;
+            }
+        } catch (e) {
+            // Silencioso
+        }
+    }
+
+    function getUrlParams() {
+        const hash = window.location.hash || '';
+        const qIndex = hash.indexOf('?');
+        if (qIndex === -1) return {};
+        const queryString = hash.slice(qIndex + 1);
+        const params = {};
+        for (const [k, v] of new URLSearchParams(queryString).entries()) {
+            params[k] = v;
+        }
+        return params;
     }
 
     async function search(page = 1) {
@@ -117,46 +234,96 @@ const LOGS = (() => {
         const level = document.getElementById('log-level')?.value || '';
         const q = document.getElementById('log-query')?.value || '';
         const device = document.getElementById('log-device')?.value || '';
+        const dateInputVal = document.getElementById('log-date')?.value || '';
+        const datePresetVal = document.getElementById('log-date-preset')?.value || '';
 
-        currentQuery = { source, level, q, device_id: device, page };
+        let dateParam = dateInputVal;
+        if (!dateParam && datePresetVal === 'this_month') {
+            const now = new Date();
+            dateParam = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        }
+
+        currentQuery = { source, level, q, device_id: device, date: dateParam, page };
 
         let url = `/logs?page=${page}&per_page=50`;
-        if (source) url += `&source=${source}`;
-        if (level) url += `&level=${level}`;
+        if (source) url += `&source=${encodeURIComponent(source)}`;
+        if (level) url += `&level=${encodeURIComponent(level)}`;
         if (q) url += `&q=${encodeURIComponent(q)}`;
         if (device) url += `&device_id=${encodeURIComponent(device)}`;
+        if (dateParam) url += `&date=${encodeURIComponent(dateParam)}`;
 
         try {
             const res = await API.get(url);
 
-            // Info
+            // Informações de paginação e contagem
             const info = document.getElementById('logs-info');
             if (info) {
-                info.textContent = `${res.total} entradas (pág ${res.page}/${res.pages})`;
+                let filterSummary = [];
+                if (device) filterSummary.push(`TV: ${device}`);
+                if (dateParam) filterSummary.push(`Data: ${dateParam}`);
+                if (level) filterSummary.push(`Nível: ${level}`);
+                if (source) filterSummary.push(`Fonte: ${source}`);
+                const extra = filterSummary.length ? ` · Filtros ativos: [${filterSummary.join(', ')}]` : '';
+                info.textContent = `${res.total} evento(s) encontrado(s) (página ${res.page} de ${res.pages || 1})${extra}`;
             }
 
             // Tabela
             if (!res.items || res.items.length === 0) {
-                el.innerHTML = '<div class="empty-state">Nenhum log encontrado.</div>';
+                el.innerHTML = '<div class="empty-state" style="padding:28px;text-align:center;color:var(--text-muted)">Nenhum log encontrado para os filtros selecionados.</div>';
+                renderPagination(res);
                 return;
             }
 
             let html = '<table class="log-table"><thead><tr>';
-            html += '<th>Data/Hora</th><th>Nível</th><th>Fonte</th><th>Dispositivo</th><th>Mensagem</th>';
+            html += '<th style="width:170px">Data / Hora</th><th style="width:90px">Nível</th><th style="width:100px">Fonte</th><th style="width:150px">TV Box</th><th>Mensagem</th>';
             html += '</tr></thead><tbody>';
 
             for (const item of res.items) {
                 const levelClass = item.level === 'ERROR' || item.level === 'CRITICAL' ? 'log-error' :
                                    item.level === 'WARNING' ? 'log-warning' : 'log-info';
-                // Timestamp relativo (normaliza 'YYYY-MM-DD HH:MM:SS' → ISO)
+
+                // Data e hora estruturados
                 const rawTs = item.timestamp || '';
-                const isoTs = rawTs ? rawTs.replace(' ', 'T') : '';
+                let dateDisplay = '--';
+                let timeDisplay = '';
+                let agoDisplay = '';
+
+                if (rawTs) {
+                    const parts = rawTs.split(' ');
+                    const datePart = parts[0] || '';
+                    const timePart = parts[1] || '';
+
+                    if (datePart.includes('-')) {
+                        const [y, m, d] = datePart.split('-');
+                        dateDisplay = `${d}/${m}/${y}`;
+                    } else {
+                        dateDisplay = datePart;
+                    }
+                    timeDisplay = timePart;
+
+                    const isoTs = rawTs.replace(' ', 'T');
+                    agoDisplay = UI.timeAgo(isoTs);
+                }
+
+                // Dispositivo com badge interativo
+                const devId = item.device && item.device !== '-' ? item.device : '';
+                let devHtml = '<span class="text-muted">—</span>';
+                if (devId) {
+                    devHtml = `<button type="button" class="log-dev-badge" onclick="LOGS.filterDevice('${UI.escAttr(devId)}')" title="Filtrar eventos desta TV">${UI.escapeHtml(devId)}</button>`;
+                }
+
                 html += `<tr class="${levelClass}">
-                    <td class="log-ts" title="${escapeHtml(rawTs)}">${isoTs ? UI.timeAgo(isoTs) : '--'}</td>
-                    <td><span class="log-badge ${levelClass}">${escapeHtml(item.level || '-')}</span></td>
-                    <td>${escapeHtml(item.source || '-')}</td>
-                    <td class="log-dev">${escapeHtml(item.device && item.device !== '-' ? item.device : '')}</td>
-                    <td class="log-msg">${escapeHtml(item.message)}</td>
+                    <td class="log-ts" title="${UI.escAttr(rawTs)}">
+                        <div class="log-ts-date">${UI.escapeHtml(dateDisplay)}</div>
+                        <div class="log-ts-time">
+                            <span class="log-time-num">${UI.escapeHtml(timeDisplay)}</span>
+                            ${agoDisplay ? `<span class="log-ts-ago">(${UI.escapeHtml(agoDisplay)})</span>` : ''}
+                        </div>
+                    </td>
+                    <td><span class="log-badge ${levelClass}">${UI.escapeHtml(item.level || '-')}</span></td>
+                    <td>${UI.escapeHtml(item.source || '-')}</td>
+                    <td class="log-dev">${devHtml}</td>
+                    <td class="log-msg">${UI.escapeHtml(item.message)}</td>
                 </tr>`;
             }
 
@@ -166,7 +333,7 @@ const LOGS = (() => {
             // Paginação
             renderPagination(res);
         } catch (e) {
-            el.innerHTML = `<div class="error-state">Erro: ${e.message}</div>`;
+            el.innerHTML = `<div class="error-state">Erro ao buscar logs: ${UI.escapeHtml(e.message)}</div>`;
         }
     }
 
@@ -174,7 +341,7 @@ const LOGS = (() => {
         const el = document.getElementById('logs-pagination');
         if (!el) return;
 
-        if (res.pages <= 1) {
+        if (!res || res.pages <= 1) {
             el.innerHTML = '';
             return;
         }
@@ -187,10 +354,55 @@ const LOGS = (() => {
         el.innerHTML = html;
     }
 
+    function filterDevice(deviceId) {
+        const sel = document.getElementById('log-device');
+        if (!sel) return;
+        let found = false;
+        for (const opt of sel.options) {
+            if (opt.value === deviceId) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            const newOpt = document.createElement('option');
+            newOpt.value = deviceId;
+            newOpt.textContent = deviceId;
+            sel.appendChild(newOpt);
+        }
+        sel.value = deviceId;
+        search(1);
+        if (typeof UI !== 'undefined' && UI.createToast) {
+            UI.createToast(`Filtrando logs do TV Box "${deviceId}"`, 'info', 2000);
+        }
+    }
+
+    function clearFilters() {
+        const sourceSel = document.getElementById('log-source');
+        const levelSel = document.getElementById('log-level');
+        const devSel = document.getElementById('log-device');
+        const dateInput = document.getElementById('log-date');
+        const datePreset = document.getElementById('log-date-preset');
+        const queryInput = document.getElementById('log-query');
+
+        if (sourceSel) sourceSel.value = '';
+        if (levelSel) levelSel.value = '';
+        if (devSel) devSel.value = '';
+        if (dateInput) dateInput.value = '';
+        if (datePreset) datePreset.value = '';
+        if (queryInput) queryInput.value = '';
+
+        updateLevelChips('');
+        search(1);
+        if (typeof UI !== 'undefined' && UI.createToast) {
+            UI.createToast('Filtros de log limpos', 'info', 1500);
+        }
+    }
+
     async function download() {
         const source = document.getElementById('log-source')?.value || '';
         let url = '/api/logs/download';
-        if (source) url += `?source=${source}`;
+        if (source) url += `?source=${encodeURIComponent(source)}`;
         window.open(url, '_blank');
     }
 
@@ -220,11 +432,5 @@ const LOGS = (() => {
         }
     }
 
-    function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    }
-
-    return { render, search, download, destroy, toggleAutoRefresh };
+    return { render, search, download, destroy, toggleAutoRefresh, filterDevice, clearFilters };
 })();

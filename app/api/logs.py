@@ -33,6 +33,7 @@ async def list_logs(
     level: str = Query(None, description="Nível: INFO|ERROR|WARNING|DEBUG|CRITICAL"),
     device_id: str = Query(None, description="Filtrar por device ID"),
     q: str = Query(None, description="Texto na mensagem"),
+    date: str = Query(None, description="Data específica (YYYY-MM-DD, DD/MM/YYYY ou YYYY-MM)"),
     from_date: str = Query(None, alias="from", description="Data início (YYYY-MM-DD)"),
     to_date: str = Query(None, alias="to", description="Data fim (YYYY-MM-DD)"),
     page: int = Query(1, ge=1),
@@ -43,7 +44,7 @@ async def list_logs(
     mgr = _get_log_manager()
     # I/O síncrono de arquivos (MBs) fora do event loop — evita stutter
     result = await asyncio.to_thread(
-        mgr.search, source, level, device_id, q, from_date, to_date, page, per_page
+        mgr.search, source, level, device_id, q, date, from_date, to_date, page, per_page
     )
     return result
 

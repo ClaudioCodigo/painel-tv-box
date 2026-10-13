@@ -121,6 +121,76 @@
 .log-badge.log-warning { color: var(--text-secondary); }
 .log-badge.log-info { color: var(--text-muted); }
 
+/* Data e hora estruturados */
+.log-ts-date {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 0.9em;
+    line-height: 1.2;
+}
+
+.log-ts-time {
+    color: var(--text-secondary);
+    font-size: 0.8em;
+    margin-top: 2px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.log-time-num {
+    font-weight: 500;
+}
+
+.log-ts-ago {
+    color: var(--text-muted);
+    font-size: 0.8em;
+}
+
+/* Badge de dispositivo clicável */
+.log-dev-badge {
+    display: inline-block;
+    background: var(--bg-base);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+    border-radius: var(--radius-sm);
+    padding: 2px 7px;
+    font-size: 0.85em;
+    font-family: var(--font-mono);
+    font-weight: 500;
+    cursor: pointer;
+    text-align: left;
+    transition: background var(--dur-fast), color var(--dur-fast), border-color var(--dur-fast);
+}
+
+.log-dev-badge:hover {
+    background: var(--control-hover);
+    color: var(--text-primary);
+    border-color: var(--border-strong);
+}
+
+/* Controles de data e ações nos filtros */
+.log-date-wrap {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+
+.log-date-wrap input[type="date"] {
+    min-width: 130px;
+}
+
+.log-date-wrap select {
+    width: auto;
+    min-width: 110px;
+}
+
+.logs-filter-row .form-actions {
+    display: flex;
+    gap: 4px;
+    align-items: flex-end;
+}
+
 .logs-pagination {
     margin-top: var(--space-3);
 }
