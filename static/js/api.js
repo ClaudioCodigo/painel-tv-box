@@ -14,11 +14,18 @@ const API = (() => {
     /**
      * URL com token na query — para uso direto no browser
      * (img src, window.open), onde headers não podem ser enviados.
+     * Garante o prefixo /api para rotas da API.
      */
     function authUrl(path) {
         const t = (typeof AUTH !== 'undefined') ? AUTH.getToken() : '';
-        const sep = path.includes('?') ? '&' : '?';
-        return `${path}${sep}token=${encodeURIComponent(t)}`;
+        let fullPath = path || '';
+        if (!fullPath.startsWith('http://') && !fullPath.startsWith('https://')) {
+            if (!fullPath.startsWith('/api/') && fullPath !== '/api') {
+                fullPath = `${BASE}${fullPath.startsWith('/') ? '' : '/'}${fullPath}`;
+            }
+        }
+        const sep = fullPath.includes('?') ? '&' : '?';
+        return `${fullPath}${sep}token=${encodeURIComponent(t)}`;
     }
 
     function handleUnauthorized(res) {

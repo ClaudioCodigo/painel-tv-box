@@ -114,9 +114,16 @@ class PlayerManager:
         """Retorna comando shell para abrir o browser em Web Kiosk com a URL direta."""
         browser = self._get_browser_def(device.web_browser)
         url = self._resolve_target_url(device, panel_url)
+        pkg = browser["package"]
+        act = browser["activity"]
+        if device.web_browser == "freekiosk" or pkg == "com.freekiosk":
+            return (
+                f"am start -n {_q(pkg)}/{_q(act)} "
+                f"--es url {_q(url)} -a android.intent.action.VIEW -d {_q(url)} --activity-clear-task"
+            )
         return (
             f"am start -a android.intent.action.VIEW -d {_q(url)} "
-            f"-n {_q(browser['package'])}/{_q(browser['activity'])} --activity-clear-task"
+            f"-n {_q(pkg)}/{_q(act)} --activity-clear-task"
         )
 
     def _is_web_mode(self, device: DeviceConfig) -> bool:
@@ -152,10 +159,7 @@ class PlayerManager:
 
         browser = self._get_browser_def(device.web_browser)
         url = self._resolve_target_url(device, panel_url)
-        cmd = (
-            f"am start -a android.intent.action.VIEW -d {_q(url)} "
-            f"-n {_q(browser['package'])}/{_q(browser['activity'])} --activity-clear-task"
-        )
+        cmd = self.build_start_web_cmd(device, panel_url)
         output, code = await self.adb.shell(device.ip, cmd, port=device.adb_port)
         logger.info("Web Kiosk started: %s -> %s (code=%d)", device.id, url, code)
         return {

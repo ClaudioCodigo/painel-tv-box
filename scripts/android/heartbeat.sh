@@ -64,9 +64,23 @@ install() {
 
 _loop() {
     . "$CONFIG"
+    INTERVAL=$(echo "${INTERVAL:-20}" | tr -d '\r')
     while true; do
-        ACTIVITY=$(dumpsys activity 2>/dev/null | grep -E 'mCurrentFocus|mFocusedApp' | head -1 | sed 's/.*\/\([^}]*\)}/\1/' | awk '{print $1}')
-        BODY="{\"activity\":\"$ACTIVITY\"}"
+        ACTIVITY=$(dumpsys window 2>/dev/null | grep -e mCurrentFocus -e mFocusedApp | grep -oE '[a-zA-Z0-9._]+/[a-zA-Z0-9._]+' | head -1)
+        [ -z "$ACTIVITY" ] && ACTIVITY=$(dumpsys activity activities 2>/dev/null | grep -i ResumedActivity | grep -oE '[a-zA-Z0-9._]+/[a-zA-Z0-9._]+' | head -1)
+
+        KIOSK_URL=""
+        if [ -f /data/data/com.freekiosk/databases/RKStorage ]; then
+            KIOSK_URL=$(sqlite3 /data/data/com.freekiosk/databases/RKStorage "SELECT value FROM catalystLocalStorage WHERE key='kiosk_url';" 2>/dev/null)
+        fi
+
+        if [ -n "$KIOSK_URL" ]; then
+            ESC_URL=$(printf '%s' "$KIOSK_URL" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr '\n\r' '  ')
+            BODY="{\"activity\":\"$ACTIVITY\",\"kiosk_url\":\"$ESC_URL\"}"
+        else
+            BODY="{\"activity\":\"$ACTIVITY\"}"
+        fi
+
         HB_URL="$PANEL_URL/api/heartbeat/$DEVICE_ID"
         # 1. Heartbeat POST
         http_req POST "$HB_URL" "$BODY" >/dev/null 2>&1

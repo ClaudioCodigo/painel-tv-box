@@ -147,13 +147,18 @@ class HealthManager:
                 logger.debug("Activity check pulado para %s: heartbeat fresco", device.id)
         else:
             try:
+                cmd = (
+                    "ACT=$(dumpsys window 2>/dev/null | grep -e mCurrentFocus -e mFocusedApp | grep -oE '[a-zA-Z0-9._]+/[a-zA-Z0-9._]+' | head -1); "
+                    "[ -z \"$ACT\" ] && ACT=$(dumpsys activity activities 2>/dev/null | grep -i ResumedActivity | grep -oE '[a-zA-Z0-9._]+/[a-zA-Z0-9._]+' | head -1); "
+                    "echo \"$ACT\""
+                )
                 output, _ = await self.adb.shell(
                     device.ip,
-                    "dumpsys activity activities 2>/dev/null | grep -i ResumedActivity | head -1",
+                    cmd,
                     port=device.adb_port,
                     timeout=5,
                 )
-                results["activity"] = output.strip() if output and "ResumedActivity" in output else ""
+                results["activity"] = output.strip() if output and ("/" in output or "ResumedActivity" in output) else ""
             except Exception:
                 results["activity"] = ""
 
@@ -170,11 +175,16 @@ class HealthManager:
                 signage_fresh = elapsed_signage < 30
             results["signage_fresh"] = signage_fresh
 
-            browser_pkg = getattr(device, "web_browser", "chrome")
+            browser_pkg = getattr(device, "web_browser", "freekiosk") or "freekiosk"
             act_lower = (results["activity"] or "").lower()
             browser_def = BROWSERS.get(browser_pkg, {})
-            pkg_name = browser_def.get("package", "chrome").lower()
-            is_browser_active = "chrome" in act_lower or "browser" in act_lower or "freekiosk" in act_lower or pkg_name in act_lower
+            pkg_name = browser_def.get("package", "com.freekiosk").lower()
+            is_browser_active = (
+                "chrome" in act_lower
+                or "browser" in act_lower
+                or "freekiosk" in act_lower
+                or (bool(pkg_name) and pkg_name in act_lower)
+            )
             results["player_ok"] = bool(signage_fresh or is_browser_active)
         else:
             if self.mediamtx:

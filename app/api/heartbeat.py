@@ -25,6 +25,7 @@ MIN_INTERVAL_SECONDS = 5  # anti-spam: mínimo entre batidas por device
 
 class HeartbeatBody(BaseModel):
     activity: Optional[str] = None
+    kiosk_url: Optional[str] = None
 
 
 class HeartbeatResultBody(BaseModel):
@@ -71,6 +72,8 @@ async def device_heartbeat(
     device.state.last_heartbeat = now
     if body and body.activity:
         device.state.current_activity = body.activity.strip()
+    if body and body.kiosk_url:
+        device.state.kiosk_url = body.kiosk_url.strip()
 
     logger.debug("[heartbeat] %s ok", device_id)
     return None

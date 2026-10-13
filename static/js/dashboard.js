@@ -378,7 +378,8 @@ const DASHBOARD = (() => {
             : (d.player?.toUpperCase() || 'VLC');
 
         const wdCount = d.state?.reboot_count ? `${d.state.reboot_count} hoje` : (recoveryLog[d.id] ? 'recuperado' : 'ok');
-        const screenshotUrl = API.authUrl(`/devices/${encodeURIComponent(d.id)}/screenshot`);
+        const screenshotUrl = API.authUrl(`/devices/${encodeURIComponent(d.id)}/screenshot?_t=${Date.now()}`);
+        const displayUrl = d.target_url || d.state?.kiosk_url || '';
 
         return `
             <div class="row ${norm === 'bad' ? 'is-bad' : 'is-ok'} ${isSelected ? 'sel' : ''} ${isExpanded ? 'expanded' : ''}" data-id="${UI.escAttr(d.id)}">
@@ -397,7 +398,7 @@ const DASHBOARD = (() => {
                     </div>
                     <div class="who-meta">
                         <span class="mono">${UI.escapeHtml(d.ip || '--')}</span>
-                        ${d.target_url ? `<span class="mono url" title="${UI.escapeHtml(d.target_url)}">${UI.escapeHtml(d.target_url)}</span>` : ''}
+                        ${displayUrl ? `<span class="mono url" title="${UI.escAttr(displayUrl)}">${UI.escapeHtml(displayUrl)}</span>` : ''}
                         <span>${UI.escapeHtml(appLabel)}</span>
                         <span title="Watchdog">wd ${UI.escapeHtml(wdCount)}</span>
                     </div>
@@ -782,6 +783,23 @@ const DASHBOARD = (() => {
         sel.innerHTML = opts.join('');
     }
 
+    let screenshotInterval = null;
+
+    function refreshScreenshots(force = false) {
+        const rows = document.getElementById('device-rows');
+        if (!rows) return;
+        const now = Date.now();
+        rows.querySelectorAll('.row').forEach(row => {
+            const id = row.dataset.id;
+            const img = row.querySelector('.thumb img');
+            if (!id || !img) return;
+            if (force || !row.classList.contains('is-bad')) {
+                const base = API.authUrl('/devices/' + encodeURIComponent(id) + '/screenshot');
+                img.src = `${base}&_t=${now}`;
+            }
+        });
+    }
+
     function startAutoRefresh() {
         if (statusInterval) clearInterval(statusInterval);
         statusInterval = setInterval(() => {
@@ -789,10 +807,16 @@ const DASHBOARD = (() => {
             loadSystemMetrics();
             loadScrcpySessions();
         }, 15000);
+
+        if (screenshotInterval) clearInterval(screenshotInterval);
+        screenshotInterval = setInterval(() => {
+            refreshScreenshots(false);
+        }, 5000);
     }
 
     function destroy() {
         if (statusInterval) { clearInterval(statusInterval); statusInterval = null; }
+        if (screenshotInterval) { clearInterval(screenshotInterval); screenshotInterval = null; }
         if (ageTimer) { clearInterval(ageTimer); ageTimer = null; }
     }
 

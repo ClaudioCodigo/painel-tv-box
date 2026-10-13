@@ -65,7 +65,7 @@ class WatchdogManager:
     @staticmethod
     def _is_stream_issue(reason: str) -> bool:
         r = reason.lower()
-        return "stream" in r or "player" in r
+        return "stream" in r or "player" in r or "browser" in r or "kiosk" in r
 
     async def _guardian_check(self, device: DeviceConfig):
         """Guardião: ressuscita heartbeat.sh/netwatch.sh se parados no device.

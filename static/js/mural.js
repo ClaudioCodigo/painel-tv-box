@@ -100,7 +100,7 @@ const MURAL = (() => {
         grid.innerHTML = list.map(d => {
             const st = normalizeStatus(d.state?.status);
             const isOff = st === 'bad';
-            const screenshotUrl = API.authUrl(`/devices/${encodeURIComponent(d.id)}/screenshot`);
+            const screenshotUrl = API.authUrl(`/devices/${encodeURIComponent(d.id)}/screenshot?_t=${Date.now()}`);
             const shape = shapes[st] || '○';
             const label = labels[st] || st.toUpperCase();
             const seen = d.last_seen || d.last_heartbeat;

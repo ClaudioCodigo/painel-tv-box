@@ -26,6 +26,7 @@ class DeviceState(BaseModel):
     last_recovery_time: Optional[datetime] = None
     reboot_count: int = 0
     current_activity: str = ""
+    kiosk_url: str = ""
     screenshot_path: Optional[str] = None
     reason: str = ""  # motivo do status (ex: "Sem stream ativa")
 
