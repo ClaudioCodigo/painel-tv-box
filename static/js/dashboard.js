@@ -385,7 +385,7 @@ const DASHBOARD = (() => {
                 <input class="cbx" type="checkbox" data-cbx="${UI.escAttr(d.id)}" ${isSelected ? 'checked' : ''} aria-label="Selecionar ${UI.escapeHtml(d.name || d.id)}">
                 
                 <div class="thumb ${isOff ? 'off' : ''}" onclick="DASHBOARD.openScrcpy('${UI.escAttr(d.id)}')">
-                    <img src="${screenshotUrl}" alt="Tela ${UI.escapeHtml(d.name || d.id)}" loading="lazy" onerror="this.style.display='none'">
+                    <img src="${screenshotUrl}" alt="Tela ${UI.escapeHtml(d.name || d.id)}" loading="lazy" onload="this.style.display='block'; if(this.nextElementSibling) this.nextElementSibling.style.display='none'" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='block'">
                     <div class="screen"><div class="bar"></div><div class="cols"><i></i><i></i></div></div>
                     ${isOff ? `<div class="offmark">${norm === 'bad' ? 'SEM SINAL' : 'NOVO'}</div>` : ''}
                 </div>

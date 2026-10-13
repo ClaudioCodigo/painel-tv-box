@@ -23,6 +23,7 @@ const MURAL = (() => {
                                 <option value="">Todas as áreas</option>
                             </select>
                         </span>
+                        <button class="btn btn-sm" onclick="MURAL.refreshNow()">↻ Atualizar</button>
                         <button class="btn btn-sm" onclick="MURAL.openMosaic()">▣ Mosaico</button>
                         <button class="btn btn-sm btn-primary" onclick="MURAL.toggleFullscreen()">▦ Tela cheia</button>
                         <button class="btn btn-sm" onclick="window.location.hash='#/'">Lista</button>
@@ -98,7 +99,7 @@ const MURAL = (() => {
 
         grid.innerHTML = list.map(d => {
             const st = normalizeStatus(d.state?.status);
-            const isOff = st === 'bad' || st === 'unknown';
+            const isOff = st === 'bad';
             const screenshotUrl = API.authUrl(`/devices/${encodeURIComponent(d.id)}/screenshot`);
             const shape = shapes[st] || '○';
             const label = labels[st] || st.toUpperCase();
@@ -117,36 +118,46 @@ const MURAL = (() => {
                         </span>
                     </div>
                     <div class="tile-screen">
-                        <img src="${screenshotUrl}" alt="Tela ${UI.escapeHtml(d.name || d.id)}" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='grid'">
+                        <img src="${screenshotUrl}" alt="Tela ${UI.escapeHtml(d.name || d.id)}" loading="lazy"
+                             onload="this.style.display='block'; if (this.nextElementSibling) this.nextElementSibling.style.display='none'"
+                             onerror="this.style.display='none'; if (this.nextElementSibling) this.nextElementSibling.style.display='grid'">
                         <div class="fake" style="display:none" aria-hidden="true">
                             <div class="hdr"></div>
                             <div class="grid2"><i></i><i></i><i></i></div>
                         </div>
-                        ${isOff ? `<div class="tile-msg"><b>${st === 'bad' ? 'sem sinal' : 'aguardando'}</b></div>` : ''}
+                        ${isOff ? `<div class="tile-msg"><b>sem sinal</b></div>` : ''}
                     </div>
                 </div>
             `;
         }).join('');
     }
 
-    function refreshScreenshots() {
+    function refreshScreenshots(force = false) {
         const grid = document.getElementById('mural-grid');
         if (!grid) return;
         const now = Date.now();
-        grid.querySelectorAll('.tile img').forEach(img => {
-            const tile = img.closest('.tile');
-            if (tile && !tile.classList.contains('off')) {
-                const id = tile.dataset.id;
-                if (id) {
-                    img.src = `${API.authUrl('/devices/' + encodeURIComponent(id) + '/screenshot')}&_t=${now}`;
-                }
+        grid.querySelectorAll('.tile').forEach(tile => {
+            const id = tile.dataset.id;
+            const img = tile.querySelector('img');
+            if (!id || !img) return;
+            // Atualiza dispositivos que não estão marcados como sem sinal, ou todos se force
+            if (force || !tile.classList.contains('bad')) {
+                const base = API.authUrl('/devices/' + encodeURIComponent(id) + '/screenshot');
+                img.src = `${base}&_t=${now}`;
             }
         });
     }
 
+    function refreshNow() {
+        refreshScreenshots(true);
+        if (typeof UI !== 'undefined' && UI.createToast) {
+            UI.createToast('Atualizando capturas das telas...', 'info');
+        }
+    }
+
     function startAutoRefresh() {
         if (refreshTimer) clearInterval(refreshTimer);
-        refreshTimer = setInterval(refreshScreenshots, 5000);
+        refreshTimer = setInterval(() => refreshScreenshots(false), 5000);
     }
 
     function destroy() {
@@ -180,5 +191,5 @@ const MURAL = (() => {
         }
     }
 
-    return { render, destroy, openDeviceScrcpy, openMosaic, toggleFullscreen };
+    return { render, destroy, openDeviceScrcpy, openMosaic, toggleFullscreen, refreshNow };
 })();

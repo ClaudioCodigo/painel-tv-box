@@ -2,11 +2,14 @@
 
 import asyncio
 from datetime import datetime
+import logging
 
 from fastapi import APIRouter, HTTPException, Request
 
 from app.models.device import DeviceConfig
 from app.utils.system import slugify, is_safe_package
+
+logger = logging.getLogger("devices")
 
 router = APIRouter(prefix="/api/devices", tags=["devices"])
 
@@ -491,14 +494,107 @@ async def device_uninstall_app(device_id: str, data: dict):
 
 # ── Screenshot ──────────────────────────────────
 
+import time
 import uuid
 from pathlib import Path
+from typing import Optional
 from fastapi.responses import FileResponse
 from fastapi import UploadFile, File as FastAPIFile
 
 from app.utils.system import get_data_dir
 
 SCREENSHOTS_DIR = get_data_dir() / "screenshots"
+_screenshot_locks: dict[str, asyncio.Lock] = {}
+
+
+def _get_screenshot_lock(device_id: str) -> asyncio.Lock:
+    lock = _screenshot_locks.get(device_id)
+    if lock is None:
+        lock = asyncio.Lock()
+        _screenshot_locks[device_id] = lock
+    return lock
+
+
+async def _capture_device_screenshot(device, force: bool = False) -> Optional[Path]:
+    """Captura screenshot do TV Box e salva em SCREENSHOTS_DIR / f"{device.id}.png".
+
+    Protegido por lock assíncrono por dispositivo e respeita TTL de 4 segundos
+    se force=False. Respeita também a regra ADB x Scrcpy.
+    """
+    if not device or not device.ip:
+        return None
+
+    SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
+    local_path = SCREENSHOTS_DIR / f"{device.id}.png"
+
+    # Se scrcpy está ativo neste dispositivo, não roda ADB intrusivo (§3.3)
+    from app.managers.scrcpy import ScrcpyManager
+    target = f"{device.ip}:{device.adb_port}"
+    if ScrcpyManager.is_device_active(target):
+        return local_path if local_path.is_file() else None
+
+    lock = _get_screenshot_lock(device.id)
+    async with lock:
+        now = time.time()
+        # Se outra corrotina acabou de capturar enquanto esperávamos o lock
+        if not force and local_path.is_file() and (now - local_path.stat().st_mtime) < 4.0:
+            return local_path
+
+        from app.managers.adb import ADBManager
+        adb = ADBManager()
+
+        # 1. Garante conexão ADB com o TV Box
+        connected = await adb.connect(device.ip, port=device.adb_port)
+        if not connected:
+            logger.warning("Screenshot: falha ao conectar ADB em %s:%s", device.ip, device.adb_port)
+            return local_path if local_path.is_file() else None
+
+        # 2. Executa capture.sh ou fallback direto screencap
+        remote_path = "/sdcard/panel/screenshot.png"
+        output, code = await adb.shell(
+            device.ip,
+            "sh /data/local/tmp/panel/capture.sh",
+            port=device.adb_port,
+            timeout=8,
+        )
+
+        if code == 0 and "screenshot: salvo em " in output:
+            remote_path = output.split("screenshot: salvo em ")[-1].strip()
+        else:
+            # Fallback direto: cria diretório e executa screencap no shell do Android
+            fallback_cmd = "mkdir -p /sdcard/panel 2>/dev/null; screencap -p /sdcard/panel/screenshot.png"
+            await adb.shell(device.ip, fallback_cmd, port=device.adb_port, timeout=8)
+            remote_path = "/sdcard/panel/screenshot.png"
+
+        # 3. Pull para arquivo temporário local e atomic replace
+        tmp_local = SCREENSHOTS_DIR / f"{device.id}.tmp.png"
+        if tmp_local.is_file():
+            try:
+                tmp_local.unlink()
+            except Exception:
+                pass
+
+        success = await adb.pull(device.ip, remote_path, str(tmp_local), port=device.adb_port, timeout=10)
+
+        if success and tmp_local.is_file() and tmp_local.stat().st_size > 100:
+            try:
+                if local_path.is_file():
+                    local_path.unlink()
+                tmp_local.replace(local_path)
+                device.state.screenshot_path = str(local_path)
+                return local_path
+            except Exception as e:
+                logger.error("Erro ao salvar screenshot %s: %s", device.id, e)
+                if tmp_local.is_file():
+                    return tmp_local
+        else:
+            if tmp_local.is_file():
+                try:
+                    tmp_local.unlink()
+                except Exception:
+                    pass
+
+        return local_path if local_path.is_file() else None
 
 
 @router.post("/{device_id}/screenshot")
@@ -509,37 +605,8 @@ async def device_screenshot_capture(device_id: str):
     if not device:
         raise HTTPException(404, "Dispositivo não encontrado")
 
-    from app.managers.adb import ADBManager
-
-    adb = ADBManager()
-
-    # 1. Executa capture.sh no TV Box
-    remote_path = ""
-    output, code = await adb.shell(
-        device.ip,
-        "sh /data/local/tmp/panel/capture.sh",
-        port=device.adb_port,
-        timeout=15,
-    )
-
-    # Parse output pra achar onde o screenshot foi salvo
-    if "screenshot: salvo em " in output:
-        remote_path = output.split("screenshot: salvo em ")[-1].strip()
-    else:
-        remote_path = "/sdcard/panel/screenshot.png"
-
-    # 2. Pull para o servidor
-    SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
-    local_path = SCREENSHOTS_DIR / f"{device_id}.png"
-
-    # Remove antigo
-    if local_path.is_file():
-        local_path.unlink()
-
-    success = await adb.pull(device.ip, remote_path, str(local_path), port=device.adb_port, timeout=15)
-
-    if success and local_path.is_file() and local_path.stat().st_size > 100:
-        device.state.screenshot_path = str(local_path)
+    local_path = await _capture_device_screenshot(device, force=True)
+    if local_path and local_path.is_file() and local_path.stat().st_size > 100:
         return {
             "success": True,
             "screenshot_url": f"/api/devices/{device_id}/screenshot",
@@ -550,25 +617,59 @@ async def device_screenshot_capture(device_id: str):
 
 
 @router.get("/{device_id}/screenshot")
-async def device_screenshot_get(device_id: str):
-    """Retorna a última screenshot capturada."""
-    from app.managers.adb import ADBManager
+async def device_screenshot_get(device_id: str, auto: bool = True):
+    """Retorna a screenshot do dispositivo.
 
+    Se auto=True (padrão) e o cache estiver vazio ou tiver mais de 4s,
+    tenta capturar sob demanda para popular os tiles do Mural e Dashboard.
+    """
     config = _get_config()
     device = config.get_device(device_id)
+    if not device:
+        raise HTTPException(404, "Dispositivo não encontrado")
 
-    # Tenta path salvo no state
-    if device and device.state.screenshot_path:
+    local_path = SCREENSHOTS_DIR / f"{device_id}.png"
+    now = time.time()
+
+    # 1. Se existe cache recente (< 4s), retorna imediatamente
+    if local_path.is_file() and (now - local_path.stat().st_mtime) < 4.0:
+        return FileResponse(
+            local_path,
+            media_type="image/png",
+            headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+        )
+
+    # 2. Se auto=True e o dispositivo tem IP, tenta capturar sob demanda
+    if auto and device.ip:
+        st = getattr(device.state, "status", "")
+        if st != "offline":
+            captured = await _capture_device_screenshot(device, force=False)
+            if captured and captured.is_file():
+                return FileResponse(
+                    captured,
+                    media_type="image/png",
+                    headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+                )
+
+    # 3. Fallback: se captura falhou ou device offline, serve a última imagem capturada salva
+    if local_path.is_file():
+        return FileResponse(
+            local_path,
+            media_type="image/png",
+            headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+        )
+
+    # 4. Tenta path salvo no state
+    if device.state.screenshot_path:
         p = Path(device.state.screenshot_path)
         if p.is_file():
-            return FileResponse(p, media_type="image/png")
+            return FileResponse(
+                p,
+                media_type="image/png",
+                headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+            )
 
-    # Tenta arquivo local
-    local_path = SCREENSHOTS_DIR / f"{device_id}.png"
-    if local_path.is_file():
-        return FileResponse(local_path, media_type="image/png")
-
-    raise HTTPException(404, "Nenhum screenshot encontrado. Capture um primeiro.")
+    raise HTTPException(404, "Nenhum screenshot encontrado. Dispositivo pode estar inacessível.")
 
 
 # ── Magisk Install ──────────────────────────────
