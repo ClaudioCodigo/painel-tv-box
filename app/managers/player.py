@@ -121,6 +121,12 @@ class PlayerManager:
                 f"am start -n {_q(pkg)}/{_q(act)} "
                 f"--es url {_q(url)} -a android.intent.action.VIEW -d {_q(url)} --activity-clear-task"
             )
+        if device.web_browser == "chrome" or pkg == "com.android.chrome":
+            return (
+                f"settings put global policy_control immersive.full=com.android.chrome 2>/dev/null; "
+                f"am start -a android.intent.action.VIEW -d {_q(url)} "
+                f"-n {_q(pkg)}/{_q(act)} --activity-clear-task --start-fullscreen"
+            )
         return (
             f"am start -a android.intent.action.VIEW -d {_q(url)} "
             f"-n {_q(pkg)}/{_q(act)} --activity-clear-task"

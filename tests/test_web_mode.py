@@ -54,6 +54,7 @@ async def test_player_start_web():
     called_cmd = adb_mock.shell.call_args[0][1]
     assert "com.android.chrome" in called_cmd
     assert "https://painel.local/dashboard" in called_cmd
+    assert "--start-fullscreen" in called_cmd
 
 
 @pytest.mark.asyncio
