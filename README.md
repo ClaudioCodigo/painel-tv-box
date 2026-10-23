@@ -103,7 +103,7 @@ node --check static\js\*.js          # sintaxe de todo o JS
 - Desligar a exigência: `config/system.yml → security: {enabled: false}`.
 - O **heartbeat** usa uma chave dedicada (`security.heartbeat_key`), não o token do painel.
 
-> ⚠️ **Config, devices e groups são LOCAIS** (gitignored): contêm IPs, `heartbeat_key` e credenciais da máquina e **não sobem no `git push`**. O repositório mantém apenas templates `.example`; o painel cria os arquivos reais no 1º boot.
+> ⚠️ **Config, devices e groups são LOCAIS** (gitignored): contêm IPs, `heartbeat_key` e credenciais da máquina e **não sobem no `git push`**. O repositório mantém apenas templates `.example`; o painel cria os arquivos reais no 1º boot. **Chaves ADB (`adbkey`) e `heartbeat.conf` também são credenciais locais e nunca devem ser commitadas.**
 
 ## 💾 Dados em runtime (fora do git)
 

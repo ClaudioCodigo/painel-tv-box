@@ -1,6 +1,8 @@
 # Painel TV Box — Guia técnico completo (contexto para LLM/agentes)
 
 > Este documento é a referência única e **atual** do projeto (estado após a sessão de auditoria de 2026-07-31). Use-o como fonte de verdade ao trabalhar no código. Documentos em `docs/` podem estar desatualizados — confira aqui primeiro e depois no código.
+>
+> 🔐 **Repositório público:** ao registrar exemplos, debug ou contexto para agentes, nunca use IPs/hostnames reais da infraestrutura, tokens, `heartbeat_key`, senhas, chaves ADB ou caminhos contendo credenciais. Para IPs de documentação prefira os blocos reservados RFC 5737 (`192.0.2.0/24`, `198.51.100.0/24`, `203.0.113.0/24`).
 
 ---
 
@@ -121,7 +123,7 @@ node --check static/js/*.js              # sintaxe de todo o JS
 
 ```yaml
 server: {host: 0.0.0.0, port: 8080, workers: 1}
-host: {ip: 192.168.254.102}          # IP do servidor (usado na URL RTSP)
+host: {ip: 192.0.2.10}               # exemplo; configure o IP LAN real localmente
 adb: {binary: adb, default_port: 5555, connect_timeout: 10, command_delay: 0.5}
 paths: {devices_dir: devices, groups_dir: groups, config_dir: config, logs_dir: logs, backups_dir: backups, scripts_dir: scripts/android, remote_scripts_dir: /data/local/tmp/panel}
 mediamtx: {api_url: http://localhost:9997, timeout: 5}

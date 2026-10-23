@@ -8,7 +8,8 @@ server:
   port: 8080
   workers: 1
 host:
-  ip: 192.168.254.102          # IP desta máquina (usado na URL RTSP dos devices)
+  # Exemplo neutro (RFC 5737). Configure o IP LAN real somente no system.yml local.
+  ip: 192.0.2.10
 adb:
   binary: adb
   default_port: 5555

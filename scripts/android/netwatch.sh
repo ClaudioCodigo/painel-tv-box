@@ -20,7 +20,17 @@ PANEL_IP=""
 if [ -f "$CONFIG" ]; then
     PANEL_IP=$(sed -n 's#^PANEL_URL=http://\([^:]*\):.*#\1#p' "$CONFIG" | head -n 1)
 fi
-[ -z "$PANEL_IP" ] && PANEL_IP="192.168.254.219"
+
+# Nunca use um IP de produção hardcoded como fallback: sem heartbeat.conf o
+# netwatch não sabe qual painel testar e poderia entrar em recovery/reboot por
+# apontar para um host errado. Provisioning deve sempre criar a config local.
+_require_panel_ip() {
+    if [ -n "$PANEL_IP" ]; then
+        return 0
+    fi
+    echo "$(date +%s) CONFIG_ERROR PANEL_URL ausente/invalida em $CONFIG; netwatch nao iniciado" >> "$LOG"
+    return 1
+}
 
 # su preferido (Magisk /sbin/su ignora SuperSU conflitante)
 SU_PREFIX="/sbin/su -c"
@@ -29,6 +39,7 @@ if [ ! -x /sbin/su ]; then
 fi
 
 check_net() {
+    _require_panel_ip || return 1
     # TCP na porta do painel (mais confiavel que ping - Windows pode bloquear ICMP)
     if command -v nc >/dev/null 2>&1; then
         nc -w 5 "$PANEL_IP" 8080 < /dev/null >/dev/null 2>&1 && return 0
@@ -71,6 +82,7 @@ _do_reboot() {
 
 _loop() {
     local fails=0
+    _require_panel_ip || exit 1
     while true; do
         if check_net; then
             if [ "$fails" -gt 0 ]; then
@@ -118,6 +130,10 @@ alive() {
 }
 
 start() {
+    _require_panel_ip || {
+        echo "netwatch: config invalida (PANEL_URL ausente em $CONFIG)"
+        return 1
+    }
     # Já rodando? Não duplica (kill via adb shell falha em processo root/Magisk)
     if alive; then
         echo "netwatch: já ativo (PID $(cat "$PID_FILE"))"

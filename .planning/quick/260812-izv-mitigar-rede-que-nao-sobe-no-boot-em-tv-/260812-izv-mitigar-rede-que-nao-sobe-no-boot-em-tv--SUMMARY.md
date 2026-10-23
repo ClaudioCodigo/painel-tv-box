@@ -10,10 +10,10 @@ status: complete
 ## O que foi feito
 
 Fixes em `scripts/android/netwatch.sh` e `scripts/android/restart_eth.sh` para
-recuperar a rede em boxes Allwinner (sunxi-gmac, ex.: modelo RO01/.84) que às
+recuperar a rede em boxes Allwinner (sunxi-gmac, ex.: modelo RO01) que às
 vezes sobem com "link fantasma" (eth UP + carrier=1 + IP, sem tráfego real).
 
-### Causas raiz encontradas (evidências do box .84 em 2026-08-12)
+### Causas raiz encontradas (evidências de um box de teste em 2026-08-12)
 
 1. **`restart_eth.sh` nunca fazia o rebind** — gate em `carrier != 1`, mas o link
    fantasma reporta `carrier=1`. A única estratégia eficaz (equivalente a
@@ -42,12 +42,11 @@ vezes sobem com "link fantasma" (eth UP + carrier=1 + IP, sem tráfego real).
 
 - `sh -n` nos dois scripts + simulação local do quoting aninhado do
   `restart_eth.sh` (script interno gerado validado com `sh -n`).
-- Deploy no box `.84`: scripts push (13:44) + netwatch reiniciado (PID 26376,
-  contador = 60 → checagem OK).
-- Servidor `.219`: `git pull` em `C:\PanelTVBox` → `a4f5a05` (provision
+- Deploy em um box de teste: scripts push + netwatch reiniciado (contador = 60 → checagem OK).
+- Servidor do painel: `git pull` em `C:\PanelTVBox` → `a4f5a05` (provision
   distribuirá aos demais boxes).
 - Commit `a4f5a05` publicado no GitHub (origin main).
-- **Teste de mecanismo no .84 (13:57):** `restart_eth.sh` manual → log provou
+- **Teste de mecanismo no box de teste:** `restart_eth.sh` manual → log provou
   o rebind executando (`rebind sunxi-gmac/gmac1`) e conectividade real de volta
   em ~11s (`OK, rede voltou apos toggle+rebind`, nc RC=0), VLC continuou ativo.
   O rebind — a peça que nunca rodava — funciona neste hardware.
@@ -63,15 +62,15 @@ vezes sobem com "link fantasma" (eth UP + carrier=1 + IP, sem tráfego real).
   box 2x à toa**. O "link fantasma" era em grande parte o CHECK quebrado.
   **Fix:** `su 2000 -g 2000 -G 3003 -c` (grupo inet) — validado no box
   (`nc rc=0`; daemon novo passa nas checagens, `CHECKS=60`) — commit `a51e06e`.
-- **Heartbeat também corrigido:** config sem `PANEL_URL` (adicionada
-  `http://192.168.254.219:8080`) + grupo inet — volta a enviar ao painel.
-- **Bug de boot REAL existe mas é raro:** no boot das 18:23 (12/08) o box ficou
+- **Heartbeat também corrigido:** config sem `PANEL_URL` (adicionada uma URL do
+  painel; em documentação pública use `http://192.0.2.10:8080`) + grupo inet — volta a enviar ao painel.
+- **Bug de boot REAL existe mas é raro:** em uma ocorrência o box ficou
   genuinamente inalcançável (ADB 10060, dmesg sem "Link is Up" — só o do
-  replug). O fix de recuperação (rebind, validado às 13:57) cobre esse caso;
+  replug). O fix de recuperação (rebind) cobre esse caso;
   com o boot hook corrigido, o netwatch agora roda de verdade e vai recuperar.
 - **Logging (diag.sh):** snapshots + captura de boot funcionando; a próxima
   ocorrência real ficará documentada em /data/local/tmp/panel/diag/.
-- **Boot validado (13/08 ~08:05):** reinício do .84 → boot hook subiu
+- **Boot validado:** reinício do box de teste → boot hook subiu
   heartbeat+netwatch via `su -g -G` e o netwatch PASSOU nas checagens
   (`CHECKS=60`, zero NET_DOWN) — o caminho do boot corrigido funciona de ponta
   a ponta. (VLC não sobe sozinho após reboot — o painel reinicia o stream.)
@@ -79,7 +78,7 @@ vezes sobem com "link fantasma" (eth UP + carrier=1 + IP, sem tráfego real).
   arquivo recém-criado (o relógio do box reseta para 2021 no boot e o arquivo
   novo parecia o mais antigo); toybox head sem `-n` negativo — commits `adf5f32`
   e `45f9f43`.
-- O box .84 não tem default route (só rota /24) mesmo com rede OK — sintoma do
+- O box de teste não tinha default route (só rota /24) mesmo com rede OK — sintoma do
   stack de rede incompleto do firmware; não bloqueia o acesso ao painel (mesma
   sub-rede).
 - Relógio do box deriva sem NTP (RTC fraco) — o contador de cooldown elimina a

@@ -7,7 +7,7 @@ status: planned
 
 # Mitigar rede que não sobe no boot em TV boxes Allwinner (sunxi-gmac)
 
-## Problema (evidências do box .84 em 2026-08-12)
+## Problema (evidências de um box de teste em 2026-08-12)
 
 Boxes específicos (Allwinner, modelo RO01, driver `sunxi-gmac`) às vezes sobem a
 eth com "link fantasma": interface `UP` + `carrier=1` + IP, mas **sem tráfego
@@ -61,8 +61,8 @@ Verificação: `sh -n` + review; deploy + restart no box.
 
 - `sh -n` nos dois scripts; review do diff.
 - Commit atômico (docs GSD incluídos — `commit_docs: true`).
-- Push dos scripts para o box `.84` via adb + restart do netwatch; sincronizar o
-  repo no servidor `.219` (C:\PanelTVBox) para o provision distribuir aos boxes.
+- Push dos scripts para um box de teste via adb + restart do netwatch; sincronizar o
+  repo no servidor do painel (`C:\PanelTVBox`) para o provision distribuir aos boxes.
 - Teste controlado (com aprovação do usuário): derrubar a eth no box e ver o
   netwatch recuperar; documentar resultado no SUMMARY.
 
@@ -70,4 +70,4 @@ Verificação: `sh -n` + review; deploy + restart no box.
 
 - Rebind roda em todo `restart_eth` (sem gate de carrier).
 - Log mostra reboot real OU cooldown respeitado (nunca tempestade).
-- Scripts passam `sh -n`; deploy no .84 e servidor feito.
+- Scripts passam `sh -n`; deploy no box de teste e servidor feito.

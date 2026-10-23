@@ -16,4 +16,5 @@ rtspTransports:
 hls: false
 webrtc: false
 metrics: false
-api_allowed_network: 192.168.254.0/24
+# Default genérico; ajuste para a sub-rede LAN real apenas no config local.
+api_allowed_network: 192.168.1.0/24

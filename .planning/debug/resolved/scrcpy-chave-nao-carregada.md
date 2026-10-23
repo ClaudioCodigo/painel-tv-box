@@ -13,14 +13,14 @@ updated: "2026-08-31"
 - actual: `adb connect` informa `failed to authenticate`; scrcpy encontra o device como `unauthorized`.
 - errors: `ERROR: Device is unauthorized` e `Server connection failed`.
 - timeline: primeira UAT após a implementação da matrícula por chave individual.
-- reproduction: extrair o bundle, executar o `.bat` e conectar ao box `192.168.254.84:5555`.
+- reproduction: extrair o bundle, executar o `.bat` e conectar a um box de teste em `192.0.2.84:5555`.
 
 ## Current Focus
 
 - hypothesis: confirmada — `ADB_VENDOR_KEYS` apontava para o diretório e o ADB não carregava o arquivo `adbkey` durante a varredura de vendor keys.
 - test: teste de regressão exige o caminho completo `credencial\adbkey` e uma verificação real por `adb get-state`.
 - expecting: atendido no launcher gerado; UAT deve reutilizar a chave já matriculada.
-- next_action: baixar novo bundle e repetir UAT no box `.84`.
+- next_action: baixar novo bundle e repetir UAT no box de teste.
 
 ## Evidence
 
