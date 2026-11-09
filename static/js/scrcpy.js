@@ -305,7 +305,7 @@ const SCRCPY = (() => {
         UI.createToast('Gerando pacote scrcpy + launcher...', 'info');
         const url = API.authUrl(`/scrcpy/client/bundle/${encodeURIComponent(deviceId)}`);
         const a = document.createElement('a');
-        a.href = `/api${url}`;
+        a.href = url;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -315,7 +315,7 @@ const SCRCPY = (() => {
         UI.createToast('Preparando instalador do cliente...', 'info');
         const url = API.authUrl('/scrcpy/client/installer');
         const a = document.createElement('a');
-        a.href = `/api${url}`;
+        a.href = url;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -347,7 +347,7 @@ const SCRCPY = (() => {
         UI.createToast('Baixando pacote portátil do cliente (.zip)...', 'info');
         const url = API.authUrl('/scrcpy/client/station-bundle');
         const a = document.createElement('a');
-        a.href = `/api${url}`;
+        a.href = url;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -434,7 +434,7 @@ const SCRCPY = (() => {
         UI.createToast('Baixando launcher...', 'info');
         const url = API.authUrl(`/scrcpy/client/launcher/${encodeURIComponent(deviceId)}`);
         const a = document.createElement('a');
-        a.href = `/api${url}`;
+        a.href = url;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);

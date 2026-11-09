@@ -122,10 +122,13 @@ class PlayerManager:
                 f"--es url {_q(url)} -a android.intent.action.VIEW -d {_q(url)} --activity-clear-task"
             )
         if device.web_browser == "chrome" or pkg == "com.android.chrome":
+            # Modo imersivo via policy_control (esconde barra de status e navegação).
+            # NÃO usar --start-fullscreen: `am start` só aceita opções do próprio
+            # ActivityManager e aborta com "Unknown option: --start-fullscreen".
             return (
-                f"settings put global policy_control immersive.full=com.android.chrome 2>/dev/null; "
+                f"settings put global policy_control immersive.full={pkg} >/dev/null 2>&1; "
                 f"am start -a android.intent.action.VIEW -d {_q(url)} "
-                f"-n {_q(pkg)}/{_q(act)} --activity-clear-task --start-fullscreen"
+                f"-n {_q(pkg)}/{_q(act)} --activity-clear-task"
             )
         return (
             f"am start -a android.intent.action.VIEW -d {_q(url)} "

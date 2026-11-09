@@ -221,6 +221,15 @@ async def test_online_installer_downloads_bundle_with_one_time_token(
 
 
 @pytest.mark.asyncio
+async def test_online_installer_handles_duplicate_api_prefix(auth_header, setup_device):
+    """Garante que requisições com /api/api/... são normalizadas e atendidas com sucesso."""
+    async with await _client() as c:
+        installer = await c.get("/api/api/scrcpy/client/installer", headers=auth_header)
+        assert installer.status_code == 200
+        assert 'filename="instalar-scrcpy.cmd"' in installer.headers["content-disposition"]
+
+
+@pytest.mark.asyncio
 async def test_launch_ticket_requires_session(auth_header, setup_device):
     EnrollmentStore._tokens.clear()
     async with await _client() as c:

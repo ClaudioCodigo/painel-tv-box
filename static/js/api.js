@@ -20,9 +20,10 @@ const API = (() => {
         const t = (typeof AUTH !== 'undefined') ? AUTH.getToken() : '';
         let fullPath = path || '';
         if (!fullPath.startsWith('http://') && !fullPath.startsWith('https://')) {
-            if (!fullPath.startsWith('/api/') && fullPath !== '/api') {
-                fullPath = `${BASE}${fullPath.startsWith('/') ? '' : '/'}${fullPath}`;
-            }
+            // Normaliza removendo qualquer repetição de api/ ou /api/
+            fullPath = fullPath.replace(/^(\/?api)+/i, '');
+            if (!fullPath.startsWith('/')) fullPath = '/' + fullPath;
+            fullPath = `${BASE}${fullPath}`;
         }
         const sep = fullPath.includes('?') ? '&' : '?';
         return `${fullPath}${sep}token=${encodeURIComponent(t)}`;

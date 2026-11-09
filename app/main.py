@@ -2,8 +2,9 @@
 
 from contextlib import asynccontextmanager
 from pathlib import Path
+import re
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
@@ -204,6 +205,15 @@ async def websocket_shell(ws: WebSocket, device_id: str):
 # --- Serve static files (com cache 1h) ---
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR), html=False), name="static")
+
+
+@app.middleware("http")
+async def deduplicate_api_prefix_middleware(request: Request, call_next):
+    # Trata requisições com prefixo /api duplicado (ex.: /api/api/scrcpy/...)
+    path = request.scope.get("path", "")
+    if path.startswith("/api/api/"):
+        request.scope["path"] = re.sub(r"^/api(/api)+/", "/api/", path)
+    return await call_next(request)
 
 
 @app.middleware("http")
