@@ -13,6 +13,7 @@ const MURAL = (() => {
 
         el.innerHTML = `
             <div class="mural-page">
+                <button class="mural-fs-exit btn btn-sm" onclick="MURAL.toggleFullscreen()" title="Sair da tela cheia" aria-label="Sair da tela cheia">✕ Sair da tela cheia</button>
                 <div class="panel">
                     <div class="toolbar">
                         <span class="panel-title">Mural em tempo real (NOC)</span>
@@ -34,6 +35,11 @@ const MURAL = (() => {
                 </div>
             </div>
         `;
+
+        document.addEventListener('fullscreenchange', onFullscreenChange);
+        if (document.fullscreenElement) {
+            document.body.classList.add('mural-fullscreen');
+        }
 
         const groupSel = document.getElementById('mural-group-select');
         if (groupSel) {
@@ -104,11 +110,13 @@ const MURAL = (() => {
             const label = labels[st] || st.toUpperCase();
             const seen = d.last_seen || d.last_heartbeat;
             const age = seen ? UI.timeAgo(seen) : '—';
+            const ip = d.ip || d.config?.ip || '';
 
             return `
                 <div class="tile ${st === 'bad' ? 'bad' : ''} ${isOff ? 'off' : ''}" data-id="${UI.escAttr(d.id)}" ondblclick="MURAL.openDeviceScrcpy('${UI.escAttr(d.id)}')" title="Duplo-clique para abrir no Scrcpy">
                     <div class="tile-head">
                         <span class="tile-name">${UI.escapeHtml(d.name || d.id)}</span>
+                        ${ip ? `<span class="tile-ip">${UI.escapeHtml(ip)}</span>` : ''}
                         <span class="sp"></span>
                         <span class="state ${st}" style="font-size:10px;padding:1px 7px">
                             <span class="shape" aria-hidden="true">${shape}</span>
@@ -173,11 +181,26 @@ const MURAL = (() => {
         refreshTimer = setInterval(() => refreshScreenshots(false), 5000);
     }
 
+    function onFullscreenChange() {
+        const isFs = !!document.fullscreenElement;
+        const page = document.querySelector('.mural-page');
+        if (isFs && page) {
+            document.body.classList.add('mural-fullscreen');
+        } else {
+            document.body.classList.remove('mural-fullscreen');
+        }
+    }
+
     function destroy() {
         if (refreshTimer) {
             clearInterval(refreshTimer);
             refreshTimer = null;
         }
+        document.removeEventListener('fullscreenchange', onFullscreenChange);
+        if (document.fullscreenElement && document.exitFullscreen) {
+            document.exitFullscreen().catch(() => {});
+        }
+        document.body.classList.remove('mural-fullscreen');
         document.querySelectorAll('#mural-grid .tile img').forEach(img => {
             if (img._blobUrl) { URL.revokeObjectURL(img._blobUrl); img._blobUrl = null; }
         });
@@ -201,9 +224,19 @@ const MURAL = (() => {
 
     function toggleFullscreen() {
         if (!document.fullscreenElement) {
-            document.documentElement.requestFullscreen().catch(() => {});
+            document.documentElement.requestFullscreen().then(() => {
+                document.body.classList.add('mural-fullscreen');
+            }).catch(() => {});
         } else {
-            if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
+            if (document.exitFullscreen) {
+                document.exitFullscreen().then(() => {
+                    document.body.classList.remove('mural-fullscreen');
+                }).catch(() => {
+                    document.body.classList.remove('mural-fullscreen');
+                });
+            } else {
+                document.body.classList.remove('mural-fullscreen');
+            }
         }
     }
 

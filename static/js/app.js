@@ -26,13 +26,108 @@ const APP = (() => {
         '/settings': { render: SETTINGS.render },
     };
 
+    function ensureBackdrop() {
+        let backdrop = document.querySelector('.sidebar-backdrop');
+        if (!backdrop) {
+            backdrop = document.createElement('div');
+            backdrop.className = 'sidebar-backdrop';
+            backdrop.setAttribute('aria-hidden', 'true');
+            document.body.appendChild(backdrop);
+        }
+        return backdrop;
+    }
+
+    function closeMobileSidebar() {
+        const sidebar = document.getElementById('sidebar');
+        const backdrop = document.querySelector('.sidebar-backdrop');
+        if (sidebar && sidebar.classList.contains('mobile-open')) {
+            sidebar.classList.remove('mobile-open');
+        }
+        if (backdrop) {
+            backdrop.classList.remove('active');
+        }
+        document.body.classList.remove('sidebar-open');
+    }
+
+    function openMobileSidebar() {
+        const sidebar = document.getElementById('sidebar');
+        const backdrop = ensureBackdrop();
+        if (sidebar) {
+            sidebar.classList.add('mobile-open');
+        }
+        if (backdrop) {
+            backdrop.classList.add('active');
+        }
+        document.body.classList.add('sidebar-open');
+    }
+
+    function toggleSidebar() {
+        const sidebar = document.getElementById('sidebar');
+        if (!sidebar) return;
+        const isMobile = window.innerWidth < 640;
+        if (isMobile) {
+            if (sidebar.classList.contains('mobile-open')) {
+                closeMobileSidebar();
+            } else {
+                openMobileSidebar();
+            }
+        } else if (window.innerWidth <= 1024) {
+            // Tablet: alterna entre colapsada (padrão) e expandida
+            if (sidebar.classList.contains('collapsed')) {
+                sidebar.classList.remove('collapsed');
+                sidebar.classList.add('expanded');
+            } else {
+                sidebar.classList.add('collapsed');
+                sidebar.classList.remove('expanded');
+            }
+        } else {
+            sidebar.classList.toggle('collapsed');
+            sidebar.classList.remove('expanded');
+        }
+    }
+
     function init() {
-        // Sidebar toggle
+        // Sidebar toggle & drawer mobile
         const toggleBtn = document.getElementById('sidebar-toggle');
         const sidebar = document.getElementById('sidebar');
-        if (toggleBtn && sidebar) {
-            toggleBtn.addEventListener('click', () => {
-                sidebar.classList.toggle('collapsed');
+        const backdrop = ensureBackdrop();
+
+        if (toggleBtn) {
+            toggleBtn.addEventListener('click', toggleSidebar);
+        }
+
+        if (backdrop) {
+            backdrop.addEventListener('click', closeMobileSidebar);
+        }
+
+        // Padrão tablet: sidebar colapsada em 64px por padrão (640px - 1024px)
+        function applyResponsiveSidebarDefault() {
+            if (!sidebar) return;
+            const w = window.innerWidth;
+            if (w < 640) {
+                sidebar.classList.remove('collapsed', 'expanded');
+            } else if (w <= 1024) {
+                if (!sidebar.classList.contains('expanded')) {
+                    sidebar.classList.add('collapsed');
+                }
+            } else {
+                sidebar.classList.remove('expanded');
+            }
+        }
+        applyResponsiveSidebarDefault();
+
+        window.addEventListener('resize', () => {
+            if (window.innerWidth >= 640) {
+                closeMobileSidebar();
+            }
+        });
+
+        // Fechar drawer ao clicar em links da sidebar em telas mobile
+        if (sidebar) {
+            sidebar.addEventListener('click', (e) => {
+                if (e.target.closest('a') && window.innerWidth < 640) {
+                    closeMobileSidebar();
+                }
             });
         }
 
@@ -144,6 +239,7 @@ const APP = (() => {
     }
 
     function navigate() {
+        closeMobileSidebar();
         const hash = window.location.hash.replace('#', '') || '/';
         const container = document.getElementById('view-container');
         if (!container) return;
@@ -260,7 +356,7 @@ const APP = (() => {
         setInterval(check, 30000);
     }
 
-    return { init, navigate, checkWizard, initHeaderStatus };
+    return { init, navigate, checkWizard, initHeaderStatus, closeMobileSidebar, openMobileSidebar, toggleSidebar };
 })();
 
 // Boot

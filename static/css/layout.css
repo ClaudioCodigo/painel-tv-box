@@ -1,7 +1,28 @@
+@import "pages/mural.css";
+
 /* ============================================================
    Painel TV Box — Layout (shell: sidebar, header, main, grids)
    UI Redesign Spec §6 · monocromático
    ============================================================ */
+
+/* ---------- SIDEBAR BACKDROP (drawer overlay mobile) ---------- */
+.sidebar-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+    z-index: 95;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--dur-base) var(--ease-out);
+}
+
+.sidebar-backdrop.active {
+    opacity: 1;
+    pointer-events: auto;
+}
+
 
 /* ---------- SIDEBAR ---------- */
 .sidebar {
@@ -284,36 +305,206 @@
     margin-bottom: var(--space-5);
 }
 
-/* ---------- RESPONSIVE ---------- */
-@media (max-width: 768px) {
+/* ---------- RESPONSIVE BREAKPOINTS (4 faixas operacionais) ---------- */
+
+/* 1. Mobile (< 640px) */
+@media (max-width: 639.98px) {
     .sidebar {
         transform: translateX(-100%);
-        width: var(--sidebar-w);
+        width: min(var(--sidebar-w), 85vw);
+        box-shadow: none;
+        z-index: 100;
+        transition: transform var(--dur-base) var(--ease-out);
     }
+
     .sidebar.mobile-open {
         transform: translateX(0);
+        box-shadow: var(--shadow-lg);
     }
+
     .sidebar.collapsed {
         transform: translateX(-100%);
+        width: min(var(--sidebar-w), 85vw);
     }
+
+    .sidebar.mobile-open.collapsed {
+        transform: translateX(0);
+    }
+
+    .sidebar.mobile-open .brand-text,
+    .sidebar.mobile-open .nav-label,
+    .sidebar.mobile-open .sidebar-footer {
+        opacity: 1 !important;
+        visibility: visible !important;
+    }
+
     .header {
-        left: 0;
+        left: 0 !important;
+        padding: 0 var(--space-3);
     }
+
+    .sidebar.collapsed ~ .header {
+        left: 0 !important;
+    }
+
     .main-content {
-        margin-left: 0;
-        width: 100%;
-        padding: var(--space-4);
+        margin-left: 0 !important;
+        width: 100% !important;
+        padding: var(--space-3);
     }
-    .sidebar.collapsed ~ .header,
+
     .sidebar.collapsed ~ .main-content {
-        left: 0;
-        margin-left: 0;
-        width: 100%;
+        margin-left: 0 !important;
+        width: 100% !important;
     }
-    .stat-grid {
+
+    .stat-grid,
+    .kpis {
         grid-template-columns: 1fr 1fr;
+        gap: var(--space-3);
     }
+
     .card-grid {
         grid-template-columns: 1fr;
+    }
+}
+
+/* 2. Tablet (640px - 1024px) */
+@media (min-width: 640px) and (max-width: 1024px) {
+    .sidebar {
+        width: var(--sidebar-collapsed-w);
+    }
+
+    .sidebar:not(.expanded) .brand-text,
+    .sidebar:not(.expanded) .nav-label,
+    .sidebar:not(.expanded) .sidebar-footer {
+        opacity: 0;
+        visibility: hidden;
+    }
+
+    .sidebar.expanded {
+        width: var(--sidebar-w);
+        box-shadow: var(--shadow-lg);
+        z-index: 100;
+    }
+
+    .sidebar.expanded .brand-text,
+    .sidebar.expanded .nav-label,
+    .sidebar.expanded .sidebar-footer {
+        opacity: 1;
+        visibility: visible;
+    }
+
+    .header {
+        left: var(--sidebar-collapsed-w);
+    }
+
+    .main-content {
+        margin-left: var(--sidebar-collapsed-w);
+        width: calc(100% - var(--sidebar-collapsed-w));
+        padding: var(--space-4);
+    }
+
+    .sidebar.collapsed ~ .header {
+        left: var(--sidebar-collapsed-w);
+    }
+
+    .sidebar.collapsed ~ .main-content {
+        margin-left: var(--sidebar-collapsed-w);
+        width: calc(100% - var(--sidebar-collapsed-w));
+    }
+
+    .stat-grid,
+    .kpis {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+
+    .card-grid {
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    }
+}
+
+/* 3. Desktop (1024px - 1440px) */
+@media (min-width: 1024.02px) and (max-width: 1440px) {
+    .view-container {
+        max-width: 1320px;
+    }
+}
+
+/* 4. Wide (> 1440px) */
+@media (min-width: 1440.02px) {
+    .view-container {
+        max-width: 1720px;
+    }
+
+    .card-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .kpis {
+        grid-template-columns: repeat(4, 1fr);
+    }
+}
+
+/* ---------- TOUCH TARGETS (Apple HIG / WCAG 2.5.8 >= 44px) ---------- */
+@media (pointer: coarse) {
+    .btn,
+    .btn-sm,
+    .btn-icon,
+    .btn-icon-sm,
+    .sidebar-toggle,
+    .nav-item,
+    .devices-page button,
+    .devices-page .btn,
+    .devices-page .btn-icon,
+    .devices-page .btn-icon-sm,
+    .devices-bulk button,
+    .devices-bulk .btn,
+    .dashboard button,
+    .dashboard .btn,
+    .bulk-bar button,
+    .bulk-bar .btn,
+    .bulk button,
+    .bulk .btn,
+    .toolbar button,
+    .toolbar .btn,
+    .toolbar select {
+        min-height: 44px;
+    }
+
+    .btn-icon,
+    .btn-icon-sm {
+        min-width: 44px;
+        min-height: 44px;
+    }
+
+    .nav-item {
+        min-height: 44px;
+        padding: 10px 14px;
+    }
+
+    .sidebar-toggle {
+        min-height: 44px;
+        min-width: 44px;
+        padding: 10px 14px;
+    }
+
+    .row-check,
+    .select-all-check,
+    input[type="checkbox"],
+    input[type="radio"] {
+        min-width: 22px;
+        min-height: 22px;
+    }
+}
+
+@media (max-width: 639.98px) {
+    .nav-item {
+        min-height: 44px;
+    }
+
+    .sidebar-toggle {
+        min-height: 44px;
+        min-width: 44px;
     }
 }
