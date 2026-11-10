@@ -71,3 +71,21 @@ class TestBackupManager:
         result = await mgr.restore("../../etc/passwd")
         assert not result.get("success")
         assert "não encontrado" in result.get("error", "")
+
+    @pytest.mark.asyncio
+    async def test_delete_backup(self, tmp_path):
+        backups = tmp_path / "backups"
+        mgr = BackupManager(project_root=tmp_path, backups_dir=backups)
+        fake_zip = backups / "backup-2026-11-10T09-00-00.zip"
+        fake_zip.write_text("fake zip content", encoding="utf-8")
+        assert fake_zip.exists()
+
+        # Delete com traversal deve ser rejeitado
+        res_evil = await mgr.delete_backup("../../etc/passwd")
+        assert not res_evil.get("success")
+        assert "não encontrado" in res_evil.get("error", "")
+
+        # Delete legítimo
+        res_ok = await mgr.delete_backup(fake_zip.name)
+        assert res_ok.get("success")
+        assert not fake_zip.exists()

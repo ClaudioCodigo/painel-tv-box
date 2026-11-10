@@ -1,41 +1,136 @@
-/* Shell — terminal remoto */
+/* Shell — Terminal Remoto ADB */
 .shell-page {
     max-width: 1000px;
 }
 
-.shell-controls {
+.shell-header-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+    padding: var(--space-3) var(--space-4);
+    margin-bottom: var(--space-3);
+    box-shadow: var(--shadow-sm);
+}
+
+.shell-device-bar {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--space-3);
-    margin-bottom: var(--space-3);
     align-items: flex-end;
+    justify-content: space-between;
+    gap: var(--space-3);
 }
 
-.shell-controls .form-group {
-    flex: 1 1 220px;
+.shell-header-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
 }
 
-.shell-controls .btn {
-    flex: 0 0 auto;
+.shell-busy-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    padding: 3px 8px;
+    background: var(--bg-inset);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
 }
 
-.shell-quick-actions {
+/* Barra de Comandos Sugeridos / Frequentes */
+.shell-quick-commands-bar {
+    margin-top: var(--space-3);
+    padding-top: var(--space-2);
+    border-top: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.quick-cmd-label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+}
+
+.quick-cmd-chips {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
+}
+
+.quick-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: var(--bg-inset);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    padding: 4px 10px;
+    font-size: 0.78rem;
+    font-family: var(--font-mono);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background var(--dur-fast) ease, border-color var(--dur-fast) ease, color var(--dur-fast) ease;
+}
+
+.quick-chip:hover {
+    background: var(--control-hover);
+    border-color: var(--text-primary);
+    color: var(--text-primary);
+}
+
+/* Painel de Apps & APK */
+.shell-apps-panel {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+    padding: var(--space-3);
     margin-bottom: var(--space-3);
+    box-shadow: var(--shadow-sm);
+}
+
+/* Terminal Console Wrapper */
+.shell-terminal-wrapper {
+    background: var(--bg-inset);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: var(--shadow-md);
+}
+
+.shell-terminal-toolbar {
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border-subtle);
+    padding: 8px 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.shell-term-title {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
 }
 
 .shell-terminal {
     background: var(--bg-inset);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius);
     padding: var(--space-4);
     font-family: var(--font-mono);
-    font-size: 0.85em;
-    line-height: 1.5;
-    min-height: 350px;
-    max-height: 600px;
+    font-size: 0.85rem;
+    line-height: 1.6;
+    min-height: 380px;
+    max-height: 550px;
     overflow-y: auto;
     color: var(--text-primary);
 }
@@ -43,18 +138,24 @@
 .shell-welcome {
     color: var(--text-muted);
     font-style: italic;
+    line-height: 1.6;
 }
 
-.shell-prompt {
-    color: var(--text-secondary);
-    font-weight: 700;
-    margin: 4px 0;
+.shell-command-entry {
+    margin: 8px 0 4px 0;
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
 }
 
 .shell-user {
     color: var(--text-primary);
     font-weight: 700;
-    margin-right: 6px;
+}
+
+.shell-cmd-text {
+    color: var(--text-secondary);
+    font-weight: 600;
 }
 
 .shell-line {
@@ -64,7 +165,7 @@
 }
 
 .shell-result {
-    margin: 4px 0 8px 0;
+    margin: 4px 0 10px 0;
     padding-left: var(--space-3);
     border-left: 2px solid var(--border-strong);
 }
@@ -78,10 +179,70 @@
 .shell-loading {
     color: var(--text-muted);
     font-style: italic;
-    animation: pulse 1.5s infinite;
+    margin: 4px 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
 }
 
-@keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
+/* Barra de Entrada de Comandos */
+.shell-input-bar {
+    background: var(--bg-surface);
+    border-top: 1px solid var(--border-subtle);
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.shell-input-prefix {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    white-space: nowrap;
+}
+
+.shell-input {
+    flex: 1;
+    background: var(--bg-base);
+    border: 1px solid var(--border-strong);
+    color: var(--text-primary);
+    padding: 8px 12px;
+    border-radius: var(--radius-sm);
+    font-size: 0.875rem;
+}
+
+.shell-input:focus {
+    outline: none;
+    border-color: var(--text-primary);
+}
+
+/* Screenshot Preview */
+.shell-shot-box {
+    margin: 8px 0;
+    padding: 10px;
+    background: var(--bg-base);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-subtle);
+}
+
+.shell-shot-preview {
+    max-width: 100%;
+    max-height: 350px;
+    cursor: pointer;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    display: block;
+    transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.shell-shot-preview:hover {
+    opacity: 0.95;
+}
+
+.shell-shot-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
 }

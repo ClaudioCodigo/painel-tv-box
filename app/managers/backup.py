@@ -164,6 +164,19 @@ class BackupManager:
             return {"success": False, "error": "Backup não encontrado"}
         return await self.import_backup(zip_path)
 
+    async def delete_backup(self, backup_name: str) -> dict:
+        """Exclui um backup específico após validação anti-traversal."""
+        path = self.get_backup_path(backup_name)
+        if not path:
+            return {"success": False, "error": "Backup não encontrado"}
+        try:
+            path.unlink()
+            logger.info("Backup excluído: %s", backup_name)
+            return {"success": True, "name": backup_name}
+        except Exception as e:
+            logger.error("Erro ao excluir backup %s: %s", backup_name, e)
+            return {"success": False, "error": str(e)}
+
     async def cleanup(self, keep_last: int = 10):
         """Remove backups antigos, mantendo os N mais recentes."""
         backups = sorted(self.backups_dir.glob("backup-*.zip"), reverse=True)

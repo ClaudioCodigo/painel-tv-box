@@ -1,52 +1,78 @@
-/* Backup — cards e lista de backups */
-.backup-card {
+/* Backup — visão geral, tabela densa de backups e ações */
+.backup-page {
+    max-width: 1000px;
+}
+
+.backup-overview-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: var(--space-4);
     margin-bottom: var(--space-4);
+}
+
+.backup-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+    padding: var(--space-4);
+    box-shadow: var(--shadow-sm);
+    display: flex;
+    flex-direction: column;
 }
 
 .backup-card p {
     margin-bottom: var(--space-3);
     line-height: 1.5;
-}
-
-.backup-page .backup-items {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-}
-
-.backup-item {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 10px 14px;
-    background: var(--bg-surface);
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius);
-}
-
-.backup-item:hover {
-    background: var(--control-hover);
-}
-
-.backup-name {
-    font-weight: 600;
-    font-size: 0.85em;
-    color: var(--text-primary);
-    font-family: var(--font-mono);
-}
-
-.backup-meta {
-    font-size: 0.75em;
-    color: var(--text-muted);
-    margin-top: 2px;
+    flex: 1;
 }
 
 .backup-actions {
     display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+/* Colunas customizadas na tabela de backups */
+.backup-col-date {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.backup-col-date .date-text {
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: var(--text-primary);
+}
+
+.backup-col-name {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.backup-file-icon {
+    color: var(--text-muted);
+    display: inline-flex;
+    align-items: center;
+}
+
+.backup-filename {
+    font-size: 0.825rem;
+    color: var(--text-primary);
+    background: var(--bg-inset);
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-subtle);
+}
+
+.table-actions {
+    display: inline-flex;
+    align-items: center;
     gap: 6px;
 }
 
-.backup-actions .btn {
-    font-size: 0.75em;
-    padding: 4px 10px;
+.table-actions .btn {
+    padding: 4px 8px;
+    font-size: 0.8rem;
 }

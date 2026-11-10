@@ -85,6 +85,17 @@ async def backup_restore(backup_name: str):
     return result
 
 
+@router.delete("/{backup_name}")
+async def backup_delete(backup_name: str):
+    """Exclui um backup específico pelo nome."""
+    mgr = BackupManager()
+    result = await mgr.delete_backup(backup_name)
+    if not result.get("success"):
+        status_code = 404 if "não encontrado" in result.get("error", "") else 400
+        raise HTTPException(status_code, result.get("error", "Falha ao excluir"))
+    return result
+
+
 @router.post("/cleanup")
 async def backup_cleanup(keep_last: int = 10):
     """Remove backups antigos."""

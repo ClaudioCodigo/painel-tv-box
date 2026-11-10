@@ -152,6 +152,7 @@ class ScrcpyManager:
             started_mono = session.get("started_mono", now)
             sessions.append({
                 "target": target,
+                "type": "mirroring",
                 "pid": session.get("pid"),
                 "running": session.get("running", False),
                 "started_at": session.get("started_at"),
@@ -159,6 +160,15 @@ class ScrcpyManager:
                 "args": session.get("args", []),
                 "last_stderr": session.get("last_stderr", ""),
                 "exit_code": session.get("exit_code"),
+            })
+        for target, stream in cls._streams.items():
+            sessions.append({
+                "target": target,
+                "type": "streaming",
+                "pid": stream.get("ffmpeg").pid if (stream.get("ffmpeg") and hasattr(stream.get("ffmpeg"), "pid")) else None,
+                "running": stream.get("running", False),
+                "started_at": stream.get("started_at"),
+                "rtmp_url": stream.get("rtmp_url", ""),
             })
         return {
             "metrics": dict(cls._metrics),

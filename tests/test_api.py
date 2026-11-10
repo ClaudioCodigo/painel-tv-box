@@ -66,6 +66,13 @@ class TestAPIHealth:
             assert "backups" in data
 
     @pytest.mark.asyncio
+    async def test_backup_delete_endpoint_not_found(self):
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.delete("/api/backup/inexistent.zip", headers=AUTH_HEADERS)
+            assert resp.status_code == 404
+
+    @pytest.mark.asyncio
     async def test_logs_sources_endpoint(self):
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
