@@ -6,40 +6,51 @@ const API = (() => {
 
     function authHeaders(extra = {}) {
         const h = { ...extra };
-        const t = (typeof AUTH !== 'undefined') ? AUTH.getToken() : '';
+        const t = (typeof AUTH !== 'undefined' && typeof AUTH.getToken === 'function') ? AUTH.getToken() : '';
         if (t) h['Authorization'] = 'Bearer ' + t;
         return h;
     }
 
+    const getAuthHeaders = authHeaders;
+
+    function normalizePath(path) {
+        let p = path || '';
+        if (p.startsWith('http://') || p.startsWith('https://')) return p;
+        p = p.replace(/^(\/?api)+/i, '');
+        if (!p.startsWith('/')) p = '/' + p;
+        return `${BASE}${p}`;
+    }
+
     /**
      * URL com token na query — para uso direto no browser
-     * (img src, window.open), onde headers não podem ser enviados.
+     * (img src, etc.), onde headers não podem ser enviados.
      * Garante o prefixo /api para rotas da API.
      */
     function authUrl(path) {
-        const t = (typeof AUTH !== 'undefined') ? AUTH.getToken() : '';
-        let fullPath = path || '';
-        if (!fullPath.startsWith('http://') && !fullPath.startsWith('https://')) {
-            // Normaliza removendo qualquer repetição de api/ ou /api/
-            fullPath = fullPath.replace(/^(\/?api)+/i, '');
-            if (!fullPath.startsWith('/')) fullPath = '/' + fullPath;
-            fullPath = `${BASE}${fullPath}`;
-        }
+        const t = (typeof AUTH !== 'undefined' && typeof AUTH.getToken === 'function') ? AUTH.getToken() : '';
+        const fullPath = normalizePath(path);
         const sep = fullPath.includes('?') ? '&' : '?';
         return `${fullPath}${sep}token=${encodeURIComponent(t)}`;
     }
 
     function handleUnauthorized(res) {
-        if (res.status === 401 && typeof AUTH !== 'undefined') {
-            if (AUTH.isLoggedIn() && typeof UI !== 'undefined' && UI.createToast) {
+        if (res && res.status === 401) {
+            const hadSession = typeof AUTH !== 'undefined' && typeof AUTH.isLoggedIn === 'function' && AUTH.isLoggedIn();
+            if (typeof AUTH !== 'undefined' && typeof AUTH.clearToken === 'function') {
+                AUTH.clearToken();
+            }
+            window.dispatchEvent(new CustomEvent('auth:logged-out'));
+            if (hadSession && typeof UI !== 'undefined' && typeof UI.createToast === 'function') {
                 UI.createToast('Sessão expirada — faça login novamente', 'warning');
             }
-            AUTH.requireLogin();
+            if (typeof AUTH !== 'undefined' && typeof AUTH.showLogin === 'function') {
+                AUTH.showLogin();
+            }
         }
     }
 
     async function request(method, path, body) {
-        const url = `${BASE}${path}`;
+        const url = normalizePath(path);
         const opts = {
             method,
             headers: authHeaders({ 'Content-Type': 'application/json' }),
@@ -82,7 +93,7 @@ const API = (() => {
     async function upload(path, file, fieldName = 'file') {
         const form = new FormData();
         form.append(fieldName, file);
-        const url = `${BASE}${path}`;
+        const url = normalizePath(path);
         const res = await fetch(url, { method: 'POST', headers: authHeaders(), body: form });
         if (!res.ok) {
             handleUnauthorized(res);
@@ -95,28 +106,56 @@ const API = (() => {
         return res.json();
     }
 
-    async function download(path, defaultFilename = 'download.zip', method = 'POST', body = null) {
-        const url = `${BASE}${path}`;
-        const opts = {
+    async function download(path, defaultFilename = 'download.zip', options = {}) {
+        let method = 'GET';
+        let body = null;
+        let headers = {};
+
+        if (typeof options === 'string') {
+            method = options.toUpperCase();
+            if (arguments.length > 3) {
+                body = arguments[3];
+            }
+        } else if (options && typeof options === 'object') {
+            if (options.method) method = options.method.toUpperCase();
+            if (options.body !== undefined) body = options.body;
+            if (options.headers) headers = options.headers;
+        }
+
+        const fullUrl = normalizePath(path);
+        const fetchOpts = {
             method,
-            headers: authHeaders(),
+            headers: getAuthHeaders(headers),
         };
         if (body && method !== 'GET') {
-            opts.headers['Content-Type'] = 'application/json';
-            opts.body = JSON.stringify(body);
+            if (typeof body === 'object' && !(body instanceof FormData)) {
+                fetchOpts.headers['Content-Type'] = 'application/json';
+                fetchOpts.body = JSON.stringify(body);
+            } else {
+                fetchOpts.body = body;
+            }
         }
 
         let res;
         try {
-            res = await fetch(url, opts);
+            res = await fetch(fullUrl, fetchOpts);
         } catch (err) {
+            if (typeof UI !== 'undefined' && typeof UI.createToast === 'function') {
+                UI.createToast(`Erro de rede no download: ${err.message}`, 'error');
+            }
             throw new Error(`Network error: ${err.message}`);
         }
 
         if (!res.ok) {
             handleUnauthorized(res);
             let detail = res.statusText;
-            try { const d = await res.json(); detail = d.detail || detail; } catch {}
+            try {
+                const d = await res.json();
+                detail = d.detail || d.title || detail;
+            } catch {}
+            if (typeof UI !== 'undefined' && typeof UI.createToast === 'function') {
+                UI.createToast(`Falha no download: ${detail}`, 'error');
+            }
             const err = new Error(detail);
             err.status = res.status;
             throw err;
@@ -129,6 +168,7 @@ const API = (() => {
         const blob = await res.blob();
         const blobUrl = URL.createObjectURL(blob);
         const a = document.createElement('a');
+        a.style.display = 'none';
         a.href = blobUrl;
         a.download = filename;
         document.body.appendChild(a);
@@ -138,5 +178,32 @@ const API = (() => {
         return { success: true, filename };
     }
 
-    return { get, post, put, del, upload, download, authUrl };
+    async function fetchBlobUrl(path) {
+        const fullUrl = normalizePath(path);
+        const res = await fetch(fullUrl, { headers: authHeaders() });
+        if (!res.ok) {
+            handleUnauthorized(res);
+            let detail = res.statusText;
+            try { const d = await res.json(); detail = d.detail || detail; } catch {}
+            const err = new Error(detail);
+            err.status = res.status;
+            throw err;
+        }
+        const blob = await res.blob();
+        return URL.createObjectURL(blob);
+    }
+
+    return {
+        get,
+        post,
+        put,
+        del,
+        upload,
+        download,
+        authUrl,
+        authHeaders,
+        getAuthHeaders,
+        fetchBlobUrl,
+        normalizePath,
+    };
 })();

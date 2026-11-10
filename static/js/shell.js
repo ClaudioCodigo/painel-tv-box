@@ -184,14 +184,14 @@ const SHELL_PAGE = (() => {
         try {
             const res = await API.post(`/devices/${deviceId}/screenshot`);
             if (res.success) {
-                const url = API.authUrl(`/api/devices/${deviceId}/screenshot`) + '&t=' + Date.now();
+                const blobUrl = await API.fetchBlobUrl(`/devices/${deviceId}/screenshot?t=${Date.now()}`);
                 const kb = (res.size_bytes / 1024).toFixed(1);
                 outEl.innerHTML += `
                     <div class="shell-result">
                         <div class="shell-line term-ok">${kb} KB — clique na imagem para ampliar</div>
-                        <img src="${url}" style="max-width:100%;max-height:400px;cursor:pointer;border:1px solid var(--border-strong);border-radius:6px;margin-top:6px"
-                             onclick="window.open('${url}')" onerror="this.nextElementSibling.style.display='block'">
-                        <div style="display:none;color:var(--text-muted);margin-top:4px">🖼️ <a href="${url}" target="_blank">Abrir screenshot em nova aba</a></div>
+                        <img src="${blobUrl}" style="max-width:100%;max-height:400px;cursor:pointer;border:1px solid var(--border-strong);border-radius:6px;margin-top:6px"
+                             onclick="window.open(this.src)" onerror="this.nextElementSibling.style.display='block'">
+                        <div style="display:none;color:var(--text-muted);margin-top:4px">🖼️ <a href="${blobUrl}" target="_blank">Abrir screenshot em nova aba</a></div>
                     </div>`;
             } else {
                 outEl.innerHTML += `<div class="shell-error">❌ ${res.error || 'Falha ao capturar'}</div>`;
@@ -202,15 +202,17 @@ const SHELL_PAGE = (() => {
         outEl.scrollTop = outEl.scrollHeight;
     }
 
-    function showExistingScreenshot(deviceId) {
+    async function showExistingScreenshot(deviceId) {
         const out = output();
-        const url = API.authUrl(`/api/devices/${deviceId}/screenshot`) + '&t=' + Date.now();
-        out.innerHTML += `
-            <div class="shell-result" style="margin-top:12px">
-                <div class="shell-line text-muted">Último screenshot:</div>
-                <img src="${url}" style="max-width:100%;max-height:300px;cursor:pointer;border:1px solid var(--border-strong);border-radius:6px;margin-top:4px"
-                     loading="lazy" onclick="window.open('${url}')">
-            </div>`;
+        try {
+            const blobUrl = await API.fetchBlobUrl(`/devices/${deviceId}/screenshot?t=${Date.now()}`);
+            out.innerHTML += `
+                <div class="shell-result" style="margin-top:12px">
+                    <div class="shell-line text-muted">Último screenshot:</div>
+                    <img src="${blobUrl}" style="max-width:100%;max-height:300px;cursor:pointer;border:1px solid var(--border-strong);border-radius:6px;margin-top:4px"
+                         loading="lazy" onclick="window.open(this.src)">
+                </div>`;
+        } catch (e) {}
     }
 
     function quick(cmd) { const inp = cmdInput(); if (inp) { inp.value = cmd; run(); } }

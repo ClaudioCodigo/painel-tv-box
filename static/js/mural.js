@@ -100,7 +100,6 @@ const MURAL = (() => {
         grid.innerHTML = list.map(d => {
             const st = normalizeStatus(d.state?.status);
             const isOff = st === 'bad';
-            const screenshotUrl = API.authUrl(`/devices/${encodeURIComponent(d.id)}/screenshot?_t=${Date.now()}`);
             const shape = shapes[st] || '○';
             const label = labels[st] || st.toUpperCase();
             const seen = d.last_seen || d.last_heartbeat;
@@ -118,10 +117,10 @@ const MURAL = (() => {
                         </span>
                     </div>
                     <div class="tile-screen">
-                        <img src="${screenshotUrl}" alt="Tela ${UI.escapeHtml(d.name || d.id)}" loading="lazy"
+                        <img alt="Tela ${UI.escapeHtml(d.name || d.id)}" loading="lazy" style="display:none"
                              onload="this.style.display='block'; if (this.nextElementSibling) this.nextElementSibling.style.display='none'"
                              onerror="this.style.display='none'; if (this.nextElementSibling) this.nextElementSibling.style.display='grid'">
-                        <div class="fake" style="display:none" aria-hidden="true">
+                        <div class="fake" aria-hidden="true">
                             <div class="hdr"></div>
                             <div class="grid2"><i></i><i></i><i></i></div>
                         </div>
@@ -130,6 +129,21 @@ const MURAL = (() => {
                 </div>
             `;
         }).join('');
+        refreshScreenshots(true);
+    }
+
+    async function updateTileBlob(img, id, now) {
+        try {
+            const blobUrl = await API.fetchBlobUrl(`/devices/${encodeURIComponent(id)}/screenshot?_t=${now}`);
+            if (img._blobUrl) { URL.revokeObjectURL(img._blobUrl); }
+            img._blobUrl = blobUrl;
+            img.src = blobUrl;
+            img.style.display = 'block';
+            if (img.nextElementSibling) img.nextElementSibling.style.display = 'none';
+        } catch (e) {
+            img.style.display = 'none';
+            if (img.nextElementSibling) img.nextElementSibling.style.display = 'grid';
+        }
     }
 
     function refreshScreenshots(force = false) {
@@ -142,8 +156,7 @@ const MURAL = (() => {
             if (!id || !img) return;
             // Atualiza dispositivos que não estão marcados como sem sinal, ou todos se force
             if (force || !tile.classList.contains('bad')) {
-                const base = API.authUrl('/devices/' + encodeURIComponent(id) + '/screenshot');
-                img.src = `${base}&_t=${now}`;
+                updateTileBlob(img, id, now);
             }
         });
     }
@@ -165,6 +178,9 @@ const MURAL = (() => {
             clearInterval(refreshTimer);
             refreshTimer = null;
         }
+        document.querySelectorAll('#mural-grid .tile img').forEach(img => {
+            if (img._blobUrl) { URL.revokeObjectURL(img._blobUrl); img._blobUrl = null; }
+        });
     }
 
     function openDeviceScrcpy(deviceId) {

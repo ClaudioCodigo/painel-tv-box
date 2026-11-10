@@ -49,6 +49,16 @@ const WS = (() => {
             connected = false;
             ws = null;
             emit('disconnected');
+
+            // 4401 = Sessão encerrada ou não autenticado: NÃO reconecta
+            if (event.code === 4401 || event.code === 1008) {
+                console.warn('[WS] Sessão não autorizada ou encerrada. Reconexão suspensa.');
+                if (reconnectTimer) {
+                    clearTimeout(reconnectTimer);
+                    reconnectTimer = null;
+                }
+                return;
+            }
             scheduleReconnect();
         };
 
@@ -99,6 +109,10 @@ const WS = (() => {
     document.addEventListener('DOMContentLoaded', connect);
     window.addEventListener('auth:logged-in', connect);
     window.addEventListener('auth:logged-out', () => {
+        if (reconnectTimer) {
+            clearTimeout(reconnectTimer);
+            reconnectTimer = null;
+        }
         if (ws) { try { ws.close(); } catch (e) {} ws = null; }
     });
 

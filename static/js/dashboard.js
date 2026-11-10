@@ -337,6 +337,7 @@ const DASHBOARD = (() => {
         container.innerHTML = list.map(d => buildRowHtml(d)).join('');
         bindRowEvents();
         updateBulkBar();
+        refreshScreenshots(true);
     }
 
     function latestSeen(d) {
@@ -378,7 +379,6 @@ const DASHBOARD = (() => {
             : (d.player?.toUpperCase() || 'VLC');
 
         const wdCount = d.state?.reboot_count ? `${d.state.reboot_count} hoje` : (recoveryLog[d.id] ? 'recuperado' : 'ok');
-        const screenshotUrl = API.authUrl(`/devices/${encodeURIComponent(d.id)}/screenshot?_t=${Date.now()}`);
         const displayUrl = d.target_url || d.state?.kiosk_url || '';
 
         return `
@@ -386,7 +386,7 @@ const DASHBOARD = (() => {
                 <input class="cbx" type="checkbox" data-cbx="${UI.escAttr(d.id)}" ${isSelected ? 'checked' : ''} aria-label="Selecionar ${UI.escapeHtml(d.name || d.id)}">
                 
                 <div class="thumb ${isOff ? 'off' : ''}" onclick="DASHBOARD.openScrcpy('${UI.escAttr(d.id)}')">
-                    <img src="${screenshotUrl}" alt="Tela ${UI.escapeHtml(d.name || d.id)}" loading="lazy" onload="this.style.display='block'; if(this.nextElementSibling) this.nextElementSibling.style.display='none'" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='block'">
+                    <img data-id="${UI.escAttr(d.id)}" alt="Tela ${UI.escapeHtml(d.name || d.id)}" loading="lazy" style="display:none" onload="this.style.display='block'; if(this.nextElementSibling) this.nextElementSibling.style.display='none'" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='block'">
                     <div class="screen"><div class="bar"></div><div class="cols"><i></i><i></i></div></div>
                     ${isOff ? `<div class="offmark">${norm === 'bad' ? 'SEM SINAL' : 'NOVO'}</div>` : ''}
                 </div>
@@ -723,8 +723,14 @@ const DASHBOARD = (() => {
         window.location.hash = '#/logs';
     }
 
-    function downloadLog() {
-        window.open(API.authUrl('/api/logs/download?source=watchdog'), '_blank');
+    async function downloadLog() {
+        try {
+            UI.createToast('Baixando logs do watchdog...', 'info');
+            await API.download('/api/logs/download?source=watchdog', `watchdog-logs-${Date.now()}.txt`);
+            UI.createToast('✅ Logs baixados', 'success');
+        } catch (e) {
+            UI.createToast(`❌ ${e.message}`, 'error');
+        }
     }
 
     // ── Métricas do Servidor ──
@@ -785,6 +791,19 @@ const DASHBOARD = (() => {
 
     let screenshotInterval = null;
 
+    async function updateThumbBlob(img, id, now) {
+        try {
+            const blobUrl = await API.fetchBlobUrl(`/devices/${encodeURIComponent(id)}/screenshot?_t=${now}`);
+            if (img._blobUrl) { URL.revokeObjectURL(img._blobUrl); }
+            img._blobUrl = blobUrl;
+            img.src = blobUrl;
+            img.style.display = 'block';
+            if (img.nextElementSibling) img.nextElementSibling.style.display = 'none';
+        } catch (e) {
+            // Se offline ou indisponível, fallback visual permanece
+        }
+    }
+
     function refreshScreenshots(force = false) {
         const rows = document.getElementById('device-rows');
         if (!rows) return;
@@ -794,8 +813,7 @@ const DASHBOARD = (() => {
             const img = row.querySelector('.thumb img');
             if (!id || !img) return;
             if (force || !row.classList.contains('is-bad')) {
-                const base = API.authUrl('/devices/' + encodeURIComponent(id) + '/screenshot');
-                img.src = `${base}&_t=${now}`;
+                updateThumbBlob(img, id, now);
             }
         });
     }
@@ -818,6 +836,9 @@ const DASHBOARD = (() => {
         if (statusInterval) { clearInterval(statusInterval); statusInterval = null; }
         if (screenshotInterval) { clearInterval(screenshotInterval); screenshotInterval = null; }
         if (ageTimer) { clearInterval(ageTimer); ageTimer = null; }
+        document.querySelectorAll('#device-rows .thumb img').forEach(img => {
+            if (img._blobUrl) { URL.revokeObjectURL(img._blobUrl); img._blobUrl = null; }
+        });
     }
 
     // ── Dropdown e Ações Individuais ──

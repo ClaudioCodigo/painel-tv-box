@@ -303,22 +303,22 @@ const SCRCPY = (() => {
             return;
         }
         UI.createToast('Gerando pacote scrcpy + launcher...', 'info');
-        const url = API.authUrl(`/scrcpy/client/bundle/${encodeURIComponent(deviceId)}`);
-        const a = document.createElement('a');
-        a.href = url;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+        try {
+            await API.download(`/scrcpy/client/bundle/${encodeURIComponent(deviceId)}`, `scrcpy-${deviceId}.zip`);
+            UI.createToast('✅ Pacote scrcpy baixado!', 'success');
+        } catch (e) {
+            UI.createToast(`Falha ao baixar pacote: ${e.message}`, 'error');
+        }
     }
 
-    function downloadStationBundle() {
+    async function downloadStationBundle() {
         UI.createToast('Preparando instalador do cliente...', 'info');
-        const url = API.authUrl('/scrcpy/client/installer');
-        const a = document.createElement('a');
-        a.href = url;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+        try {
+            await API.download('/scrcpy/client/installer', 'instalar-scrcpy.cmd');
+            UI.createToast('✅ Instalador baixado!', 'success');
+        } catch (e) {
+            UI.createToast(`Falha ao baixar instalador: ${e.message}`, 'error');
+        }
     }
 
     async function startHost() {
@@ -343,14 +343,14 @@ const SCRCPY = (() => {
         }
     }
 
-    function downloadStationZip() {
+    async function downloadStationZip() {
         UI.createToast('Baixando pacote portátil do cliente (.zip)...', 'info');
-        const url = API.authUrl('/scrcpy/client/station-bundle');
-        const a = document.createElement('a');
-        a.href = url;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+        try {
+            await API.download('/scrcpy/client/station-bundle', 'PainelTVBox-Scrcpy-Cliente.zip');
+            UI.createToast('✅ Pacote portátil baixado!', 'success');
+        } catch (e) {
+            UI.createToast(`Falha ao baixar pacote portátil: ${e.message}`, 'error');
+        }
     }
 
     async function startLocal() {
@@ -432,12 +432,12 @@ const SCRCPY = (() => {
             return;
         }
         UI.createToast('Baixando launcher...', 'info');
-        const url = API.authUrl(`/scrcpy/client/launcher/${encodeURIComponent(deviceId)}`);
-        const a = document.createElement('a');
-        a.href = url;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+        try {
+            await API.download(`/scrcpy/client/launcher/${encodeURIComponent(deviceId)}`, `iniciar-${deviceId}.bat`);
+            UI.createToast('✅ Launcher baixado!', 'success');
+        } catch (e) {
+            UI.createToast(`Falha ao baixar launcher: ${e.message}`, 'error');
+        }
     }
 
     async function startMirroring() {
@@ -493,7 +493,12 @@ const SCRCPY = (() => {
                 if (status) status.textContent = cap.error || 'Falha na captura';
                 return;
             }
-            if (img) img.src = API.authUrl(`/devices/${liveDeviceId}/screenshot?t=${Date.now()}`);
+            if (img) {
+                if (img._blobUrl) { URL.revokeObjectURL(img._blobUrl); }
+                const blobUrl = await API.fetchBlobUrl(`/devices/${liveDeviceId}/screenshot?t=${Date.now()}`);
+                img._blobUrl = blobUrl;
+                img.src = blobUrl;
+            }
             if (status) status.textContent = 'Atualizado ' + new Date().toLocaleTimeString();
         } catch (e) {
             if (status) status.textContent = e.message || 'Falha';

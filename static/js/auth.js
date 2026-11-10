@@ -161,5 +161,5 @@ const AUTH = (() => {
         });
     }
 
-    return { getToken, setToken, login, logout, isLoggedIn, showLogin, hideLogin, requireLogin, fetchStatus, init };
+    return { getToken, setToken, clearToken, login, logout, isLoggedIn, showLogin, hideLogin, requireLogin, fetchStatus, init };
 })();

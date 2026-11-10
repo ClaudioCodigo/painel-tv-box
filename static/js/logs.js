@@ -403,7 +403,19 @@ const LOGS = (() => {
         const source = document.getElementById('log-source')?.value || '';
         let url = '/api/logs/download';
         if (source) url += `?source=${encodeURIComponent(source)}`;
-        window.open(url, '_blank');
+        try {
+            if (typeof UI !== 'undefined' && UI.createToast) {
+                UI.createToast('Baixando logs...', 'info');
+            }
+            await API.download(url, `logs-${source || 'all'}-${Date.now()}.txt`);
+            if (typeof UI !== 'undefined' && UI.createToast) {
+                UI.createToast('✅ Logs baixados', 'success');
+            }
+        } catch (e) {
+            if (typeof UI !== 'undefined' && UI.createToast) {
+                UI.createToast(`❌ ${e.message}`, 'error');
+            }
+        }
     }
 
     function startAutoRefresh() {

@@ -434,7 +434,12 @@ const DEVICE_PAGE = (() => {
                 const img = document.getElementById('d-screenshot-src');
                 const area = document.getElementById('d-screenshot-img');
                 const status = document.getElementById('d-screenshot-area');
-                if (img) img.src = API.authUrl(res.screenshot_url) + '&t=' + Date.now();
+                if (img) {
+                    if (img._blobUrl) { URL.revokeObjectURL(img._blobUrl); }
+                    const blobUrl = await API.fetchBlobUrl(`${res.screenshot_url}?t=${Date.now()}`);
+                    img._blobUrl = blobUrl;
+                    img.src = blobUrl;
+                }
                 if (area) area.style.display = 'block';
                 if (status) status.style.display = 'none';
                 UI.createToast(`Screenshot capturado (${(res.size_bytes / 1024).toFixed(1)} KB)`, 'success');

@@ -133,11 +133,14 @@ const BACKUP = (() => {
         );
     }
 
-    function doDownload(name) {
-        // GET no endpoint dedicado de download (o antigo apontava para o
-        // restore, que é POST e destrutivo). Token via query (window.open
-        // não envia headers).
-        window.open(API.authUrl(`/api/backup/download/${encodeURIComponent(name)}`), '_blank');
+    async function doDownload(name) {
+        try {
+            UI.createToast(`Baixando backup ${name}...`, 'info');
+            await API.download(`/backup/download/${encodeURIComponent(name)}`, `${name}.zip`);
+            UI.createToast('✅ Download concluído', 'success');
+        } catch (e) {
+            UI.createToast(`❌ ${e.message}`, 'error');
+        }
     }
 
     return { render, doExport, doImport, doRestore, doDownload };
