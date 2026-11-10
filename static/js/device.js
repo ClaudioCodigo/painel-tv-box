@@ -1,13 +1,20 @@
 /**
- * Device Page — detalhe e controle de um TV Box (Fase B, tabs).
- *   Visão geral | Stream | Apps | Shell | Screenshots
+ * Device Page — detalhe e controle de um TV Box (Fase 3B NOC-style).
+ * Layout em 2 colunas:
+ *   - Barra Sticky de Ações no Topo
+ *   - Coluna Esquerda (60%): Screenshot ao vivo, Controles Kiosk Web/Player, D-Pad Remoto
+ *   - Coluna Direita (40%): Informações do Dispositivo, Watchdog & Linha do Tempo, Apps Instalados
+ *   - Gaveta (Drawer) Shell ADB na base
  */
 const DEVICE_PAGE = (() => {
     let deviceId = null;
     let refreshTimer = null;
-    let currentTab = 'visao';
-    const loadedTabs = new Set();
     let groupName = '';
+    let currentDevice = null;
+    let currentStatus = null;
+    let wsHandler = null;
+    let isCapturingScreenshot = false;
+    let isShellDrawerOpen = false;
 
     function latestSeen(d) {
         if (!d || (!d.last_seen && !d.last_heartbeat)) return null;
@@ -21,280 +28,458 @@ const DEVICE_PAGE = (() => {
         return seen ? `visto há ${UI.timeAgo(seen)}` : 'nunca visto';
     }
 
+    /**
+     * Renderização inicial da página do dispositivo
+     */
     async function render(el, id) {
         deviceId = id;
-        currentTab = 'visao';
-        loadedTabs.clear();
-        UI.setPageTitle('Dispositivo');
+        UI.setPageTitle(`Dispositivo ${id}`);
 
-        el.innerHTML = `<div class="device-detail">${UI.skeletons('line', 5)}</div>`;
+        // Skeleton de carregamento com cards v2
+        el.innerHTML = `
+            <div class="device-page-layout">
+                <div class="device-loading-skeleton">
+                    ${UI.skeletons('card', 3)}
+                </div>
+            </div>
+        `;
 
         try {
-            const device = await API.get(`/devices/${deviceId}`);
+            const [device, statusRes] = await Promise.all([
+                API.get(`/devices/${encodeURIComponent(deviceId)}`),
+                API.get(`/devices/${encodeURIComponent(deviceId)}/status`).catch(() => null)
+            ]);
+
+            currentDevice = device;
+            currentStatus = statusRes;
+
             groupName = device.group || '';
             if (groupName) {
                 const groups = await API.get('/groups').catch(() => []);
                 const g = (Array.isArray(groups) ? groups : []).find(x => x.id === groupName);
                 if (g) groupName = g.name || g.id;
             }
-            renderShell(el, device);
-            await switchTab(currentTab);
-            refreshStatus();
+
+            renderLayout(el, device, statusRes);
+            loadApps();
             startAutoRefresh();
+            setupWebSocket();
         } catch (e) {
-            el.innerHTML = `<div class="device-detail">${UI.stateView('error', e.message, { retry: true })}</div>`;
+            el.innerHTML = `
+                <div class="device-page-layout">
+                    ${UI.stateView('error', e.message || 'Erro ao carregar detalhes do dispositivo', { retry: true })}
+                </div>
+            `;
             UI.bindStateRetry(el, () => render(el, deviceId));
         }
     }
 
-    function renderShell(el, device) {
-        const status = device.state?.status || 'unknown';
-        const reason = device.state?.reason || '';
-        const icon = UI.statusIcon(status); const sClass = UI.statusClass(status);
+    /**
+     * Monta o layout estrutural completo de 2 colunas NOC-style
+     */
+    function renderLayout(el, device, st) {
+        const dstate = device.state || {};
+        const status = dstate.status || (st?.adb_connected ? 'online' : 'unknown');
+        const reason = dstate.reason || '';
+        const ipDisplay = device.ip ? `${device.ip}:${device.adb_port || 5555}` : '--';
         const chip = device.group ? UI.groupChip(groupName || device.group, device.group) : '';
+        const locationBadge = device.location ? `<span class="device-loc-badge" title="Localização">${UI.icon('map-pin') || ''} ${UI.escapeHtml(device.location)}</span>` : '';
 
         el.innerHTML = `
-            <div class="device-detail">
-                <div class="card dcard-header" style="padding:var(--space-4)">
-                    <div class="card-title">${icon} ${UI.escapeHtml(device.name || device.id)}</div>
-                    <div class="dcard-header-right">${chip}</div>
-                </div>
-                <div class="dcard-status ${sClass}" id="device-header-status">
-                    ${UI.statusBar(status, reason)}
-                </div>
-                <div class="dcard-life">
-                    <span id="device-fresh">${freshness(device.state)}</span>
-                </div>
-
-                <div class="device-actions" style="margin-top:var(--space-4)">
-                    <button class="btn btn-primary btn-sm" onclick="DEVICE_PAGE.openScrcpy()">${UI.icon('monitor')} Scrcpy (1-Clique)</button>
-                    <button class="btn btn-secondary btn-sm" onclick="DEVICE_PAGE.openScrcpyHost()">🖥️ No Servidor</button>
-                    <button class="btn btn-secondary btn-sm" onclick="DEVICE_PAGE.reloadKiosk()">${UI.icon('refresh')} Recarregar Kiosk</button>
-                    <button class="btn btn-secondary btn-sm" onclick="DEVICE_PAGE.action('reboot')">${UI.icon('reboot')} Reboot</button>
-                    <button class="btn btn-secondary btn-sm" onclick="DEVICE_PAGE.refreshStatus()">${UI.icon('refresh')} Atualizar</button>
-                    <button class="btn btn-secondary btn-sm" onclick="DEVICE_PAGE.provisionScripts()">${UI.icon('upload')} Scripts</button>
-                    <button class="btn btn-danger btn-sm" onclick="DEVICE_PAGE.deleteDevice()">${UI.icon('trash')} Remover</button>
-                </div>
-
-                <div class="device-tabs" role="tablist" aria-label="Seções do dispositivo">
-                    <button class="tab-pill active" data-tab="visao" role="tab" aria-selected="true" onclick="DEVICE_PAGE.switchTab('visao')">Visão geral</button>
-                    <button class="tab-pill" data-tab="stream" role="tab" aria-selected="false" onclick="DEVICE_PAGE.switchTab('stream')">Kiosk Web</button>
-                    <button class="tab-pill" data-tab="apps" role="tab" aria-selected="false" onclick="DEVICE_PAGE.switchTab('apps')">Apps</button>
-                    <button class="tab-pill" data-tab="shell" role="tab" aria-selected="false" onclick="DEVICE_PAGE.switchTab('shell')">Shell</button>
-                    <button class="tab-pill" data-tab="screenshots" role="tab" aria-selected="false" onclick="DEVICE_PAGE.switchTab('screenshots')">Screenshots</button>
-                </div>
-                <div class="device-tab-content" id="device-tab-content">
-                    ${UI.skeletons('line', 4)}
-                </div>
-            </div>
-        `;
-    }
-
-    async function switchTab(name) {
-        currentTab = name;
-        document.querySelectorAll('.device-tabs .tab-pill').forEach(b => {
-            const active = b.dataset.tab === name;
-            b.classList.toggle('active', active);
-            b.setAttribute('aria-selected', active ? 'true' : 'false');
-        });
-
-        const container = document.getElementById('device-tab-content');
-        if (!container) return;
-
-        if (!loadedTabs.has(name)) {
-            container.innerHTML = UI.skeletons('line', 4);
-            try {
-                const device = await API.get(`/devices/${deviceId}`);
-                if (name === 'visao') renderVisao(container, device);
-                else if (name === 'stream') renderStream(container, device);
-                else if (name === 'apps') renderApps(container, device);
-                else if (name === 'shell') renderShellTab(container);
-                else if (name === 'screenshots') renderScreenshots(container);
-                loadedTabs.add(name);
-            } catch (e) {
-                container.innerHTML = UI.stateView('error', e.message, { retry: true });
-                UI.bindStateRetry(container, () => switchTab(name));
-            }
-        } else {
-            // Recarrega dados frescos nas abas que dependem de state
-            try {
-                const device = await API.get(`/devices/${deviceId}`);
-                if (name === 'visao') renderVisao(container, device);
-                else if (name === 'stream') renderStream(container, device);
-                else if (name === 'apps') await loadApps();
-                else if (name === 'screenshots') renderScreenshots(container);
-            } catch (e) { /* mantém conteúdo anterior */ }
-        }
-    }
-
-    // ── Tabs ────────────────────────────────────
-
-    function renderVisao(container, device) {
-        const st = device.state || {};
-        container.innerHTML = `
-            <div class="device-grid">
-                <div class="device-info-card">
-                    <h3>${UI.icon('layers')} Rede</h3>
-                    <div class="info-row"><span class="info-key">IP</span><span class="info-val">${UI.escapeHtml(device.ip || '--')}</span></div>
-                    <div class="info-row"><span class="info-key">ADB</span><span class="info-val" id="d-adb">Verificando...</span></div>
-                    <div class="info-row"><span class="info-key">MAC</span><span class="info-val">${UI.escapeHtml(device.mac || '--')}</span></div>
-                    <div class="info-row"><span class="info-key">Grupo</span><span class="info-val">${UI.escapeHtml(groupName || device.group || '--')}</span></div>
-                    <div class="info-row"><span class="info-key">Local</span><span class="info-val">${UI.escapeHtml(device.location || '--')}</span></div>
-                </div>
-                <div class="device-info-card">
-                    <h3>${UI.icon('monitor')} Aplicação Kiosk Web</h3>
-                    <div class="info-row"><span class="info-key">URL Alvo</span><span class="info-val" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${UI.escapeHtml(device.target_url || '')}">${UI.escapeHtml(device.target_url || '--')}</span></div>
-                    <div class="info-row"><span class="info-key">Browser</span><span class="info-val">${UI.escapeHtml(device.web_browser === 'chrome' ? 'Google Chrome' : (device.web_browser === 'browser' ? 'Browser Padrão' : 'Free Kiosk Browser'))}</span></div>
-                    <div class="info-row"><span class="info-key">Root</span><span class="info-val" id="d-root">--</span></div>
-                    <div class="info-row"><span class="info-key">Modelo</span><span class="info-val" id="d-model">--</span></div>
-                </div>
-            </div>
-            <div class="device-info-card full" style="margin-top:var(--space-4)">
-                <h3>${UI.icon('clock')} Linha de vida</h3>
-                <div class="info-row"><span class="info-key">Heartbeat OS</span><span class="info-val" id="d-heartbeat">${st.last_heartbeat ? freshness({ last_heartbeat: st.last_heartbeat }) : '—'}</span></div>
-                <div class="info-row"><span class="info-key">Ping Página Web</span><span class="info-val" id="d-signage-ping">${st.last_signage_ping ? freshness({ last_heartbeat: st.last_signage_ping }) : '—'}</span></div>
-                <div class="info-row"><span class="info-key">Última recuperação</span><span class="info-val">${st.last_recovery_time ? freshness({ last_recovery_time: st.last_recovery_time }) : '—'}</span></div>
-                <div class="info-row"><span class="info-key">Reboots (watchdog)</span><span class="info-val">${st.reboot_count || 0}</span></div>
-            </div>
-        `;
-    }
-
-    function renderStream(container, device) {
-        const st = device.state || {};
-        container.innerHTML = `
-            <div class="device-grid">
-                <div class="device-info-card">
-                    <h3>${UI.icon('browser')} Configuração do Kiosk Web</h3>
-                    <div style="margin-top:var(--space-3)">
-                        <label class="form-label" style="font-size:12px;font-weight:600">URL da Página Web</label>
-                        <input type="url" id="d-web-url" class="input-field" style="width:100%;margin-bottom:8px" placeholder="https://app.powerbi.com/view?r=..." value="${UI.escapeHtml(device.target_url || '')}">
-                        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-                            <label style="font-size:12px">Browser:</label>
-                            <select id="d-web-browser" class="input-field" style="padding:4px 8px">
-                                <option value="freekiosk" ${(!device.web_browser || device.web_browser === 'freekiosk') ? 'selected' : ''}>Free Kiosk Browser (Recomendado)</option>
-                                <option value="chrome" ${device.web_browser === 'chrome' ? 'selected' : ''}>Google Chrome</option>
-                                <option value="browser" ${device.web_browser === 'browser' ? 'selected' : ''}>Navegador Padrão</option>
-                            </select>
-                            <button class="btn btn-primary btn-sm" onclick="DEVICE_PAGE.saveWebConfig()">Salvar Configuração Web</button>
+            <div class="device-page-layout" id="device-container">
+                <!-- 1. Barra de Ações Sticky no Topo -->
+                <header class="device-sticky-header" id="device-sticky-header">
+                    <div class="device-header-left">
+                        <div class="device-header-icon">${UI.icon('tv', 26) || UI.icon('monitor', 26)}</div>
+                        <div class="device-header-titles">
+                            <div class="device-header-title-row">
+                                <h1 class="device-header-title">${UI.escapeHtml(device.name || device.id)}</h1>
+                                <code class="device-id-pill" title="ID do Dispositivo">${UI.escapeHtml(device.id)}</code>
+                                <div id="device-header-status-badge">
+                                    ${UI.stateBadge(status, { reason })}
+                                </div>
+                            </div>
+                            <div class="device-header-meta">
+                                <span class="device-meta-ip"><strong class="font-mono">${UI.escapeHtml(ipDisplay)}</strong></span>
+                                ${chip}
+                                ${locationBadge}
+                                <span class="device-meta-freshness" id="device-freshness">${freshness(dstate)}</span>
+                            </div>
                         </div>
                     </div>
-                    <div class="info-row" style="margin-top:var(--space-4);border-top:1px solid var(--border-subtle);padding-top:var(--space-2)"><span class="info-key">Atividade em foco</span><span class="info-val" id="d-activity">${UI.escapeHtml(st.current_activity || '—')}</span></div>
-                </div>
-                <div class="device-info-card">
-                    <h3>${UI.icon('play')} Controle do Kiosk</h3>
-                    <p class="text-muted text-sm" style="margin-bottom:var(--space-3)">
-                        Abre, fecha ou recarrega a página Web Kiosk no TV Box via navegador configurado.
-                    </p>
-                    <div style="display:flex;gap:8px;flex-wrap:wrap">
-                        <button class="btn btn-primary btn-sm" onclick="DEVICE_PAGE.action('start-stream')">${UI.icon('play')} Abrir Página</button>
-                        <button class="btn btn-secondary btn-sm" onclick="DEVICE_PAGE.reloadKiosk()">${UI.icon('refresh')} Recarregar Kiosk</button>
-                        <button class="btn btn-secondary btn-sm" onclick="DEVICE_PAGE.action('stop-stream')">${UI.icon('stop')} Fechar Browser</button>
+                    <div class="device-header-actions">
+                        <button class="btn btn-primary btn-sm" onclick="DEVICE_PAGE.openScrcpy()" title="Espelhamento remoto de alta performance via Scrcpy">
+                            ${UI.icon('monitor')} Scrcpy (1-Clique)
+                        </button>
+                        <button class="btn btn-secondary btn-sm" onclick="DEVICE_PAGE.reloadKiosk()" title="Reinicia o Kiosk Web no navegador configurado">
+                            ${UI.icon('refresh')} Recarregar Kiosk
+                        </button>
+                        <button class="btn btn-secondary btn-sm" onclick="DEVICE_PAGE.rebootDevice()" title="Reinicia o TV Box Android">
+                            ${UI.icon('reboot')} Reiniciar Aparelho
+                        </button>
+                        <button class="btn btn-secondary btn-sm" onclick="DEVICE_PAGE.provisionScripts()" title="Provisiona e atualiza scripts internos no Android">
+                            ${UI.icon('upload')} Provisionar Scripts
+                        </button>
+                        <button class="btn btn-danger btn-sm" onclick="DEVICE_PAGE.deleteDevice()" title="Remove permanentemente o dispositivo">
+                            ${UI.icon('trash')} Excluir
+                        </button>
                     </div>
-                    <div class="info-row" style="margin-top:var(--space-4);border-top:1px solid var(--border-subtle);padding-top:var(--space-3)">
-                        <span class="info-key">Recuperação automática</span>
-                        <span class="info-val">
-                            <label class="switch" title="Watchdog reabre o conteúdo se cair">
-                                <input type="checkbox" id="d-recovery-toggle" ${device.recovery_enabled === false ? '' : 'checked'} onchange="DEVICE_PAGE.toggleRecovery(this.checked)">
-                                <span class="switch-slider" aria-hidden="true"></span>
-                            </label>
-                        </span>
+                </header>
+
+                <!-- 2. Grid Principal em 2 Colunas (60% / 40%) -->
+                <main class="device-noc-grid">
+                    <!-- Coluna Esquerda (60%): Live Screenshot + Kiosk Web Controls + Remote D-Pad -->
+                    <section class="device-col-main">
+                        <!-- Card 1: Screenshot Ao Vivo -->
+                        <div class="card device-card">
+                            <div class="card-header">
+                                <div class="card-title-wrap">
+                                    <h2 class="card-title">${UI.icon('camera')} Screenshot Ao Vivo</h2>
+                                    <span class="text-muted text-xs" id="d-screenshot-meta">Visualização sob demanda</span>
+                                </div>
+                                <div class="card-header-actions">
+                                    <button class="btn btn-secondary btn-sm" id="d-btn-capture" onclick="DEVICE_PAGE.captureScreenshot()">
+                                        <span class="btn-spinner" id="d-shot-spinner" style="display:none">${UI.icon('refresh')}</span>
+                                        ${UI.icon('camera')} Capturar Agora
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="device-screen-wrapper" id="d-screen-wrapper">
+                                <img id="d-screen-img" class="device-live-img" src="" alt="Captura de tela do TV Box" style="display:none;" onclick="window.open(this.src, '_blank')" title="Clique para expandir" />
+                                <div id="d-screen-placeholder" class="device-screen-placeholder">
+                                    <div class="placeholder-icon">${UI.icon('monitor', 48)}</div>
+                                    <p class="placeholder-text">Nenhuma imagem carregada na sessão</p>
+                                    <button class="btn btn-sm btn-secondary" onclick="DEVICE_PAGE.captureScreenshot()">${UI.icon('camera')} Obter captura da tela</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Card 2: Controles Kiosk Web & Player -->
+                        <div class="card device-card">
+                            <div class="card-header">
+                                <div class="card-title-wrap">
+                                    <h2 class="card-title">${UI.icon('play')} Controles Kiosk Web</h2>
+                                    <span class="text-muted text-xs">Transmissão de conteúdo e controle do navegador</span>
+                                </div>
+                                <div id="d-activity-badge">
+                                    <span class="badge badge-mono text-xs" title="Atividade Android em foco">${UI.escapeHtml(dstate.current_activity || 'Sem atividade')}</span>
+                                </div>
+                            </div>
+                            <div class="kiosk-controls-body">
+                                <div class="form-group" style="margin-bottom:var(--space-3)">
+                                    <label class="form-label text-xs font-semibold" for="d-web-url">URL da Página Web / Stream RTSP</label>
+                                    <div class="input-with-button">
+                                        <input type="url" id="d-web-url" class="form-input" placeholder="https://app.powerbi.com/view?... ou rtsp://..." value="${UI.escapeHtml(device.target_url || '')}" />
+                                    </div>
+                                </div>
+
+                                <div class="kiosk-config-grid">
+                                    <div class="form-group" style="margin-bottom:0">
+                                        <label class="form-label text-xs font-semibold" for="d-player-select">Player / Navegador</label>
+                                        <select id="d-player-select" class="form-select">
+                                            <option value="freekiosk" ${(!device.web_browser || device.web_browser === 'freekiosk') && device.mode !== 'stream' ? 'selected' : ''}>Free Kiosk Browser (Recomendado)</option>
+                                            <option value="chrome" ${device.web_browser === 'chrome' && device.mode !== 'stream' ? 'selected' : ''}>Google Chrome</option>
+                                            <option value="browser" ${device.web_browser === 'browser' && device.mode !== 'stream' ? 'selected' : ''}>Navegador Padrão</option>
+                                            <option value="vlc" ${device.player === 'vlc' || device.mode === 'stream' ? 'selected' : ''}>VLC Player (Stream RTSP)</option>
+                                            <option value="mpv" ${device.player === 'mpv' ? 'selected' : ''}>MPV Player (Stream RTSP)</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group" style="margin-bottom:0; align-self:flex-end">
+                                        <button class="btn btn-secondary btn-sm" onclick="DEVICE_PAGE.saveWebConfig()" style="width:100%">
+                                            ${UI.icon('check')} Salvar Configuração
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="kiosk-action-footer">
+                                    <div class="kiosk-playback-btns">
+                                        <button class="btn btn-primary btn-sm" onclick="DEVICE_PAGE.action('start-stream')">
+                                            ${UI.icon('play')} Iniciar / Abrir
+                                        </button>
+                                        <button class="btn btn-secondary btn-sm" onclick="DEVICE_PAGE.action('stop-stream')">
+                                            ${UI.icon('stop')} Parar / Fechar
+                                        </button>
+                                        <button class="btn btn-secondary btn-sm" onclick="DEVICE_PAGE.reloadKiosk()">
+                                            ${UI.icon('refresh')} Recarregar
+                                        </button>
+                                    </div>
+                                    <div class="kiosk-recovery-wrap">
+                                        <label class="switch-control" title="Watchdog reabre o conteúdo se cair">
+                                            <input type="checkbox" id="d-recovery-toggle" ${device.recovery_enabled !== false ? 'checked' : ''} onchange="DEVICE_PAGE.toggleRecovery(this.checked)">
+                                            <span class="switch-slider"></span>
+                                            <span class="switch-text text-xs">Recuperação Automática</span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Card 3: D-Pad de Navegação Remota -->
+                        <div class="card device-card">
+                            <div class="card-header">
+                                <div class="card-title-wrap">
+                                    <h2 class="card-title">${UI.icon('layers')} Controle Remoto (D-Pad Virtual)</h2>
+                                    <span class="text-muted text-xs">Interação de teclado e controle remoto via ADB</span>
+                                </div>
+                            </div>
+                            <div class="dpad-card-body">
+                                <div class="dpad-interactive-wrapper">
+                                    <div class="dpad-cross-grid">
+                                        <button type="button" class="dpad-btn dpad-up" onclick="DEVICE_PAGE.sendKey(19)" title="Para Cima" aria-label="Cima">▲</button>
+                                        <button type="button" class="dpad-btn dpad-left" onclick="DEVICE_PAGE.sendKey(21)" title="Para Esquerda" aria-label="Esquerda">◀</button>
+                                        <button type="button" class="dpad-btn dpad-center" onclick="DEVICE_PAGE.sendKey(23)" title="OK / Selecionar" aria-label="OK">OK</button>
+                                        <button type="button" class="dpad-btn dpad-right" onclick="DEVICE_PAGE.sendKey(22)" title="Para Direita" aria-label="Direita">▶</button>
+                                        <button type="button" class="dpad-btn dpad-down" onclick="DEVICE_PAGE.sendKey(20)" title="Para Baixo" aria-label="Baixo">▼</button>
+                                    </div>
+                                </div>
+                                <div class="dpad-actions-bar">
+                                    <button class="btn btn-secondary btn-sm" onclick="DEVICE_PAGE.sendKey(4)" title="Voltar (Back)">
+                                        ${UI.icon('chevron-left')} Voltar
+                                    </button>
+                                    <button class="btn btn-secondary btn-sm" onclick="DEVICE_PAGE.sendKey(3)" title="Início (Home)">
+                                        ${UI.icon('home')} Home
+                                    </button>
+                                    <button class="btn btn-secondary btn-sm" onclick="DEVICE_PAGE.sendKey(82)" title="Menu">
+                                        Menu
+                                    </button>
+                                    <button class="btn btn-secondary btn-sm" onclick="DEVICE_PAGE.sendKey(25)" title="Volume -">
+                                        Vol -
+                                    </button>
+                                    <button class="btn btn-secondary btn-sm" onclick="DEVICE_PAGE.sendKey(24)" title="Volume +">
+                                        Vol +
+                                    </button>
+                                    <button class="btn btn-secondary btn-sm" onclick="DEVICE_PAGE.sendKey(26)" title="Tela / Power">
+                                        ${UI.icon('power')} Power
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Coluna Direita (40%): Hardware & Rede + Watchdog Timeline + Apps Instalados -->
+                    <aside class="device-col-side">
+                        <!-- Card 4: Informações do Dispositivo -->
+                        <div class="card device-card">
+                            <div class="card-header">
+                                <h2 class="card-title">${UI.icon('server')} Informações do Dispositivo</h2>
+                            </div>
+                            <div class="device-info-table" id="d-info-table">
+                                ${renderDeviceInfoRows(device, st)}
+                            </div>
+                        </div>
+
+                        <!-- Card 5: Watchdog & Linha do Tempo -->
+                        <div class="card device-card">
+                            <div class="card-header">
+                                <h2 class="card-title">${UI.icon('clock')} Watchdog & Linha do Tempo</h2>
+                            </div>
+                            <div class="device-watchdog-content" id="d-watchdog-content">
+                                ${renderWatchdogRows(dstate)}
+                            </div>
+                        </div>
+
+                        <!-- Card 6: Apps Instalados (APK) -->
+                        <div class="card device-card">
+                            <div class="card-header">
+                                <div class="card-title-wrap">
+                                    <h2 class="card-title">${UI.icon('archive')} Apps Instalados</h2>
+                                    <span class="badge" id="d-apps-count-badge">Carregando...</span>
+                                </div>
+                                <div class="card-header-actions">
+                                    <button class="btn btn-secondary btn-sm" onclick="DEVICE_PAGE.installApp()" title="Fazer upload de APK">
+                                        ${UI.icon('upload')} Instalar APK
+                                    </button>
+                                    <button class="btn btn-ghost btn-sm" onclick="DEVICE_PAGE.loadApps()" title="Recarregar lista de apps" aria-label="Recarregar lista de apps">
+                                        ${UI.icon('refresh')}
+                                    </button>
+                                </div>
+                            </div>
+                            <input type="file" id="d-apk-file" accept=".apk" style="display:none" />
+                            <div class="apps-list-container" id="d-apps-list">
+                                <div class="text-muted text-xs p-3">Carregando apps instalados...</div>
+                            </div>
+                        </div>
+                    </aside>
+                </main>
+
+                <!-- 3. Gaveta (Drawer) Shell ADB na Base -->
+                <div class="device-shell-drawer ${isShellDrawerOpen ? 'open' : ''}" id="device-shell-drawer">
+                    <div class="shell-drawer-header" onclick="DEVICE_PAGE.toggleShellDrawer()">
+                        <div class="shell-drawer-title">
+                            <span class="shell-icon">${UI.icon('terminal')}</span>
+                            <strong>Terminal Shell ADB</strong>
+                            <span class="text-muted text-xs">Acesso rápido ao console do TV Box</span>
+                        </div>
+                        <div class="shell-drawer-quick-chips" onclick="event.stopPropagation()">
+                            <button type="button" class="quick-chip" onclick="DEVICE_PAGE.runQuickCommand('getprop ro.build.version.release')">Android Version</button>
+                            <button type="button" class="quick-chip" onclick="DEVICE_PAGE.runQuickCommand('dumpsys battery')">Bateria</button>
+                            <button type="button" class="quick-chip" onclick="DEVICE_PAGE.runQuickCommand('uptime')">Uptime</button>
+                            <button type="button" class="quick-chip" onclick="DEVICE_PAGE.runQuickCommand('pm list packages -3')">Apps -3</button>
+                        </div>
+                        <button type="button" class="btn btn-ghost btn-sm shell-drawer-toggle" aria-label="Expandir ou recolher shell" aria-expanded="${isShellDrawerOpen ? 'true' : 'false'}">
+                            ${isShellDrawerOpen ? '▼ Recolher' : '▲ Expandir'}
+                        </button>
                     </div>
-                    <p class="text-muted text-sm" style="margin-top:6px">Desative se o conteúdo foi pausado de propósito — evita que o watchdog fique tentando reabrir.</p>
+                    <div class="shell-drawer-body" id="shell-drawer-body">
+                        <div class="device-shell-output" id="d-shell-out" role="log" aria-live="polite">Aguardando comando. Digite abaixo ou selecione um atalho...</div>
+                        <div class="device-shell-input-row">
+                            <span class="shell-prompt">$</span>
+                            <input type="text" id="d-shell-input" placeholder="Digite um comando shell ADB (ex: getprop ro.product.model)" onkeydown="if(event.key==='Enter')DEVICE_PAGE.runShell()" autocomplete="off" />
+                            <button class="btn btn-primary btn-sm" onclick="DEVICE_PAGE.runShell()">Executar</button>
+                            <button class="btn btn-secondary btn-sm" onclick="DEVICE_PAGE.clearShell()">Limpar</button>
+                        </div>
+                    </div>
                 </div>
             </div>
         `;
     }
 
-    function renderApps(container) {
-        container.innerHTML = `
-            <div class="device-info-card full">
-                <h3>${UI.icon('archive')} APK — Gerenciar Apps</h3>
-                <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center">
-                    <button class="btn btn-primary btn-sm" onclick="DEVICE_PAGE.installApp()">${UI.icon('upload')} Instalar APK</button>
-                    <button class="btn btn-secondary btn-sm" onclick="DEVICE_PAGE.loadApps()">${UI.icon('refresh')} Recarregar Lista</button>
-                    <span class="text-muted text-sm" id="d-apk-status" style="margin-left:4px;align-self:center"></span>
-                </div>
-                <input type="file" id="d-apk-file" accept=".apk" style="display:none">
-                <div id="d-apps-list" class="apps-list">
-                    <div class="text-muted text-sm">Carregando apps instalados...</div>
-                </div>
-            </div>
-        `;
-        loadApps();
-    }
+    /**
+     * Renderiza linhas do card de Informações do Dispositivo
+     */
+    function renderDeviceInfoRows(device, st) {
+        const adbConnected = st?.adb_connected;
+        const adbText = adbConnected ? 'Conectado' : 'Offline';
+        const adbClass = adbConnected ? 'text-success' : 'text-danger';
+        const rootText = st?.root ? 'Sim (Root Ativo)' : 'Não';
+        const modelText = st?.model || device.model || '--';
+        const androidVer = st?.android_version || '--';
+        const uptimeText = st?.uptime ? UI.timeAgo(new Date(Date.now() - (st.uptime * 1000))) : (st?.uptime_str || '--');
 
-    function renderShellTab(container) {
-        container.innerHTML = `
-            <div class="device-info-card full">
-                <h3>${UI.icon('terminal')} Shell Remoto</h3>
-                <div class="device-shell-output" id="d-shell-out">Digite um comando abaixo...</div>
-                <div class="device-shell-input">
-                    <input type="text" id="d-shell-input" placeholder="Digite um comando (ex: getprop ro.build.version.release)" onkeydown="if(event.key==='Enter')DEVICE_PAGE.runShell()">
-                    <button class="btn btn-primary btn-sm" onclick="DEVICE_PAGE.runShell()">Executar</button>
-                    <button class="btn btn-secondary btn-sm" onclick="DEVICE_PAGE.clearShell()">Limpar</button>
-                </div>
-            </div>
+        return `
+            <div class="info-row"><span class="info-key">Endereço IP</span><span class="info-val font-mono">${UI.escapeHtml(device.ip || '--')}</span></div>
+            <div class="info-row"><span class="info-key">Porta ADB</span><span class="info-val font-mono">${device.adb_port || 5555}</span></div>
+            <div class="info-row"><span class="info-key">Conexão ADB</span><span class="info-val ${adbClass} font-semibold">${adbText}</span></div>
+            <div class="info-row"><span class="info-key">Endereço MAC</span><span class="info-val font-mono">${UI.escapeHtml(device.mac || '--')}</span></div>
+            <div class="info-row"><span class="info-key">Modelo</span><span class="info-val">${UI.escapeHtml(modelText)}</span></div>
+            <div class="info-row"><span class="info-key">Android</span><span class="info-val">${UI.escapeHtml(androidVer)}</span></div>
+            <div class="info-row"><span class="info-key">Root</span><span class="info-val">${rootText}</span></div>
+            <div class="info-row"><span class="info-key">Grupo</span><span class="info-val">${UI.escapeHtml(groupName || device.group || '--')}</span></div>
+            <div class="info-row"><span class="info-key">Localização</span><span class="info-val">${UI.escapeHtml(device.location || '--')}</span></div>
+            <div class="info-row"><span class="info-key">Uptime</span><span class="info-val">${uptimeText}</span></div>
         `;
     }
 
-    function renderScreenshots(container) {
-        container.innerHTML = `
-            <div class="device-info-card full">
-                <h3>${UI.icon('camera')} Screenshot</h3>
-                <div style="display:flex;gap:8px;margin-bottom:10px">
-                    <button class="btn btn-primary btn-sm" onclick="DEVICE_PAGE.captureScreenshot()">${UI.icon('camera')} Capturar agora</button>
-                </div>
-                <div id="d-screenshot-area">
-                    <div class="text-muted text-sm">Clique em "Capturar agora" para obter screenshot.</div>
-                </div>
-                <div id="d-screenshot-img" class="device-screenshot" style="display:none">
-                    <img id="d-screenshot-src" src="" alt="Screenshot" onclick="window.open(this.src, '_blank')">
+    /**
+     * Renderiza linhas do card de Watchdog e Linha do Tempo
+     */
+    function renderWatchdogRows(dstate) {
+        const hbDisplay = dstate.last_heartbeat ? freshness({ last_heartbeat: dstate.last_heartbeat }) : '—';
+        const pingDisplay = dstate.last_signage_ping ? freshness({ last_heartbeat: dstate.last_signage_ping }) : '—';
+        const recDisplay = dstate.last_recovery_time ? freshness({ last_heartbeat: dstate.last_recovery_time }) : 'Nenhuma';
+        const reboots = dstate.reboot_count || 0;
+
+        return `
+            <div class="info-row">
+                <span class="info-key">Status Watchdog</span>
+                <span class="info-val"><span class="badge badge-ok">Ativo & Monitorando</span></span>
+            </div>
+            <div class="info-row">
+                <span class="info-key">Heartbeat OS</span>
+                <span class="info-val font-mono">${hbDisplay}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-key">Ping da Página Web</span>
+                <span class="info-val font-mono">${pingDisplay}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-key">Última Recuperação</span>
+                <span class="info-val">${recDisplay}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-key">Reboots Automáticos</span>
+                <span class="info-val"><strong class="font-mono">${reboots}</strong></span>
+            </div>
+
+            <div class="recovery-cascade-wrap">
+                <div class="recovery-cascade-title text-xs font-semibold text-muted">Cascata de Recuperação Automática</div>
+                <div class="recovery-steps-row">
+                    <div class="recovery-step completed" title="1. Tenta reabrir o player/kiosk">1. Player</div>
+                    <div class="recovery-step-arrow">→</div>
+                    <div class="recovery-step completed" title="2. Reinicia interface Wi-Fi">2. Wi-Fi</div>
+                    <div class="recovery-step-arrow">→</div>
+                    <div class="recovery-step completed" title="3. Reinicia interface Ethernet">3. Ethernet</div>
+                    <div class="recovery-step-arrow">→</div>
+                    <div class="recovery-step completed" title="4. Reboot do aparelho se persistir">4. Reboot</div>
                 </div>
             </div>
         `;
     }
 
-    // ── Status (atualiza header + visão geral + stream) ──
-
+    /**
+     * Atualização dinâmica com DOM.patch sem perder estado ou foco
+     */
     async function refreshStatus() {
+        if (!deviceId) return;
         try {
-            const [st, device] = await Promise.all([
-                API.get(`/devices/${deviceId}/status`).catch(() => null),
-                API.get(`/devices/${deviceId}`).catch(() => null),
+            const [st, dev] = await Promise.all([
+                API.get(`/devices/${encodeURIComponent(deviceId)}/status`).catch(() => null),
+                API.get(`/devices/${encodeURIComponent(deviceId)}`).catch(() => null)
             ]);
 
-            const statusEl = document.getElementById('device-header-status');
-            const dstate = device?.state || {};
+            if (dev) currentDevice = dev;
+            if (st) currentStatus = st;
+
+            const dstate = dev?.state || {};
             const status = dstate.status || (st?.adb_connected ? 'online' : 'unknown');
             const reason = dstate.reason || '';
-            if (statusEl) {
-                statusEl.className = `dcard-status ${UI.statusClass(status)}`;
-                statusEl.innerHTML = UI.statusBar(status, reason);
+
+            // 1. Patch no Badge de Status do Header Sticky
+            const statusBadgeContainer = document.getElementById('device-header-status-badge');
+            if (statusBadgeContainer) {
+                DOM.patch(statusBadgeContainer, UI.stateBadge(status, { reason }));
             }
-            const fresh = document.getElementById('device-fresh');
-            if (fresh) fresh.textContent = freshness(dstate);
 
-            // Visão geral
-            const adb = document.getElementById('d-adb');
-            if (adb) adb.textContent = st ? (st.adb_connected ? 'Conectado' : 'Offline') : '—';
-            const model = document.getElementById('d-model');
-            if (model) model.textContent = st?.model || '--';
-            const root = document.getElementById('d-root');
-            if (root) root.textContent = st?.root ? 'Sim' : 'Não';
-            const hb = document.getElementById('d-heartbeat');
-            if (hb) hb.textContent = dstate.last_heartbeat ? freshness({ last_heartbeat: dstate.last_heartbeat }) : '—';
+            // 2. Patch no texto de freshness
+            const freshEl = document.getElementById('device-freshness');
+            if (freshEl) {
+                freshEl.textContent = freshness(dstate);
+            }
 
-            // Stream
-            const activity = document.getElementById('d-activity');
-            if (activity) activity.textContent = dstate.current_activity || '—';
+            // 3. Patch nas Informações do Dispositivo
+            const infoContainer = document.getElementById('d-info-table');
+            if (infoContainer && dev) {
+                DOM.patch(infoContainer, renderDeviceInfoRows(dev, st));
+            }
+
+            // 4. Patch no Watchdog e Linha do Tempo
+            const watchdogContainer = document.getElementById('d-watchdog-content');
+            if (watchdogContainer) {
+                DOM.patch(watchdogContainer, renderWatchdogRows(dstate));
+            }
+
+            // 5. Patch na atividade atual
+            const activityBadge = document.getElementById('d-activity-badge');
+            if (activityBadge) {
+                DOM.patch(activityBadge, `<span class="badge badge-mono text-xs" title="Atividade Android em foco">${UI.escapeHtml(dstate.current_activity || 'Sem atividade')}</span>`);
+            }
         } catch (e) {
-            console.warn('Status refresh:', e.message);
+            console.warn('[DEVICE_PAGE] Status refresh failed:', e.message);
         }
     }
 
+    /**
+     * Timer periódico de atualização
+     */
     function startAutoRefresh() {
         if (refreshTimer) clearInterval(refreshTimer);
-        refreshTimer = setInterval(refreshStatus, 30000);
+        refreshTimer = setInterval(refreshStatus, 15000);
+    }
+
+    /**
+     * Listener para eventos WebSocket
+     */
+    function setupWebSocket() {
+        if (typeof WS === 'undefined') return;
+        if (wsHandler) WS.off('all', wsHandler);
+
+        wsHandler = (ev) => {
+            if (!ev || (ev.device_id && ev.device_id !== deviceId)) return;
+            if (ev.type === 'health' || ev.type === 'alert' || ev.type === 'magisk') {
+                refreshStatus();
+            }
+        };
+        WS.on('all', wsHandler);
     }
 
     function destroy() {
@@ -302,253 +487,84 @@ const DEVICE_PAGE = (() => {
             clearInterval(refreshTimer);
             refreshTimer = null;
         }
-    }
-
-    // ── Apps ────────────────────────────────────
-
-    async function loadApps() {
-        const el = document.getElementById('d-apps-list');
-        if (!el) return;
-        const status = document.getElementById('d-apk-status');
-        if (status) status.textContent = 'Carregando...';
-
-        try {
-            const res = await API.get(`/devices/${deviceId}/apps`);
-            if (!res.success || !res.packages || res.packages.length === 0) {
-                el.innerHTML = '<div class="text-muted text-sm">Nenhum app de terceiros instalado.</div>';
-                if (status) status.textContent = '';
-                return;
-            }
-            let html = `<div class="apps-count">${res.count} apps de terceiros</div>`;
-            res.packages.forEach(p => {
-                html += `
-                    <div class="app-row">
-                        <span class="app-name">${UI.escapeHtml(p.name)}</span>
-                        <code class="app-pkg">${UI.escapeHtml(p.package)}</code>
-                        <button class="btn btn-sm btn-danger" onclick="DEVICE_PAGE.uninstallApp('${UI.escAttr(p.package)}')">${UI.icon('trash')}</button>
-                    </div>`;
-            });
-            el.innerHTML = html;
-            if (status) status.textContent = '';
-        } catch (e) {
-            el.innerHTML = `<div class="text-danger">Erro: ${UI.escapeHtml(e.message)}</div>`;
-            if (status) status.textContent = '';
+        if (wsHandler && typeof WS !== 'undefined') {
+            WS.off('all', wsHandler);
+            wsHandler = null;
+        }
+        const img = document.getElementById('d-screen-img');
+        if (img && img._blobUrl) {
+            URL.revokeObjectURL(img._blobUrl);
+            img._blobUrl = null;
         }
     }
 
-    async function installApp() {
-        const input = document.getElementById('d-apk-file');
-        const status = document.getElementById('d-apk-status');
-        if (!input) return;
-
-        input.onchange = async function(file) {
-            const f = file.target.files[0];
-            if (!f) return;
-            if (!f.name.endsWith('.apk')) { UI.createToast('Selecione um arquivo .apk', 'error'); return; }
-
-            if (status) status.textContent = `Enviando ${f.name}...`;
-            UI.createToast(`Enviando ${f.name}...`, 'info', 3000);
-
-            try {
-                const data = await API.upload(`/devices/${deviceId}/install-apk`, f, 'file');
-                if (data.success) {
-                    UI.createToast(`${f.name} instalado`, 'success');
-                    await loadApps();
-                } else {
-                    UI.createToast(`${data.error || data.output || 'Falha na instalação'}`, 'error');
-                }
-            } catch (e) {
-                UI.createToast(`${e.message}`, 'error');
-            }
-            if (status) status.textContent = '';
-            input.value = '';
-        };
-        input.click();
-    }
-
-    async function uninstallApp(pkg) {
-        UI.showModal(`Remover ${pkg}`, `<p>Desinstalar <strong>${UI.escapeHtml(pkg)}</strong>?</p>`, async () => {
-            try {
-                const res = await API.post(`/devices/${deviceId}/uninstall-app`, { package: pkg });
-                if (res.success) {
-                    UI.createToast(`${pkg} desinstalado`, 'success');
-                    await loadApps();
-                } else {
-                    UI.createToast(`${res.output || 'Falha'}`, 'error');
-                }
-            } catch (e) { UI.createToast(`${e.message}`, 'error'); }
-        });
-    }
-
-    // ── Ações ──────────────────────────────────
-
-    async function action(action) {
-        try {
-            const res = await API.post(`/devices/${deviceId}/${action}`, {});
-            const msg = res.success !== false ? `${action} executado` : `Falha: ${res.error || res.output || ''}`;
-            UI.createToast(msg, res.success !== false ? 'success' : 'error');
-            refreshStatus();
-        } catch (e) {
-            if (!UI.confirmStopScrcpy(e, () => action(action))) {
-                UI.createToast(`Erro em ${action}: ${e.message}`, 'error');
-            }
-        }
-    }
-
-    async function openScrcpy() {
-        try {
-            const dev = await API.get(`/devices/${deviceId}`);
-            if (dev && dev.ip) {
-                UI.launchScrcpy(dev);
-            } else {
-                UI.launchScrcpy({ id: deviceId, ip: deviceId });
-            }
-        } catch (e) {
-            UI.launchScrcpy({ id: deviceId, ip: deviceId });
-        }
-    }
-
-    async function openScrcpyHost() {
-        const dev = await API.get(`/devices/${deviceId}`).catch(() => null);
-        UI.launchScrcpyHost(deviceId, dev?.name || deviceId);
-    }
-
-    async function toggleRecovery(enabled) {
-        try {
-            await API.put(`/devices/${deviceId}`, { recovery_enabled: enabled });
-            UI.createToast(enabled ? 'Recuperação automática ativada' : 'Recuperação automática desativada', 'success');
-        } catch (e) {
-            UI.createToast(`Erro: ${e.message}`, 'error');
-        }
-    }
-
-    // ── Screenshot ──────────────────────────────
+    // ── Screenshots com DOM.crossFadeImage ──────────────────
 
     async function captureScreenshot() {
-        const btn = document.querySelector('[onclick*="captureScreenshot"]');
+        if (isCapturingScreenshot || !deviceId) return;
+        isCapturingScreenshot = true;
+
+        const btn = document.getElementById('d-btn-capture');
+        const spinner = document.getElementById('d-shot-spinner');
+        const img = document.getElementById('d-screen-img');
+        const placeholder = document.getElementById('d-screen-placeholder');
+        const meta = document.getElementById('d-screenshot-meta');
+
         if (btn) btn.disabled = true;
+        if (spinner) spinner.style.display = 'inline-block';
 
         try {
-            const res = await API.post(`/devices/${deviceId}/screenshot`);
-            if (res.success) {
-                const img = document.getElementById('d-screenshot-src');
-                const area = document.getElementById('d-screenshot-img');
-                const status = document.getElementById('d-screenshot-area');
+            const res = await API.post(`/devices/${encodeURIComponent(deviceId)}/screenshot`);
+            if (res.success && res.screenshot_url) {
+                const blobUrl = await API.fetchBlobUrl(`${res.screenshot_url}?t=${Date.now()}`);
                 if (img) {
-                    if (img._blobUrl) { URL.revokeObjectURL(img._blobUrl); }
-                    const blobUrl = await API.fetchBlobUrl(`${res.screenshot_url}?t=${Date.now()}`);
+                    if (img._blobUrl) URL.revokeObjectURL(img._blobUrl);
                     img._blobUrl = blobUrl;
-                    img.src = blobUrl;
+                    img.style.display = 'block';
+                    if (placeholder) placeholder.style.display = 'none';
+                    DOM.crossFadeImage(img, blobUrl);
                 }
-                if (area) area.style.display = 'block';
-                if (status) status.style.display = 'none';
+                if (meta) {
+                    const kb = (res.size_bytes / 1024).toFixed(1);
+                    meta.textContent = `Capturado agora (${kb} KB)`;
+                }
                 UI.createToast(`Screenshot capturado (${(res.size_bytes / 1024).toFixed(1)} KB)`, 'success');
             } else {
-                UI.createToast(`Erro: ${res.error}`, 'error');
+                UI.createToast(`Erro: ${res.error || 'Falha ao capturar screenshot'}`, 'error');
             }
         } catch (e) {
-            UI.createToast(`Erro: ${e.message}`, 'error');
-        }
-        if (btn) btn.disabled = false;
-    }
-
-    // ── Provision ───────────────────────────────
-
-    async function provisionScripts() {
-        const btn = document.querySelector('[onclick*="provisionScripts"]');
-        if (btn) btn.disabled = true;
-        try {
-            const res = await API.post(`/devices/${deviceId}/provision`);
-            UI.createToast(res.success ? `${res.scripts_count} scripts instalados` : `Erro: ${res.errors?.join(', ')}`,
-                res.success ? 'success' : 'error');
-        } catch (e) {
-            UI.createToast(`Erro: ${e.message}`, 'error');
-        }
-        if (btn) btn.disabled = false;
-    }
-
-    // ── Delete ──────────────────────────────────
-
-    async function deleteDevice() {
-        UI.showModal(
-            `Remover ${deviceId}`,
-            `<p>Tem certeza? O YAML do dispositivo será deletado permanentemente.</p>`,
-            async () => {
-                try {
-                    await API.del(`/devices/${deviceId}`);
-                    UI.createToast('Dispositivo removido', 'success');
-                    window.location.hash = '#/';
-                } catch (e) {
-                    UI.createToast(`Erro: ${e.message}`, 'error');
-                }
-            }
-        );
-    }
-
-    // ── Shell ───────────────────────────────────
-
-    async function runShell() {
-        const input = document.getElementById('d-shell-input');
-        const output = document.getElementById('d-shell-out');
-        if (!input || !output) return;
-
-        const command = input.value.trim();
-        if (!command) return;
-
-        const prev = output.textContent;
-        output.textContent = prev + `\n$ ${command}\nExecutando...`;
-
-        try {
-            const res = await API.post(`/devices/${deviceId}/shell`, { command });
-            output.textContent = prev + `\n$ ${command}\n${res.output || '(sem output)'}\n━━━ exit: ${res.exit_code}`;
-        } catch (e) {
-            output.textContent = prev + `\n$ ${command}\nErro: ${e.message}`;
-        }
-
-        input.value = '';
-        output.scrollTop = output.scrollHeight;
-    }
-
-    function clearShell() {
-        const output = document.getElementById('d-shell-out');
-        if (output) output.textContent = 'Shell limpo.';
-    }
-
-    async function setMode(mode) {
-        try {
-            await API.put(`/devices/${deviceId}`, { mode: mode });
-            UI.createToast(mode === 'web' ? 'Modo alterado para Página Web' : 'Modo alterado para Stream RTSP', 'success');
-            const container = document.getElementById('device-tab-content');
-            if (container) {
-                const device = await API.get(`/devices/${deviceId}`);
-                renderStream(container, device);
-            }
-        } catch (e) {
-            UI.createToast(`Erro: ${e.message}`, 'error');
+            UI.createToast(`Erro na captura: ${e.message}`, 'error');
+        } finally {
+            isCapturingScreenshot = false;
+            if (btn) btn.disabled = false;
+            if (spinner) spinner.style.display = 'none';
         }
     }
+
+    // ── Kiosk Web & Players ────────────────────────────────
 
     async function saveWebConfig() {
         const urlInput = document.getElementById('d-web-url');
-        const browserSelect = document.getElementById('d-web-browser');
+        const playerSelect = document.getElementById('d-player-select');
         if (!urlInput) return;
 
         const target_url = urlInput.value.trim();
-        if (!target_url) {
-            UI.createToast('Informe uma URL válida', 'error');
-            return;
-        }
+        const selected = playerSelect ? playerSelect.value : 'freekiosk';
 
-        const web_browser = browserSelect ? browserSelect.value : 'freekiosk';
+        const isStream = (selected === 'vlc' || selected === 'mpv');
+        const payload = {
+            target_url: target_url,
+            mode: isStream ? 'stream' : 'web',
+            web_browser: isStream ? 'chrome' : selected,
+            player: isStream ? selected : 'vlc'
+        };
+
         try {
-            await API.put(`/devices/${deviceId}`, {
-                mode: 'web',
-                target_url: target_url,
-                web_browser: web_browser
-            });
-            UI.createToast('Configuração Web salva com sucesso', 'success');
+            await API.put(`/devices/${encodeURIComponent(deviceId)}`, payload);
+            UI.createToast('Configuração salva com sucesso', 'success');
+            refreshStatus();
         } catch (e) {
-            UI.createToast(`Erro: ${e.message}`, 'error');
+            UI.createToast(`Erro ao salvar: ${e.message}`, 'error');
         }
     }
 
@@ -556,7 +572,7 @@ const DEVICE_PAGE = (() => {
         UI.createToast('Recarregando Kiosk no TV Box...', 'info', 2000);
         try {
             const res = await API.post(`/devices/${encodeURIComponent(deviceId)}/start-stream`);
-            if (res.success) {
+            if (res.success !== false) {
                 UI.createToast('🔄 Kiosk recarregado com sucesso!', 'success');
                 refreshStatus();
             } else {
@@ -567,5 +583,255 @@ const DEVICE_PAGE = (() => {
         }
     }
 
-    return { render, destroy, switchTab, refreshStatus, action, openScrcpy, openScrcpyHost, reloadKiosk, captureScreenshot, installApp, loadApps, uninstallApp, provisionScripts, deleteDevice, runShell, clearShell, toggleRecovery, setMode, saveWebConfig };
+    async function toggleRecovery(enabled) {
+        try {
+            await API.put(`/devices/${encodeURIComponent(deviceId)}`, { recovery_enabled: enabled });
+            UI.createToast(enabled ? 'Recuperação automática ativada' : 'Recuperação automática desativada', 'success');
+        } catch (e) {
+            UI.createToast(`Erro: ${e.message}`, 'error');
+        }
+    }
+
+    async function action(actName) {
+        try {
+            const res = await API.post(`/devices/${encodeURIComponent(deviceId)}/${actName}`, {});
+            const msg = res.success !== false ? `${actName} executado` : `Falha: ${res.error || res.output || ''}`;
+            UI.createToast(msg, res.success !== false ? 'success' : 'error');
+            refreshStatus();
+        } catch (e) {
+            if (!UI.confirmStopScrcpy(e, () => action(actName))) {
+                UI.createToast(`Erro em ${actName}: ${e.message}`, 'error');
+            }
+        }
+    }
+
+    // ── D-Pad Remoto ADB ───────────────────────────────────
+
+    async function sendKey(keycode) {
+        if (!deviceId) return;
+        try {
+            await API.post(`/devices/${encodeURIComponent(deviceId)}/shell`, { command: `input keyevent ${keycode}` });
+        } catch (e) {
+            UI.createToast(`Erro ao enviar comando: ${e.message}`, 'error');
+        }
+    }
+
+    // ── Ações de Cabeçalho ─────────────────────────────────
+
+    async function openScrcpy() {
+        try {
+            const dev = currentDevice || await API.get(`/devices/${encodeURIComponent(deviceId)}`);
+            if (dev && dev.ip) {
+                UI.launchScrcpy(dev);
+            } else {
+                UI.launchScrcpy({ id: deviceId, ip: deviceId });
+            }
+        } catch (e) {
+            UI.launchScrcpy({ id: deviceId, ip: deviceId });
+        }
+    }
+
+    async function rebootDevice() {
+        UI.showModal(
+            'Reiniciar TV Box',
+            `<p>Deseja reiniciar o aparelho <strong>${UI.escapeHtml(deviceId)}</strong> agora?</p>`,
+            async () => {
+                await action('reboot');
+            }
+        );
+    }
+
+    async function provisionScripts() {
+        const btn = document.querySelector('[onclick*="provisionScripts"]');
+        if (btn) btn.disabled = true;
+        try {
+            const res = await API.post(`/devices/${encodeURIComponent(deviceId)}/provision`);
+            UI.createToast(res.success ? `${res.scripts_count} scripts provisionados com sucesso` : `Erro: ${res.errors?.join(', ')}`, res.success ? 'success' : 'error');
+        } catch (e) {
+            UI.createToast(`Erro: ${e.message}`, 'error');
+        }
+        if (btn) btn.disabled = false;
+    }
+
+    async function deleteDevice() {
+        UI.showModal(
+            `Remover ${deviceId}`,
+            `<p>Tem certeza? As configurações e o YAML de <strong>${UI.escapeHtml(deviceId)}</strong> serão excluídos permanentemente.</p>`,
+            async () => {
+                try {
+                    await API.del(`/devices/${encodeURIComponent(deviceId)}`);
+                    UI.createToast('Dispositivo removido com sucesso', 'success');
+                    window.location.hash = '#/devices';
+                } catch (e) {
+                    UI.createToast(`Erro ao remover: ${e.message}`, 'error');
+                }
+            }
+        );
+    }
+
+    // ── Gerenciamento de Apps (APK) ─────────────────────────
+
+    async function loadApps() {
+        const listEl = document.getElementById('d-apps-list');
+        const badgeEl = document.getElementById('d-apps-count-badge');
+        if (!listEl) return;
+
+        try {
+            const res = await API.get(`/devices/${encodeURIComponent(deviceId)}/apps`);
+            if (!res.success || !res.packages || res.packages.length === 0) {
+                listEl.innerHTML = '<div class="text-muted text-xs p-3">Nenhum app de terceiros instalado.</div>';
+                if (badgeEl) badgeEl.textContent = '0 apps';
+                return;
+            }
+
+            if (badgeEl) badgeEl.textContent = `${res.packages.length} apps`;
+
+            let html = '';
+            res.packages.forEach(p => {
+                html += `
+                    <div class="app-item-row">
+                        <div class="app-item-info">
+                            <span class="app-item-name">${UI.escapeHtml(p.name)}</span>
+                            <code class="app-item-pkg">${UI.escapeHtml(p.package)}</code>
+                        </div>
+                        <button class="btn btn-ghost btn-sm app-uninstall-btn" onclick="DEVICE_PAGE.uninstallApp('${UI.escAttr(p.package)}')" title="Desinstalar ${UI.escAttr(p.name)}" aria-label="Desinstalar ${UI.escAttr(p.name)}">
+                            ${UI.icon('trash')}
+                        </button>
+                    </div>
+                `;
+            });
+            listEl.innerHTML = html;
+        } catch (e) {
+            listEl.innerHTML = `<div class="text-danger text-xs p-3">Erro ao carregar apps: ${UI.escapeHtml(e.message)}</div>`;
+            if (badgeEl) badgeEl.textContent = 'Erro';
+        }
+    }
+
+    async function installApp() {
+        const input = document.getElementById('d-apk-file');
+        if (!input) return;
+
+        input.onchange = async function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            if (!file.name.endsWith('.apk')) {
+                UI.createToast('Selecione um arquivo com extensão .apk', 'error');
+                return;
+            }
+
+            UI.createToast(`Enviando ${file.name}...`, 'info', 4000);
+
+            try {
+                const data = await API.upload(`/devices/${encodeURIComponent(deviceId)}/install-apk`, file, 'file');
+                if (data.success) {
+                    UI.createToast(`App ${file.name} instalado com sucesso`, 'success');
+                    await loadApps();
+                } else {
+                    UI.createToast(data.error || data.output || 'Falha na instalação do APK', 'error');
+                }
+            } catch (err) {
+                UI.createToast(`Erro: ${err.message}`, 'error');
+            }
+            input.value = '';
+        };
+        input.click();
+    }
+
+    async function uninstallApp(pkg) {
+        UI.showModal(
+            `Desinstalar ${pkg}`,
+            `<p>Deseja desinstalar o pacote <strong>${UI.escapeHtml(pkg)}</strong> do aparelho?</p>`,
+            async () => {
+                try {
+                    const res = await API.post(`/devices/${encodeURIComponent(deviceId)}/uninstall-app`, { package: pkg });
+                    if (res.success) {
+                        UI.createToast(`${pkg} desinstalado com sucesso`, 'success');
+                        await loadApps();
+                    } else {
+                        UI.createToast(res.output || 'Falha ao desinstalar', 'error');
+                    }
+                } catch (e) {
+                    UI.createToast(`Erro: ${e.message}`, 'error');
+                }
+            }
+        );
+    }
+
+    // ── Drawer Shell ADB ───────────────────────────────────
+
+    function toggleShellDrawer() {
+        isShellDrawerOpen = !isShellDrawerOpen;
+        const drawer = document.getElementById('device-shell-drawer');
+        const toggleBtn = drawer ? drawer.querySelector('.shell-drawer-toggle') : null;
+        if (drawer) {
+            drawer.classList.toggle('open', isShellDrawerOpen);
+        }
+        if (toggleBtn) {
+            toggleBtn.innerHTML = isShellDrawerOpen ? '▼ Recolher' : '▲ Expandir';
+            toggleBtn.setAttribute('aria-expanded', isShellDrawerOpen ? 'true' : 'false');
+        }
+        if (isShellDrawerOpen) {
+            const input = document.getElementById('d-shell-input');
+            if (input) setTimeout(() => input.focus(), 150);
+        }
+    }
+
+    function runQuickCommand(cmd) {
+        if (!isShellDrawerOpen) toggleShellDrawer();
+        const input = document.getElementById('d-shell-input');
+        if (input) input.value = cmd;
+        runShell();
+    }
+
+    async function runShell() {
+        const input = document.getElementById('d-shell-input');
+        const output = document.getElementById('d-shell-out');
+        if (!input || !output || !deviceId) return;
+
+        const command = input.value.trim();
+        if (!command) return;
+
+        const prev = output.textContent;
+        output.textContent = prev + `\n$ ${command}\n[executando...]`;
+        output.scrollTop = output.scrollHeight;
+
+        try {
+            const res = await API.post(`/devices/${encodeURIComponent(deviceId)}/shell`, { command });
+            const exitStr = res.exit_code !== undefined ? ` (exit: ${res.exit_code})` : '';
+            output.textContent = prev + `\n$ ${command}\n${res.output || '(sem output)'}\n[concluído${exitStr}]`;
+        } catch (e) {
+            output.textContent = prev + `\n$ ${command}\nErro: ${e.message}`;
+        }
+
+        input.value = '';
+        output.scrollTop = output.scrollHeight;
+    }
+
+    function clearShell() {
+        const output = document.getElementById('d-shell-out');
+        if (output) output.textContent = 'Shell limpo. Aguardando novo comando...';
+    }
+
+    return {
+        render,
+        destroy,
+        refreshStatus,
+        openScrcpy,
+        reloadKiosk,
+        rebootDevice,
+        provisionScripts,
+        deleteDevice,
+        action,
+        saveWebConfig,
+        toggleRecovery,
+        captureScreenshot,
+        sendKey,
+        loadApps,
+        installApp,
+        uninstallApp,
+        toggleShellDrawer,
+        runQuickCommand,
+        runShell,
+        clearShell
+    };
 })();

@@ -1,110 +1,371 @@
-/* Groups — cards de grupo */
-.groups-toolbar {
-    margin-bottom: var(--space-4);
+/* ==========================================================================
+   Painel TV Box — Groups Page (Design System v2 NOC-Style)
+   Cards compactos em grid responsivo, mini-grid 2x2, tabela interna expansível
+   ========================================================================== */
+
+.groups-page {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    min-width: 0;
 }
 
+/* ── Grid Responsivo de Cards de Grupo ── */
+.groups-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+    gap: var(--space-4);
+    align-items: start;
+}
+
+/* ── Card de Grupo Compacto ── */
 .group-card {
-    margin-bottom: var(--space-3);
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: var(--shadow-sm);
+    transition: border-color var(--dur-fast) ease, box-shadow var(--dur-fast) ease;
 }
 
-.group-header {
+.group-card:hover {
+    border-color: var(--border-strong);
+    box-shadow: var(--shadow-md);
+}
+
+/* ── Cabeçalho do Card ── */
+.group-card-header {
+    padding: 12px 16px;
+    background: var(--bg-base);
+    border-bottom: 1px solid var(--border-subtle);
     display: flex;
     align-items: center;
-    gap: var(--space-3);
-    padding: var(--space-4);
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.group-header-left {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
     min-width: 0;
-}
-
-.group-icon {
-    font-size: 1.5em;
-    color: var(--text-secondary);
-    display: inline-flex;
-}
-
-.group-info {
     flex: 1;
-    min-width: 0;
+}
+
+.group-title-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
 }
 
 .group-name {
-    font-weight: 600;
+    font-size: 0.95rem;
+    font-weight: 700;
     color: var(--text-primary);
+    text-decoration: none;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-.group-meta {
-    font-size: 0.8em;
+.group-name:hover {
+    color: var(--text-primary);
+    text-decoration: underline;
+}
+
+.group-count-badge {
+    font-size: 0.72rem;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: var(--bg-raised);
+    border: 1px solid var(--border-strong);
+    color: var(--text-secondary);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.group-desc {
+    font-size: 0.75rem;
     color: var(--text-muted);
-    margin-top: 2px;
-    overflow-wrap: anywhere;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 260px;
 }
 
-.group-actions-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
+.group-header-right {
     flex-shrink: 0;
-    justify-content: flex-end;
-}
-
-.group-devices {
     display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-    padding: 6px 14px 14px;
+    align-items: center;
 }
 
-.group-device-tag {
+/* ── Preview: Mini-Grid 2x2 de Miniaturas ── */
+.group-preview-box {
+    padding: 12px 16px;
+    background: var(--bg-inset);
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.group-thumb-grid {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    max-height: 180px;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    display: grid;
+    gap: 2px;
+    background-color: var(--border-subtle);
+}
+
+.group-thumb-grid.empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    background: var(--bg-surface);
+}
+
+.group-thumb-grid.single {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr;
+}
+
+.group-thumb-grid.double {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr;
+}
+
+.group-thumb-grid.grid-2x2 {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+}
+
+.group-thumb-cell {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    background: var(--bg-raised);
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: filter var(--dur-fast) ease;
+}
+
+.group-thumb-cell:hover {
+    filter: brightness(1.1);
+}
+
+.group-thumb-cell img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.group-thumb-cell .thumb-fallback {
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+}
+
+.group-thumb-cell .thumb-status-dot {
+    position: absolute;
+    top: 5px;
+    left: 5px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    border: 1px solid rgba(0, 0, 0, 0.4);
+    box-shadow: 0 0 3px rgba(0, 0, 0, 0.6);
+}
+
+.group-thumb-cell .thumb-status-dot.online {
+    background: var(--text-primary);
+}
+
+.group-thumb-cell .thumb-status-dot.warning,
+.group-thumb-cell .thumb-status-dot.degraded {
+    background: var(--text-secondary);
+}
+
+.group-thumb-cell .thumb-status-dot.offline {
+    background: var(--text-muted);
+}
+
+.group-thumb-cell .thumb-name-overlay {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 2px 6px;
+    font-size: 0.65rem;
+    background: rgba(0, 0, 0, 0.7);
+    color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.2;
+}
+
+.group-thumb-cell .thumb-more-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.75);
+    color: #fff;
+    font-size: 0.9rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    letter-spacing: 0.05em;
+}
+
+/* ── Dispositivos do Grupo (Lista/Tabela Expansível) ── */
+.group-devices-collapsible {
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.group-devices-toggle-btn {
+    width: 100%;
+    padding: 8px 16px;
+    background: transparent;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background var(--dur-fast) ease, color var(--dur-fast) ease;
+}
+
+.group-devices-toggle-btn:hover {
+    background: var(--control-hover);
+    color: var(--text-primary);
+}
+
+.group-devices-toggle-btn .toggle-icon {
     display: inline-flex;
     align-items: center;
-    gap: 3px;
-    padding: 3px 8px;
-    border-radius: var(--radius-sm);
-    font-size: 0.78em;
-    background: var(--bg-base);
-    border: 1px solid var(--border-subtle);
-    color: var(--text-secondary);
-    max-width: 100%;
+    transition: transform var(--dur-fast) ease;
 }
 
-.group-device-tag.success { color: var(--text-primary); }
-.group-device-tag.danger { color: var(--text-muted); }
-.group-device-tag.warning { color: var(--text-secondary); font-weight: 600; }
-
-@media (max-width: 720px) {
-    .group-header {
-        align-items: flex-start;
-        flex-wrap: wrap;
-    }
-    .group-actions-list {
-        width: 100%;
-        justify-content: flex-start;
-    }
-    .group-actions-list .btn {
-        flex: 1 1 92px;
-    }
+.group-devices-toggle-btn.open .toggle-icon {
+    transform: rotate(180deg);
 }
 
-/* Contadores de status por grupo (C2) */
-.group-counters {
+.group-devices-table {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height var(--dur-expand) var(--ease-out);
+    background: var(--bg-surface);
+}
+
+.group-devices-table.open {
+    max-height: 360px;
+    overflow-y: auto;
+}
+
+.gdev-row {
     display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-    margin-top: 6px;
+    align-items: center;
+    justify-content: space-between;
+    padding: 7px 16px;
+    border-bottom: 1px solid var(--border-subtle);
+    font-size: 0.8rem;
+    transition: background var(--dur-fast) ease;
 }
-.group-counters .dcard-counter {
-    font-size: 0.7em;
-    padding: 2px 8px;
+
+.gdev-row:hover {
+    background: var(--bg-raised);
 }
-.group-name a,
-a.group-name {
+
+.gdev-row:last-child {
+    border-bottom: none;
+}
+
+.gdev-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    flex: 1;
+}
+
+.gdev-name {
+    font-weight: 600;
     color: var(--text-primary);
     text-decoration: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
-.group-name a:hover {
-    color: var(--text-secondary);
+
+.gdev-name:hover {
     text-decoration: underline;
+}
+
+.gdev-ip {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+.gdev-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: 8px;
+    flex-shrink: 0;
+}
+
+/* ── Card Footer / Ações em Massa ── */
+.group-card-footer {
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    background: var(--bg-base);
+}
+
+.group-card-footer .btn {
+    font-size: 0.76rem;
+    padding: 4px 10px;
+    height: 30px;
+    min-height: 30px;
+}
+
+.group-card-footer .dropdown-wrap {
+    margin-left: auto;
+}
+
+/* ── Responsividade ── */
+@media (max-width: 768px) {
+    .groups-grid {
+        grid-template-columns: 1fr;
+    }
+    .group-card-footer .btn {
+        flex: 1 1 calc(50% - 6px);
+    }
+    .group-card-footer .dropdown-wrap {
+        margin-left: 0;
+        width: 100%;
+    }
+    .group-card-footer .dropdown-wrap .btn {
+        width: 100%;
+    }
 }

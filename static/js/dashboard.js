@@ -37,7 +37,7 @@ const DASHBOARD = (() => {
 
         el.innerHTML = `
             <!-- FAIXA DE INCIDENTE -->
-            <div class="incident" id="incident-banner" style="display:none">
+            <div class="incident" id="incident-banner" style="display:none" role="alert" aria-live="polite">
                 <span class="glyph" aria-hidden="true">!</span>
                 <div class="incident-txt" id="incident-text">Carregando status da frota...</div>
                 <span class="sp"></span>
@@ -103,7 +103,7 @@ const DASHBOARD = (() => {
                     </div>
 
                     <!-- BARRA DE AÇÕES EM LOTE -->
-                    <div class="bulk" id="bulk-bar">
+                    <div class="bulk" id="bulk-bar" role="region" aria-label="Ações em lote">
                         <b><span id="bulk-count">0</span> selecionados</b>
                         <button class="btn btn-sm" onclick="DASHBOARD.bulkReloadKiosk()">↻ Recarregar kiosk</button>
                         <button class="btn btn-sm" onclick="DASHBOARD.bulkChangeUrl()">⇄ Trocar URL</button>
@@ -411,9 +411,9 @@ const DASHBOARD = (() => {
 
                 <div class="acts">
                     <button class="btn btn-sm btn-primary" onclick="DASHBOARD.openScrcpy('${UI.escAttr(d.id)}')" title="Abrir scrcpy neste PC">▣ abrir</button>
-                    <button class="btn btn-sm" onclick="DASHBOARD.reloadKiosk('${UI.escAttr(d.id)}')" title="Recarregar Kiosk no TV Box">↻</button>
+                    <button class="btn btn-sm" onclick="DASHBOARD.reloadKiosk('${UI.escAttr(d.id)}')" title="Recarregar Kiosk no TV Box" aria-label="Recarregar Kiosk no TV Box">↻</button>
                     <div class="dropdown-wrap">
-                        <button class="btn btn-sm btn-icon" onclick="DASHBOARD.toggleMenu(event,'${UI.escAttr(d.id)}')" title="Mais opções">⋯</button>
+                        <button class="btn btn-sm btn-icon" onclick="DASHBOARD.toggleMenu(event,'${UI.escAttr(d.id)}')" title="Mais opções" aria-label="Mais opções" aria-haspopup="true">⋯</button>
                         <div class="dropdown-menu" id="menu-${UI.escAttr(d.id)}">
                             <button class="dropdown-item" onclick="DASHBOARD.openScrcpy('${UI.escAttr(d.id)}')">🖥️ Abrir neste PC</button>
                             <button class="dropdown-item" onclick="DASHBOARD.openScrcpyHost('${UI.escAttr(d.id)}')">🖥️ Abrir no Servidor</button>

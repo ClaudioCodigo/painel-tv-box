@@ -1,233 +1,422 @@
-/* Logs — filtros, tabela, paginação */
+/* ============================================================
+   Painel TV Box — Logs Page (Fase 3B NOC-style)
+   Feed Cronológico Estilo Terminal NOC:
+     - Toolbar com filtros avançados e busca
+     - Terminal feed denso com visual monospaced
+     - Destaques visuais por severidade, badge TV Box interativo
+     - Streaming de eventos ao vivo e rolagem suave
+   ============================================================ */
+
 .logs-page {
-    max-width: 1200px;
+    max-width: 1400px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
 }
 
-.logs-filters {
+/* ── 1. Toolbar de Filtros & Ações NOC ────────────────────────── */
+.logs-toolbar-card {
     background: var(--bg-surface);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius);
     padding: var(--space-4);
-    margin-bottom: var(--space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    box-shadow: var(--shadow-sm);
 }
 
-.logs-filter-row {
+.logs-toolbar-header {
     display: flex;
-    gap: var(--space-3);
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
     flex-wrap: wrap;
-    align-items: flex-end;
-}
-
-.logs-filter-row .form-group {
-    margin-bottom: 0;
-    min-width: 120px;
-}
-
-.logs-filter-row .form-group label {
-    font-size: 0.7em;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin-bottom: 2px;
-}
-
-.logs-filter-row .form-group input,
-.logs-filter-row .form-group select {
-    font-size: 0.8em;
-    padding: 6px 10px;
-    background: var(--bg-base);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-sm);
-    color: var(--text-primary);
-    width: 100%;
-}
-
-.logs-info {
-    font-size: 0.75em;
-    color: var(--text-muted);
-    margin-top: var(--space-2);
-}
-
-.logs-table-wrapper {
-    background: var(--bg-surface);
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius);
-    overflow-x: auto;
-}
-
-.log-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.8em;
-}
-
-.log-table th {
-    text-align: left;
-    padding: 10px 12px;
-    color: var(--text-muted);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    font-size: 0.75em;
-    border-bottom: 1px solid var(--border-strong);
-    position: sticky;
-    top: 0;
-    background: var(--bg-surface);
-}
-
-.log-table td {
-    padding: 6px 12px;
+    padding-bottom: var(--space-3);
     border-bottom: 1px solid var(--border-subtle);
-    vertical-align: top;
 }
 
-.log-table tr:hover td {
-    background: var(--control-hover);
+.logs-toolbar-title-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
 }
 
-.log-ts {
-    white-space: nowrap;
-    color: var(--text-muted);
-    font-family: var(--font-mono);
-    font-size: 0.85em;
-}
-
-.log-msg {
-    color: var(--text-primary);
-    word-break: break-word;
-    max-width: 400px;
-}
-
-.log-dev {
-    color: var(--text-secondary);
-    font-family: var(--font-mono);
-    font-size: 0.85em;
-}
-
-.log-badge {
-    display: inline-block;
-    padding: 1px 6px;
-    border-radius: 3px;
-    font-size: 0.75em;
+.logs-page-title {
+    font-size: 1.25rem;
     font-weight: 700;
-    border: 1px solid var(--border-strong);
-}
-
-.log-error { color: var(--text-primary); font-weight: 600; }
-.log-warning { color: var(--text-secondary); }
-.log-info { color: var(--text-muted); }
-
-.log-badge.log-error { color: var(--text-primary); font-weight: 700; }
-.log-badge.log-warning { color: var(--text-secondary); }
-.log-badge.log-info { color: var(--text-muted); }
-
-/* Data e hora estruturados */
-.log-ts-date {
-    font-weight: 600;
     color: var(--text-primary);
-    font-size: 0.9em;
-    line-height: 1.2;
-}
-
-.log-ts-time {
-    color: var(--text-secondary);
-    font-size: 0.8em;
-    margin-top: 2px;
+    margin: 0;
     display: flex;
     align-items: center;
-    gap: 5px;
+    gap: var(--space-2);
 }
 
-.log-time-num {
-    font-weight: 500;
-}
-
-.log-ts-ago {
+.logs-page-title svg {
     color: var(--text-muted);
-    font-size: 0.8em;
 }
 
-/* Badge de dispositivo clicável */
-.log-dev-badge {
-    display: inline-block;
-    background: var(--bg-base);
-    border: 1px solid var(--border-subtle);
-    color: var(--text-secondary);
-    border-radius: var(--radius-sm);
-    padding: 2px 7px;
-    font-size: 0.85em;
-    font-family: var(--font-mono);
-    font-weight: 500;
-    cursor: pointer;
-    text-align: left;
-    transition: background var(--dur-fast), color var(--dur-fast), border-color var(--dur-fast);
-}
-
-.log-dev-badge:hover {
-    background: var(--control-hover);
-    color: var(--text-primary);
-    border-color: var(--border-strong);
-}
-
-/* Controles de data e ações nos filtros */
-.log-date-wrap {
+.logs-toolbar-actions {
     display: flex;
-    gap: 4px;
     align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
 }
 
-.log-date-wrap input[type="date"] {
-    min-width: 130px;
+#btn-feed-pause.active {
+    background: var(--bg-raised);
+    border-color: var(--border-strong);
+    color: var(--text-primary);
+    font-weight: 700;
 }
 
-.log-date-wrap select {
-    width: auto;
-    min-width: 110px;
-}
-
-.logs-filter-row .form-actions {
-    display: flex;
-    gap: 4px;
+/* Grid de Filtros */
+.logs-filter-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1.5fr;
+    gap: var(--space-3);
     align-items: flex-end;
 }
 
-.logs-pagination {
-    margin-top: var(--space-3);
-}
-
-.pagination {
+.filter-field {
     display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--space-3);
+    flex-direction: column;
+    gap: 4px;
 }
 
-.pagination-info {
-    font-size: 0.85em;
+.filter-grow {
+    min-width: 220px;
+}
+
+.filter-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
     color: var(--text-muted);
 }
 
-/* Chips de nível (D1) */
-.logs-level-chips {
+.date-input-group {
     display: flex;
     gap: 6px;
-    margin-top: var(--space-3);
+    align-items: center;
+}
+
+.date-input-group input[type="date"] {
+    min-width: 130px;
+    flex: 1;
+}
+
+.date-input-group select {
+    flex: 1;
+}
+
+/* Linha de Chips de Severidade */
+.logs-severity-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+    padding-top: var(--space-2);
+}
+
+.severity-chips {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     flex-wrap: wrap;
 }
-.log-chip {
+
+.chip-filter {
     padding: 3px 12px;
     border-radius: 999px;
-    font-size: 0.72em;
+    font-size: 0.72rem;
     font-weight: 700;
     letter-spacing: 0.4px;
     border: 1px solid var(--border-strong);
     color: var(--text-secondary);
-    background: var(--bg-surface);
-    transition: background var(--dur-fast) ease, color var(--dur-fast) ease;
+    background: var(--bg-base);
+    cursor: pointer;
+    transition: background var(--dur-fast) ease, color var(--dur-fast) ease, border-color var(--dur-fast) ease;
 }
-.log-chip:hover { background: var(--control-hover); color: var(--text-primary); }
-.log-chip.active {
+
+.chip-filter:hover {
+    background: var(--control-hover);
+    color: var(--text-primary);
+}
+
+.chip-filter.active {
     background: var(--text-primary);
     color: var(--text-inverse);
     border-color: var(--text-primary);
+}
+
+.logs-active-summary {
+    margin-left: auto;
+}
+
+/* ── 2. Terminal NOC Console Feed ────────────────────────────── */
+.terminal-container {
+    background: var(--bg-base);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+}
+
+.terminal-header {
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border-strong);
+    padding: 8px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    user-select: none;
+}
+
+.terminal-header-left {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.term-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    transition: background var(--dur-fast) ease;
+}
+
+.term-status-dot.active {
+    background: var(--text-primary);
+    box-shadow: 0 0 8px rgba(255, 255, 255, 0.6);
+    animation: livePulse 2s infinite ease-in-out;
+}
+
+@keyframes livePulse {
+    0% { transform: scale(0.95); opacity: 0.7; }
+    50% { transform: scale(1.15); opacity: 1; }
+    100% { transform: scale(0.95); opacity: 0.7; }
+}
+
+.term-title-text {
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: var(--text-primary);
+}
+
+.term-badge-count {
+    background: var(--bg-base);
+    border: 1px solid var(--border-subtle);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+}
+
+.terminal-header-right {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+}
+
+.term-checkbox-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-muted);
+    cursor: pointer;
+    user-select: none;
+}
+
+/* Corpo do Terminal (NOC Monospaced Feed) */
+.terminal-body {
+    background: var(--bg-base);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 0.81rem;
+    line-height: 1.45;
+    padding: var(--space-3) var(--space-4);
+    min-height: 520px;
+    max-height: 68vh;
+    overflow-y: auto;
+    scroll-behavior: smooth;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Linha de Console */
+.term-line {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding: 3px 6px;
+    border-radius: var(--radius-sm);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+    transition: background var(--dur-instant) ease;
+}
+
+.term-line:hover {
+    background: var(--control-hover);
+}
+
+.term-line-live {
+    animation: termLineAppear var(--dur-fast) var(--ease-appear);
+}
+
+@keyframes termLineAppear {
+    from {
+        opacity: 0;
+        transform: translateY(2px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.term-ts {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    white-space: nowrap;
+    flex-shrink: 0;
+    user-select: none;
+}
+
+.term-badge {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    line-height: 1.2;
+    flex-shrink: 0;
+    user-select: none;
+    border: 1px solid var(--border-strong);
+}
+
+.term-badge-info {
+    color: var(--text-muted);
+    border-color: var(--border-subtle);
+    background: transparent;
+}
+
+.term-badge-warn {
+    color: var(--text-primary);
+    background: var(--bg-raised);
+    border-color: var(--text-secondary);
+}
+
+.term-badge-bad {
+    color: var(--text-inverse);
+    background: var(--text-primary);
+    border-color: var(--text-primary);
+}
+
+.term-badge-crit {
+    color: var(--text-inverse);
+    background: var(--text-primary);
+    border-color: var(--text-primary);
+    font-weight: 800;
+}
+
+.term-src {
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    flex-shrink: 0;
+    user-select: none;
+}
+
+.term-dev-col {
+    flex-shrink: 0;
+}
+
+.term-dev-badge {
+    background: var(--bg-raised);
+    border: 1px solid var(--border-strong);
+    color: var(--text-secondary);
+    border-radius: 3px;
+    padding: 1px 6px;
+    font-size: 0.72rem;
+    font-family: var(--font-mono);
+    cursor: pointer;
+    transition: background var(--dur-fast) ease, color var(--dur-fast) ease, border-color var(--dur-fast) ease;
+}
+
+.term-dev-badge:hover {
+    background: var(--control-hover);
+    color: var(--text-primary);
+    border-color: var(--text-primary);
+}
+
+.term-dev-empty {
+    font-size: 0.72rem;
+}
+
+.term-msg {
+    color: var(--text-primary);
+    word-break: break-all;
+    flex: 1;
+}
+
+/* Variações de cor sutil na linha completa */
+.term-lvl-bad .term-msg {
+    font-weight: 600;
+}
+
+.term-lvl-crit {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.term-lvl-crit .term-msg {
+    font-weight: 700;
+}
+
+.term-empty-state {
+    margin: auto;
+    font-size: 0.85rem;
+}
+
+/* ── 3. Paginação ────────────────────────────────────────────── */
+.logs-pagination-bar {
+    display: flex;
+    justify-content: center;
+    padding: var(--space-2) 0;
+}
+
+/* ── Responsividade ─────────────────────────────────────────── */
+@media (max-width: 1024px) {
+    .logs-filter-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+@media (max-width: 640px) {
+    .logs-filter-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .logs-toolbar-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .logs-toolbar-actions {
+        width: 100%;
+    }
+
+    .term-line {
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    .term-msg {
+        width: 100%;
+    }
 }

@@ -1,127 +1,714 @@
-/* Device — página de detalhe do TV Box */
-.device-detail {
-    max-width: 800px;
+/* ============================================================
+   Painel TV Box — Device Page (Fase 3B NOC-style)
+   Layout em 2 Colunas:
+     - Barra de Ações Sticky no Topo
+     - Coluna Esquerda (60%): Live Screenshot, Kiosk Web, D-Pad Remoto
+     - Coluna Direita (40%): Hardware, Watchdog Timeline, Apps
+     - Gaveta (Drawer) Shell ADB na Base
+   ============================================================ */
+
+.device-page-layout {
+    max-width: 1400px;
     margin: 0 auto;
+    padding-bottom: 80px; /* Espaço para gaveta shell na base */
 }
 
-.device-header {
+.device-loading-skeleton {
+    display: grid;
+    grid-template-columns: 1.5fr 1fr;
+    gap: var(--space-4);
+    margin-top: var(--space-4);
+}
+
+/* ── 1. Barra de Ações Sticky no Topo ────────────────────────── */
+.device-sticky-header {
+    position: sticky;
+    top: var(--header-h, 56px);
+    z-index: 15;
+    background: var(--bg-surface);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+    padding: var(--space-3) var(--space-4);
+    margin-bottom: var(--space-4);
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: var(--space-4);
-    margin-bottom: var(--space-5);
+    flex-wrap: wrap;
+    box-shadow: var(--shadow-sm);
 }
 
-.device-header .device-icon {
-    font-size: 2.5em;
+.device-header-left {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    min-width: 280px;
+}
+
+.device-header-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    background: var(--bg-raised);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    flex-shrink: 0;
+}
+
+.device-header-titles {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.device-header-title-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+}
+
+.device-header-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0;
+    line-height: 1.2;
+}
+
+.device-id-pill {
+    background: var(--bg-base);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    padding: 1px 7px;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.device-header-meta {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    flex-wrap: wrap;
+}
+
+.device-meta-ip {
     color: var(--text-secondary);
 }
 
-.device-header .device-info h2 {
-    font-size: 1.3em;
+.device-loc-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--bg-base);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: 1px 6px;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.device-meta-freshness {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.device-header-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+}
+
+/* ── 2. Grid Principal em 2 Colunas (60% / 40%) ────────────── */
+.device-noc-grid {
+    display: grid;
+    grid-template-columns: 1.5fr 1fr;
+    gap: var(--space-4);
+    align-items: start;
+}
+
+.device-col-main,
+.device-col-side {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+}
+
+.device-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+    padding: var(--space-4);
+}
+
+.device-card .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    margin-bottom: var(--space-3);
+    padding-bottom: var(--space-2);
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.card-title-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.card-title-wrap .card-title {
+    font-size: 0.95rem;
+    font-weight: 700;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.card-title-wrap .card-title svg {
+    color: var(--text-muted);
+}
+
+/* ── Screenshot Ao Vivo ───────────────────────────────────────── */
+.device-screen-wrapper {
+    background: var(--bg-inset);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    min-height: 280px;
+    max-height: 420px;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.device-live-img {
+    width: 100%;
+    max-height: 420px;
+    object-fit: contain;
+    cursor: pointer;
+    transition: opacity var(--dur-crossfade) ease;
+}
+
+.device-screen-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-3);
+    padding: var(--space-5);
+    text-align: center;
+    color: var(--text-muted);
+}
+
+.device-screen-placeholder .placeholder-icon {
+    opacity: 0.4;
+}
+
+.device-screen-placeholder .placeholder-text {
+    font-size: 0.85rem;
+    margin: 0;
+}
+
+.btn-spinner {
+    display: inline-block;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* ── Controles Kiosk Web & Player ────────────────────────────── */
+.kiosk-controls-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+.kiosk-config-grid {
+    display: grid;
+    grid-template-columns: 1fr 180px;
+    gap: var(--space-3);
+}
+
+.kiosk-action-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--border-subtle);
+    flex-wrap: wrap;
+}
+
+.kiosk-playback-btns {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+}
+
+.kiosk-recovery-wrap {
+    display: flex;
+    align-items: center;
+}
+
+.switch-control {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    cursor: pointer;
+    user-select: none;
+}
+
+.switch-control input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.switch-slider {
+    position: relative;
+    width: 36px;
+    height: 20px;
+    background: var(--border-strong);
+    border-radius: 20px;
+    transition: background var(--dur-fast) ease;
+}
+
+.switch-slider::before {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    background: var(--text-primary);
+    border-radius: 50%;
+    transition: transform var(--dur-fast) ease;
+}
+
+.switch-control input:checked + .switch-slider {
+    background: var(--text-primary);
+}
+
+.switch-control input:checked + .switch-slider::before {
+    background: var(--text-inverse);
+    transform: translateX(16px);
+}
+
+/* ── D-Pad Virtual Remoto ────────────────────────────────────── */
+.dpad-card-body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-4);
+    padding: var(--space-2) 0;
+}
+
+.dpad-interactive-wrapper {
+    background: var(--bg-base);
+    border: 1px solid var(--border-strong);
+    border-radius: 50%;
+    padding: var(--space-3);
+    box-shadow: inset 0 2px 6px rgba(0,0,0,0.4);
+}
+
+.dpad-cross-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 56px);
+    grid-template-rows: repeat(3, 56px);
+    gap: 4px;
+    align-items: center;
+    justify-items: center;
+}
+
+.dpad-btn {
+    width: 52px;
+    height: 52px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-raised);
+    border: 1px solid var(--border-strong);
+    color: var(--text-primary);
+    font-size: 0.95rem;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+    transition: background var(--dur-fast) ease, transform var(--dur-instant) ease, border-color var(--dur-fast) ease;
+}
+
+.dpad-btn:hover {
+    background: var(--control-hover);
+    border-color: var(--text-secondary);
+}
+
+.dpad-btn:active {
+    transform: scale(0.92);
+    background: var(--text-primary);
+    color: var(--text-inverse);
+}
+
+.dpad-up {
+    grid-column: 2;
+    grid-row: 1;
+    border-radius: 12px 12px 4px 4px;
+}
+
+.dpad-left {
+    grid-column: 1;
+    grid-row: 2;
+    border-radius: 12px 4px 4px 12px;
+}
+
+.dpad-center {
+    grid-column: 2;
+    grid-row: 2;
+    border-radius: 50%;
+    background: var(--bg-surface);
+    font-size: 0.85rem;
+    border: 2px solid var(--border-strong);
+}
+
+.dpad-center:hover {
+    border-color: var(--text-primary);
+}
+
+.dpad-right {
+    grid-column: 3;
+    grid-row: 2;
+    border-radius: 4px 12px 12px 4px;
+}
+
+.dpad-down {
+    grid-column: 2;
+    grid-row: 3;
+    border-radius: 4px 4px 12px 12px;
+}
+
+.dpad-actions-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+    max-width: 500px;
+}
+
+/* ── Coluna Direita: Info, Watchdog, Apps ─────────────────────── */
+.device-info-table {
+    display: flex;
+    flex-direction: column;
+}
+
+.info-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--border-subtle);
+    font-size: 0.82rem;
+}
+
+.info-row:last-child {
+    border-bottom: none;
+}
+
+.info-key {
+    color: var(--text-muted);
+}
+
+.info-val {
+    color: var(--text-primary);
+    text-align: right;
+}
+
+.text-success { color: var(--text-primary); }
+.text-danger { color: var(--text-muted); }
+.font-mono { font-family: var(--font-mono); }
+.font-semibold { font-weight: 600; }
+
+/* Watchdog timeline & cascade stepper */
+.device-watchdog-content {
+    display: flex;
+    flex-direction: column;
+}
+
+.badge-ok {
+    background: var(--bg-raised);
+    border: 1px solid var(--border-strong);
+    color: var(--text-primary);
+    border-radius: 4px;
+    padding: 2px 7px;
+    font-size: 0.72rem;
     font-weight: 600;
 }
 
-.device-header .device-info .device-location {
-    font-size: 0.85em;
-    color: var(--text-secondary);
+.recovery-cascade-wrap {
+    margin-top: var(--space-3);
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--border-subtle);
 }
 
-.device-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-    margin-bottom: var(--space-5);
-}
-
-.device-actions .btn {
-    font-size: 0.8em;
-    padding: 8px 14px;
-}
-
-.device-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: var(--space-3);
-    margin-bottom: var(--space-5);
-}
-
-.device-grid .full {
-    grid-column: 1 / -1;
-}
-
-.device-info-card h3 {
-    font-size: 0.8em;
-    color: var(--text-muted);
+.recovery-cascade-title {
+    margin-bottom: var(--space-2);
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    margin-bottom: var(--space-3);
 }
 
-.device-screenshot img {
-    width: 100%;
-    max-height: 300px;
-    object-fit: contain;
-    background: var(--bg-inset);
+.recovery-steps-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+}
+
+.recovery-step {
+    padding: 4px 8px;
+    background: var(--bg-base);
+    border: 1px solid var(--border-strong);
     border-radius: var(--radius-sm);
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.recovery-step-arrow {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+
+/* Apps Instalados */
+.apps-list-container {
+    max-height: 260px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    background: var(--bg-base);
+}
+
+.app-item-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border-subtle);
+    gap: var(--space-2);
+    transition: background var(--dur-fast) ease;
+}
+
+.app-item-row:last-child {
+    border-bottom: none;
+}
+
+.app-item-row:hover {
+    background: var(--control-hover);
+}
+
+.app-item-info {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.app-item-name {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.app-item-pkg {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.app-uninstall-btn {
+    min-height: 28px;
+    height: 28px;
+    width: 28px;
+    padding: 0;
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+}
+
+.app-uninstall-btn:hover {
+    color: var(--text-primary);
+}
+
+/* ── 3. Gaveta (Drawer) Shell ADB na Base ─────────────────────── */
+.device-shell-drawer {
+    position: fixed;
+    bottom: 0;
+    left: var(--sidebar-w, 240px);
+    right: 0;
+    z-index: 20;
+    background: var(--bg-surface);
+    border-top: 1px solid var(--border-strong);
+    box-shadow: 0 -4px 20px rgba(0,0,0,0.3);
+    transition: transform var(--dur-expand) var(--ease-out);
+    transform: translateY(calc(100% - 44px)); /* Altura do header da gaveta */
+}
+
+.device-shell-drawer.open {
+    transform: translateY(0);
+}
+
+.shell-drawer-header {
+    height: 44px;
+    padding: 0 var(--space-4);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    background: var(--bg-raised);
     cursor: pointer;
+    user-select: none;
+}
+
+.shell-drawer-title {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: 0.85rem;
+    color: var(--text-primary);
+}
+
+.shell-drawer-title .shell-icon {
+    color: var(--text-muted);
+}
+
+.shell-drawer-quick-chips {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    overflow-x: auto;
+}
+
+.quick-chip {
+    padding: 2px 8px;
+    font-size: 0.72rem;
+    font-family: var(--font-mono);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-strong);
+    background: var(--bg-base);
+    color: var(--text-secondary);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background var(--dur-fast) ease, color var(--dur-fast) ease;
+}
+
+.quick-chip:hover {
+    background: var(--control-hover);
+    color: var(--text-primary);
+    border-color: var(--text-secondary);
+}
+
+.shell-drawer-toggle {
+    font-size: 0.75rem;
+    white-space: nowrap;
+}
+
+.shell-drawer-body {
+    padding: var(--space-3) var(--space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    height: 280px;
 }
 
 .device-shell-output {
-    background: var(--bg-inset);
+    flex: 1;
+    background: var(--bg-base);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
     color: var(--text-primary);
     font-family: var(--font-mono);
-    font-size: 0.8em;
+    font-size: 0.78rem;
     padding: var(--space-3);
-    border-radius: var(--radius-sm);
-    max-height: 300px;
     overflow-y: auto;
     white-space: pre-wrap;
     word-break: break-all;
-    border: 1px solid var(--border-subtle);
+    line-height: 1.4;
 }
 
-.device-shell-input {
+.device-shell-input-row {
     display: flex;
+    align-items: center;
     gap: var(--space-2);
-    margin-top: var(--space-2);
 }
 
-.device-shell-input input {
-    flex: 1;
-    background: var(--bg-inset);
-    color: var(--text-primary);
+.shell-prompt {
     font-family: var(--font-mono);
-    font-size: 0.85em;
-    padding: 8px 12px;
+    color: var(--text-muted);
+    font-weight: 700;
+}
+
+.device-shell-input-row input {
+    flex: 1;
+    background: var(--bg-base);
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    padding: 6px 10px;
     outline: none;
 }
 
-.device-shell-input input:focus {
+.device-shell-input-row input:focus {
     border-color: var(--focus-ring);
 }
 
-@media (max-width: 600px) {
-    .device-grid {
+/* ── Responsividade ─────────────────────────────────────────── */
+@media (max-width: 1024px) {
+    .device-noc-grid {
         grid-template-columns: 1fr;
+    }
+
+    .device-shell-drawer {
+        left: 0;
     }
 }
 
-/* Tabs do device (Fase B) */
-.device-tabs {
-    display: flex;
-    gap: 4px;
-    border-bottom: 1px solid var(--border-subtle);
-    margin: var(--space-4) 0 0;
-    overflow-x: auto;
-    padding-bottom: 0;
-}
-.device-tab-content {
-    margin-top: var(--space-4);
-}
-.device-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
+@media (max-width: 640px) {
+    .device-sticky-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .device-header-actions {
+        width: 100%;
+    }
+
+    .kiosk-config-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .shell-drawer-quick-chips {
+        display: none;
+    }
 }

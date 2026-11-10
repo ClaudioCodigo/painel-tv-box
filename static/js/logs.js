@@ -1,30 +1,133 @@
 /**
- * Logs Page — busca, filtros avançados, download, auto-refresh.
- * Permite filtrar por TV Box, dia/mês/ano, nível e fonte, além de
- * exibir data e hora completas com timestamp relativo.
+ * Logs Page — Feed Cronológico Estilo Terminal NOC (Fase 3B).
+ *   - Toolbar com filtros avançados (busca, severidade, TV Box dinâmica, período, fonte)
+ *   - Terminal feed denso com visual monospaced, timestamps HH:mm:ss.SSS, badges e live streaming WS
+ *   - Pausa/Retomada de feed, scroll automático e exportação de logs
  */
 const LOGS = (() => {
     let refreshTimer = null;
     let currentQuery = {};
     let inflight = false;
-    let autoRefresh = true;
+    let isFeedPaused = false;
+    let autoScroll = true;
     let knownDevices = [];
+    let wsHandler = null;
+    const maxTerminalLines = 500;
 
+    /**
+     * Formata timestamp para exibição no terminal: HH:mm:ss.SSS e data completa
+     */
+    function formatTs(raw) {
+        if (!raw) {
+            const now = new Date();
+            const time = now.toTimeString().split(' ')[0] + '.' + String(now.getMilliseconds()).padStart(3, '0');
+            return { time, full: now.toLocaleString() };
+        }
+
+        // Tenta parse ISO ou "YYYY-MM-DD HH:mm:ss"
+        let d = new Date(raw);
+        if (isNaN(d.getTime())) {
+            const parts = raw.split(' ');
+            if (parts.length >= 2) {
+                const dateParts = parts[0].split('-');
+                const timeParts = parts[1].split(':');
+                if (dateParts.length === 3 && timeParts.length >= 2) {
+                    d = new Date(dateParts[0], dateParts[1] - 1, dateParts[2], timeParts[0], timeParts[1], timeParts[2] || 0);
+                }
+            }
+        }
+
+        if (!isNaN(d.getTime())) {
+            const h = String(d.getHours()).padStart(2, '0');
+            const m = String(d.getMinutes()).padStart(2, '0');
+            const s = String(d.getSeconds()).padStart(2, '0');
+            const ms = String(d.getMilliseconds()).padStart(3, '0');
+            return {
+                time: `${h}:${m}:${s}.${ms}`,
+                full: d.toLocaleString()
+            };
+        }
+
+        // Fallback: se raw já contiver hora
+        return {
+            time: raw.length > 12 ? raw.slice(-12) : raw,
+            full: raw
+        };
+    }
+
+    /**
+     * Retorna metadados de classe e rótulo por severidade
+     */
+    function getSeverityMeta(level) {
+        const lvl = String(level || 'INFO').toUpperCase();
+        switch (lvl) {
+            case 'CRITICAL':
+                return { cls: 'crit', label: 'CRÍT' };
+            case 'ERROR':
+                return { cls: 'bad', label: 'ERRO' };
+            case 'WARNING':
+            case 'WARN':
+                return { cls: 'warn', label: 'AVISO' };
+            case 'DEBUG':
+                return { cls: 'debug', label: 'DEBUG' };
+            case 'INFO':
+            default:
+                return { cls: 'info', label: 'INFO' };
+        }
+    }
+
+    /**
+     * Renderiza página de logs
+     */
     async function render(el) {
-        UI.setPageTitle('Logs');
-
-        // Lê parâmetros da URL caso venha direcionado (ex: #/logs?device=box-1)
+        UI.setPageTitle('Logs & Eventos');
         const urlParams = getUrlParams();
 
         el.innerHTML = `
             <div class="logs-page">
-                <!-- Filtros -->
-                <div class="logs-filters">
-                    <div class="logs-filter-row">
-                        <div class="form-group">
-                            <label for="log-source">Fonte</label>
-                            <select id="log-source">
-                                <option value="">Todas</option>
+                <!-- 1. Toolbar de Filtros & Ações NOC -->
+                <div class="logs-toolbar-card">
+                    <div class="logs-toolbar-header">
+                        <div class="logs-toolbar-title-wrap">
+                            <h1 class="logs-page-title">${UI.icon('terminal', 20)} Logs & Eventos</h1>
+                            <span class="text-muted text-xs">Console de auditoria e monitoramento em tempo real</span>
+                        </div>
+                        <div class="logs-toolbar-actions">
+                            <button class="btn btn-primary btn-sm" onclick="LOGS.search(1)">
+                                ${UI.icon('search')} Buscar
+                            </button>
+                            <button class="btn btn-secondary btn-sm" id="btn-feed-pause" onclick="LOGS.togglePause()" title="Pausar ou retomar recebimento de eventos">
+                                <span id="feed-pause-icon">${UI.icon('pause')}</span> <span id="feed-pause-label">Pausar Feed</span>
+                            </button>
+                            <button class="btn btn-secondary btn-sm" onclick="LOGS.download()" title="Exportar arquivo de log completo">
+                                ${UI.icon('download')} Exportar Logs
+                            </button>
+                            <button class="btn btn-ghost btn-sm" onclick="LOGS.clearFilters()" title="Limpar todos os filtros">
+                                ✕ Limpar
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Linha de controles de filtro -->
+                    <div class="logs-filter-grid">
+                        <div class="filter-field filter-grow">
+                            <label class="filter-label" for="log-query">Busca por Texto</label>
+                            <div class="filter-input-wrap">
+                                <input type="text" id="log-query" class="form-input" placeholder="Filtrar por mensagem, IP ou detalhe..." />
+                            </div>
+                        </div>
+
+                        <div class="filter-field">
+                            <label class="filter-label" for="log-device">TV Box</label>
+                            <select id="log-device" class="form-select font-mono">
+                                <option value="">Todas as TVs</option>
+                            </select>
+                        </div>
+
+                        <div class="filter-field">
+                            <label class="filter-label" for="log-source">Fonte</label>
+                            <select id="log-source" class="form-select">
+                                <option value="">Todas as fontes</option>
                                 <option value="system">Sistema</option>
                                 <option value="adb">ADB</option>
                                 <option value="mediamtx">MediaMTX</option>
@@ -33,28 +136,12 @@ const LOGS = (() => {
                                 <option value="api">API</option>
                             </select>
                         </div>
-                        <div class="form-group">
-                            <label for="log-level">Nível</label>
-                            <select id="log-level">
-                                <option value="">Todos</option>
-                                <option value="INFO">INFO</option>
-                                <option value="WARNING">WARNING</option>
-                                <option value="ERROR">ERROR</option>
-                                <option value="DEBUG">DEBUG</option>
-                                <option value="CRITICAL">CRITICAL</option>
-                            </select>
-                        </div>
-                        <div class="form-group" style="min-width: 170px;">
-                            <label for="log-device">TV Box</label>
-                            <select id="log-device">
-                                <option value="">Todas as TVs</option>
-                            </select>
-                        </div>
-                        <div class="form-group" style="min-width: 220px;">
-                            <label for="log-date">Data (Dia / Mês / Ano)</label>
-                            <div class="log-date-wrap">
-                                <input type="date" id="log-date" title="Selecione um dia específico">
-                                <select id="log-date-preset" title="Atalho de período">
+
+                        <div class="filter-field filter-date-field">
+                            <label class="filter-label" for="log-date">Período / Data</label>
+                            <div class="date-input-group">
+                                <input type="date" id="log-date" class="form-input" />
+                                <select id="log-date-preset" class="form-select">
                                     <option value="">Qualquer data</option>
                                     <option value="today">Hoje</option>
                                     <option value="yesterday">Ontem</option>
@@ -62,54 +149,91 @@ const LOGS = (() => {
                                 </select>
                             </div>
                         </div>
-                        <div class="form-group form-group-grow">
-                            <label for="log-query">Buscar</label>
-                            <input type="text" id="log-query" placeholder="Texto na mensagem...">
-                        </div>
-                        <div class="form-group form-actions">
-                            <button class="btn btn-primary btn-sm" onclick="LOGS.search(1)">${UI.icon('search')} Buscar</button>
-                            <button class="btn btn-ghost btn-sm" onclick="LOGS.clearFilters()" title="Limpar todos os filtros">✕ Limpar</button>
-                            <button class="btn btn-secondary btn-sm" onclick="LOGS.download()">${UI.icon('download')} Download</button>
-                            <button class="btn btn-ghost btn-sm" id="log-refresh-toggle" onclick="LOGS.toggleAutoRefresh()" title="Pausar/retomar atualização">${UI.icon('pause')} Auto</button>
-                        </div>
+
+                        <input type="hidden" id="log-level" value="" />
                     </div>
-                    <div class="logs-info" id="logs-info"></div>
-                    <div class="logs-level-chips" id="logs-level-chips">
-                        <button class="log-chip active" data-level="">Todos</button>
-                        <button class="log-chip" data-level="INFO">INFO</button>
-                        <button class="log-chip" data-level="WARNING">WARNING</button>
-                        <button class="log-chip" data-level="ERROR">ERROR</button>
-                        <button class="log-chip" data-level="CRITICAL">CRITICAL</button>
+
+                    <!-- Chips de Severidade -->
+                    <div class="logs-severity-row">
+                        <span class="severity-label text-muted text-xs font-semibold">Severidade:</span>
+                        <div class="severity-chips" id="severity-chips">
+                            <button type="button" class="chip-filter active" data-level="">Todos</button>
+                            <button type="button" class="chip-filter chip-info" data-level="INFO">Info</button>
+                            <button type="button" class="chip-filter chip-warn" data-level="WARNING">Aviso</button>
+                            <button type="button" class="chip-filter chip-bad" data-level="ERROR">Erro</button>
+                            <button type="button" class="chip-filter chip-crit" data-level="CRITICAL">Crítico</button>
+                        </div>
+                        <div class="logs-active-summary text-muted text-xs" id="logs-summary" role="status" aria-live="polite"></div>
                     </div>
                 </div>
 
-                <!-- Tabela de logs -->
-                <div class="logs-table-wrapper">
-                    <div class="logs-table" id="logs-table">
-                        ${UI.skeletons('row', 6)}
+                <!-- 2. Terminal NOC Console Feed -->
+                <div class="terminal-container">
+                    <div class="terminal-header">
+                        <div class="terminal-header-left">
+                            <span class="term-status-dot active" id="term-live-dot" title="Streaming WebSocket Ativo"></span>
+                            <span class="term-title-text font-mono" id="term-live-status">LIVE STREAM NOC</span>
+                            <span class="term-badge-count font-mono" id="term-count-badge">0 eventos</span>
+                        </div>
+                        <div class="terminal-header-right">
+                            <label class="term-checkbox-label text-xs" title="Mantém rolagem acompanhando os novos eventos">
+                                <input type="checkbox" id="term-autoscroll" checked />
+                                <span>Auto-scroll</span>
+                            </label>
+                            <button type="button" class="btn btn-ghost btn-xs" onclick="LOGS.clearTerminal()" title="Limpar visualização do console" aria-label="Limpar visualização do console">
+                                Limpar Tela
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Corpo do Terminal -->
+                    <div class="terminal-body" id="terminal-feed" role="log" aria-live="polite" aria-atomic="false">
+                        <div class="term-skeleton p-4">${UI.skeletons('row', 8)}</div>
                     </div>
                 </div>
 
-                <!-- Paginação -->
-                <div class="logs-pagination" id="logs-pagination"></div>
+                <!-- 3. Paginação Histórica -->
+                <div class="logs-pagination-bar" id="logs-pagination"></div>
             </div>
         `;
 
-        // Carrega lista de TV Boxes
+        // 1. Carrega opções de dispositivos
         await loadDeviceOptions(urlParams.device || urlParams.device_id || '');
 
-        // Aplica filtros vindos da URL caso existam
+        // 2. Aplica parâmetros da URL se houver
         if (urlParams.level) {
-            const levelSel = document.getElementById('log-level');
-            if (levelSel) levelSel.value = urlParams.level;
-            updateLevelChips(urlParams.level);
+            const levelInput = document.getElementById('log-level');
+            if (levelInput) levelInput.value = urlParams.level;
+            updateSeverityChips(urlParams.level);
         }
         if (urlParams.date) {
             const dateInput = document.getElementById('log-date');
             if (dateInput) dateInput.value = urlParams.date;
         }
+        if (urlParams.source) {
+            const srcSel = document.getElementById('log-source');
+            if (srcSel) srcSel.value = urlParams.source;
+        }
+        if (urlParams.q) {
+            const qInput = document.getElementById('log-query');
+            if (qInput) qInput.value = urlParams.q;
+        }
 
-        // Binds de data
+        // 3. Event Listeners de Filtros
+        setupFilterListeners();
+
+        // 4. Inicia WebSocket e polling periódico
+        setupWebSocket();
+        startAutoRefresh();
+
+        // 5. Busca inicial
+        await search(1);
+    }
+
+    /**
+     * Configura listeners de interação nos filtros
+     */
+    function setupFilterListeners() {
         const dateInput = document.getElementById('log-date');
         const datePreset = document.getElementById('log-date-preset');
         if (dateInput) {
@@ -124,8 +248,7 @@ const LOGS = (() => {
             });
         }
 
-        // Binds de inputs (mudança ou Enter aciona a busca)
-        ['log-query', 'log-source', 'log-level', 'log-device'].forEach(id => {
+        ['log-query', 'log-source', 'log-device'].forEach(id => {
             const el = document.getElementById(id);
             if (!el) return;
             if (el.tagName === 'SELECT') {
@@ -137,27 +260,31 @@ const LOGS = (() => {
             }
         });
 
-        // Chips de nível
-        document.querySelectorAll('.logs-level-chips .log-chip').forEach(chip => {
+        // Chips de severidade
+        document.querySelectorAll('#severity-chips .chip-filter').forEach(chip => {
             chip.addEventListener('click', () => {
-                const level = chip.dataset.level || '';
-                const sel = document.getElementById('log-level');
-                if (sel) sel.value = level;
-                updateLevelChips(level);
+                const lvl = chip.dataset.level || '';
+                const hiddenInput = document.getElementById('log-level');
+                if (hiddenInput) hiddenInput.value = lvl;
+                updateSeverityChips(lvl);
                 search(1);
             });
         });
 
-        // Auto-refresh a cada 5s
-        startAutoRefresh();
-
-        // Carrega logs iniciais
-        await search(1);
+        // Toggle do autoscroll
+        const autoScrollCb = document.getElementById('term-autoscroll');
+        if (autoScrollCb) {
+            autoScrollCb.addEventListener('change', (e) => {
+                autoScroll = e.target.checked;
+                if (autoScroll) scrollToBottom();
+            });
+        }
     }
 
-    function updateLevelChips(activeLevel) {
-        document.querySelectorAll('.logs-level-chips .log-chip').forEach(c => {
-            c.classList.toggle('active', (c.dataset.level || '') === (activeLevel || ''));
+    function updateSeverityChips(activeLevel) {
+        document.querySelectorAll('#severity-chips .chip-filter').forEach(c => {
+            const match = (c.dataset.level || '') === (activeLevel || '');
+            c.classList.toggle('active', match);
         });
     }
 
@@ -191,15 +318,13 @@ const LOGS = (() => {
             knownDevices = Array.isArray(devs) ? devs : [];
             let html = '<option value="">Todas as TVs</option>';
             knownDevices.forEach(d => {
-                const label = `${d.name || d.id}${d.ip ? ' · ' + d.ip : ''}`;
+                const label = `${d.name || d.id}${d.ip ? ' (' + d.ip + ')' : ''}`;
                 html += `<option value="${UI.escAttr(d.id)}">${UI.escapeHtml(label)}</option>`;
             });
             sel.innerHTML = html;
-            if (preselect) {
-                sel.value = preselect;
-            }
+            if (preselect) sel.value = preselect;
         } catch (e) {
-            // Silencioso
+            console.warn('[LOGS] Falha ao carregar lista de devices:', e.message);
         }
     }
 
@@ -215,20 +340,13 @@ const LOGS = (() => {
         return params;
     }
 
+    /**
+     * Executa busca com paginação e filtros
+     */
     async function search(page = 1) {
-        const el = document.getElementById('logs-table');
-        if (!el || inflight) return;
+        const feed = document.getElementById('terminal-feed');
+        if (!feed || inflight) return;
         inflight = true;
-        try {
-            await doSearch(page);
-        } finally {
-            inflight = false;
-        }
-    }
-
-    async function doSearch(page = 1) {
-        const el = document.getElementById('logs-table');
-        if (!el) return;
 
         const source = document.getElementById('log-source')?.value || '';
         const level = document.getElementById('log-level')?.value || '';
@@ -255,85 +373,263 @@ const LOGS = (() => {
         try {
             const res = await API.get(url);
 
-            // Informações de paginação e contagem
-            const info = document.getElementById('logs-info');
-            if (info) {
-                let filterSummary = [];
-                if (device) filterSummary.push(`TV: ${device}`);
-                if (dateParam) filterSummary.push(`Data: ${dateParam}`);
-                if (level) filterSummary.push(`Nível: ${level}`);
-                if (source) filterSummary.push(`Fonte: ${source}`);
-                const extra = filterSummary.length ? ` · Filtros ativos: [${filterSummary.join(', ')}]` : '';
-                info.textContent = `${res.total} evento(s) encontrado(s) (página ${res.page} de ${res.pages || 1})${extra}`;
+            // Atualiza resumo
+            const summary = document.getElementById('logs-summary');
+            if (summary) {
+                const parts = [];
+                if (device) parts.push(`TV: ${device}`);
+                if (dateParam) parts.push(`Data: ${dateParam}`);
+                if (level) parts.push(`Nível: ${level}`);
+                if (source) parts.push(`Fonte: ${source}`);
+                const extra = parts.length ? ` · [${parts.join(', ')}]` : '';
+                summary.textContent = `${res.total} eventos encontrados (pág ${res.page}/${res.pages || 1})${extra}`;
             }
 
-            // Tabela
-            if (!res.items || res.items.length === 0) {
-                el.innerHTML = '<div class="empty-state" style="padding:28px;text-align:center;color:var(--text-muted)">Nenhum log encontrado para os filtros selecionados.</div>';
-                renderPagination(res);
-                return;
+            // Atualiza contador do terminal
+            const countBadge = document.getElementById('term-count-badge');
+            if (countBadge) {
+                countBadge.textContent = `${res.items?.length || 0} exibidos`;
             }
 
-            let html = '<table class="log-table"><thead><tr>';
-            html += '<th style="width:170px">Data / Hora</th><th style="width:90px">Nível</th><th style="width:100px">Fonte</th><th style="width:150px">TV Box</th><th>Mensagem</th>';
-            html += '</tr></thead><tbody>';
-
-            for (const item of res.items) {
-                const levelClass = item.level === 'ERROR' || item.level === 'CRITICAL' ? 'log-error' :
-                                   item.level === 'WARNING' ? 'log-warning' : 'log-info';
-
-                // Data e hora estruturados
-                const rawTs = item.timestamp || '';
-                let dateDisplay = '--';
-                let timeDisplay = '';
-                let agoDisplay = '';
-
-                if (rawTs) {
-                    const parts = rawTs.split(' ');
-                    const datePart = parts[0] || '';
-                    const timePart = parts[1] || '';
-
-                    if (datePart.includes('-')) {
-                        const [y, m, d] = datePart.split('-');
-                        dateDisplay = `${d}/${m}/${y}`;
-                    } else {
-                        dateDisplay = datePart;
-                    }
-                    timeDisplay = timePart;
-
-                    const isoTs = rawTs.replace(' ', 'T');
-                    agoDisplay = UI.timeAgo(isoTs);
-                }
-
-                // Dispositivo com badge interativo
-                const devId = item.device && item.device !== '-' ? item.device : '';
-                let devHtml = '<span class="text-muted">—</span>';
-                if (devId) {
-                    devHtml = `<button type="button" class="log-dev-badge" onclick="LOGS.filterDevice('${UI.escAttr(devId)}')" title="Filtrar eventos desta TV">${UI.escapeHtml(devId)}</button>`;
-                }
-
-                html += `<tr class="${levelClass}">
-                    <td class="log-ts" title="${UI.escAttr(rawTs)}">
-                        <div class="log-ts-date">${UI.escapeHtml(dateDisplay)}</div>
-                        <div class="log-ts-time">
-                            <span class="log-time-num">${UI.escapeHtml(timeDisplay)}</span>
-                            ${agoDisplay ? `<span class="log-ts-ago">(${UI.escapeHtml(agoDisplay)})</span>` : ''}
-                        </div>
-                    </td>
-                    <td><span class="log-badge ${levelClass}">${UI.escapeHtml(item.level || '-')}</span></td>
-                    <td>${UI.escapeHtml(item.source || '-')}</td>
-                    <td class="log-dev">${devHtml}</td>
-                    <td class="log-msg">${UI.escapeHtml(item.message)}</td>
-                </tr>`;
-            }
-
-            html += '</tbody></table>';
-            el.innerHTML = html;
-
-            // Paginação
+            // Renderiza linhas no terminal
+            renderTerminalLines(res.items || []);
             renderPagination(res);
+
+            if (autoScroll) scrollToBottom();
         } catch (e) {
-            el.innerHTML = `<div class="error-state">Erro ao buscar logs: ${UI.escapeHtml(e.message)}</div>`;
+            feed.innerHTML = `<div class="term-empty-state text-danger p-4">Erro ao buscar logs: ${UI.escapeHtml(e.message)}</div>`;
+        } finally {
+            inflight = false;
+        }
+    }
+
+    /**
+     * Renderiza o conjunto de linhas no terminal NOC
+     */
+    function renderTerminalLines(items) {
+        const feed = document.getElementById('terminal-feed');
+        if (!feed) return;
+
+        if (!items || items.length === 0) {
+            feed.innerHTML = '<div class="term-empty-state p-5 text-muted text-center">Nenhum registro de log encontrado para os filtros selecionados.</div>';
+            return;
+        }
+
+        const linesHtml = items.map(item => createLineHtml(item)).join('');
+        feed.innerHTML = linesHtml;
+    }
+
+    /**
+     * Cria HTML individual de uma linha de console
+     */
+    function createLineHtml(item) {
+        const sev = getSeverityMeta(item.level);
+        const tsObj = formatTs(item.timestamp);
+        const devId = (item.device && item.device !== '-') ? item.device : '';
+        const devHtml = devId
+            ? `<button type="button" class="term-dev-badge" onclick="LOGS.filterDevice('${UI.escAttr(devId)}')" title="Filtrar eventos desta TV">[${UI.escapeHtml(devId)}]</button>`
+            : `<span class="term-dev-empty text-muted">[-]</span>`;
+
+        return `
+            <div class="term-line term-lvl-${sev.cls}">
+                <span class="term-ts" title="${UI.escAttr(tsObj.full)}">${tsObj.time}</span>
+                <span class="term-badge term-badge-${sev.cls}">${sev.label}</span>
+                <span class="term-src">[${UI.escapeHtml(item.source || '-')}]</span>
+                <span class="term-dev-col">${devHtml}</span>
+                <span class="term-msg">${UI.escapeHtml(item.message || '')}</span>
+            </div>
+        `;
+    }
+
+    /**
+     * Adiciona linha recebida em tempo real via WebSocket (streaming)
+     */
+    function appendLiveLog(item) {
+        if (isFeedPaused) return;
+
+        const feed = document.getElementById('terminal-feed');
+        if (!feed) return;
+
+        // Se o container estiver vazio ou em estado vazio, limpa
+        if (feed.querySelector('.term-empty-state') || feed.querySelector('.term-skeleton')) {
+            feed.innerHTML = '';
+        }
+
+        // Verifica filtros ativos
+        if (currentQuery.device_id && item.device && item.device !== currentQuery.device_id) return;
+        if (currentQuery.level && item.level && item.level.toUpperCase() !== currentQuery.level.toUpperCase()) return;
+        if (currentQuery.source && item.source && item.source.toLowerCase() !== currentQuery.source.toLowerCase()) return;
+        if (currentQuery.q && item.message && !item.message.toLowerCase().includes(currentQuery.q.toLowerCase())) return;
+
+        const lineWrapper = document.createElement('div');
+        lineWrapper.innerHTML = createLineHtml(item);
+        const newLine = lineWrapper.firstElementChild;
+        if (!newLine) return;
+
+        newLine.classList.add('term-line-live');
+        feed.appendChild(newLine);
+
+        // Limita tamanho do DOM para manter fluidez
+        while (feed.children.length > maxTerminalLines) {
+            feed.removeChild(feed.firstElementChild);
+        }
+
+        // Atualiza contador
+        const countBadge = document.getElementById('term-count-badge');
+        if (countBadge) {
+            countBadge.textContent = `${feed.children.length} exibidos`;
+        }
+
+        if (autoScroll) {
+            scrollToBottom();
+        }
+    }
+
+    function scrollToBottom() {
+        const feed = document.getElementById('terminal-feed');
+        if (feed) {
+            feed.scrollTop = feed.scrollHeight;
+        }
+    }
+
+    /**
+     * Integração com WebSocket para eventos em tempo real
+     */
+    function setupWebSocket() {
+        if (typeof WS === 'undefined') return;
+        if (wsHandler) WS.off('all', wsHandler);
+
+        wsHandler = (ev) => {
+            if (!ev) return;
+            const now = new Date().toISOString();
+            let level = 'INFO';
+            let msg = '';
+            const dev = ev.device_id || '-';
+            const src = ev.type || 'ws';
+
+            if (ev.type === 'alert') {
+                level = ev.severity === 'critical' ? 'CRITICAL' : 'WARNING';
+                msg = ev.message || 'Alerta do sistema';
+            } else if (ev.type === 'health') {
+                level = ev.status === 'offline' ? 'ERROR' : (ev.status === 'degraded' ? 'WARNING' : 'INFO');
+                msg = `Health Check: status=${ev.status}${ev.reason ? ' (' + ev.reason + ')' : ''}`;
+            } else if (ev.type === 'magisk') {
+                level = ev.step === 'error' ? 'ERROR' : 'INFO';
+                msg = `Magisk Provisioning: passo ${ev.step || 'andamento'}`;
+            } else {
+                msg = ev.message || JSON.stringify(ev);
+            }
+
+            appendLiveLog({
+                timestamp: now,
+                level: level,
+                source: src,
+                device: dev,
+                message: msg
+            });
+        };
+
+        WS.on('all', wsHandler);
+    }
+
+    function startAutoRefresh() {
+        if (refreshTimer) clearInterval(refreshTimer);
+        refreshTimer = setInterval(() => {
+            // Se o feed estiver pausado ou usuário navegando em página > 1, não sobrescreve
+            if (!isFeedPaused && (!currentQuery.page || currentQuery.page === 1)) {
+                search(1);
+            }
+        }, 8000);
+    }
+
+    function togglePause() {
+        isFeedPaused = !isFeedPaused;
+        const btn = document.getElementById('btn-feed-pause');
+        const iconEl = document.getElementById('feed-pause-icon');
+        const labelEl = document.getElementById('feed-pause-label');
+        const dot = document.getElementById('term-live-dot');
+        const statusText = document.getElementById('term-live-status');
+
+        if (isFeedPaused) {
+            if (btn) btn.classList.add('active');
+            if (iconEl) iconEl.innerHTML = UI.icon('play');
+            if (labelEl) labelEl.textContent = 'Retomar Feed';
+            if (dot) dot.classList.remove('active');
+            if (statusText) statusText.textContent = 'FEED PAUSADO';
+            UI.createToast('Feed de eventos pausado', 'info', 2000);
+        } else {
+            if (btn) btn.classList.remove('active');
+            if (iconEl) iconEl.innerHTML = UI.icon('pause');
+            if (labelEl) labelEl.textContent = 'Pausar Feed';
+            if (dot) dot.classList.add('active');
+            if (statusText) statusText.textContent = 'LIVE STREAM NOC';
+            UI.createToast('Feed de eventos retomado', 'info', 2000);
+            search(1);
+        }
+    }
+
+    function filterDevice(devId) {
+        const sel = document.getElementById('log-device');
+        if (!sel) return;
+
+        let found = false;
+        for (const opt of sel.options) {
+            if (opt.value === devId) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            const opt = document.createElement('option');
+            opt.value = devId;
+            opt.textContent = devId;
+            sel.appendChild(opt);
+        }
+        sel.value = devId;
+        search(1);
+        UI.createToast(`Filtrando logs do TV Box "${devId}"`, 'info', 2000);
+    }
+
+    function clearFilters() {
+        const q = document.getElementById('log-query');
+        const dev = document.getElementById('log-device');
+        const src = document.getElementById('log-source');
+        const dt = document.getElementById('log-date');
+        const dtPreset = document.getElementById('log-date-preset');
+        const lvl = document.getElementById('log-level');
+
+        if (q) q.value = '';
+        if (dev) dev.value = '';
+        if (src) src.value = '';
+        if (dt) dt.value = '';
+        if (dtPreset) dtPreset.value = '';
+        if (lvl) lvl.value = '';
+
+        updateSeverityChips('');
+        search(1);
+        UI.createToast('Filtros de log limpos', 'info', 1500);
+    }
+
+    function clearTerminal() {
+        const feed = document.getElementById('terminal-feed');
+        if (feed) {
+            feed.innerHTML = '<div class="term-empty-state p-5 text-muted text-center">Console limpo pelo operador. Aguardando novos eventos...</div>';
+        }
+        const countBadge = document.getElementById('term-count-badge');
+        if (countBadge) countBadge.textContent = '0 eventos';
+    }
+
+    async function download() {
+        const source = document.getElementById('log-source')?.value || '';
+        let url = '/api/logs/download';
+        if (source) url += `?source=${encodeURIComponent(source)}`;
+
+        try {
+            UI.createToast('Preparando download do log...', 'info', 2000);
+            await API.download(url, `logs-${source || 'all'}-${Date.now()}.txt`);
+            UI.createToast('✅ Logs baixados com sucesso', 'success');
+        } catch (e) {
+            UI.createToast(`Falha no download: ${e.message}`, 'error');
         }
     }
 
@@ -346,95 +642,17 @@ const LOGS = (() => {
             return;
         }
 
-        let html = '<div class="pagination">';
-        html += `<button class="btn btn-sm btn-secondary" onclick="LOGS.search(${res.page - 1})" ${res.page <= 1 ? 'disabled' : ''}>← Anterior</button>`;
-        html += `<span class="pagination-info">Página ${res.page} de ${res.pages}</span>`;
-        html += `<button class="btn btn-sm btn-secondary" onclick="LOGS.search(${res.page + 1})" ${res.page >= res.pages ? 'disabled' : ''}>Próximo →</button>`;
-        html += '</div>';
-        el.innerHTML = html;
-    }
-
-    function filterDevice(deviceId) {
-        const sel = document.getElementById('log-device');
-        if (!sel) return;
-        let found = false;
-        for (const opt of sel.options) {
-            if (opt.value === deviceId) {
-                found = true;
-                break;
-            }
-        }
-        if (!found) {
-            const newOpt = document.createElement('option');
-            newOpt.value = deviceId;
-            newOpt.textContent = deviceId;
-            sel.appendChild(newOpt);
-        }
-        sel.value = deviceId;
-        search(1);
-        if (typeof UI !== 'undefined' && UI.createToast) {
-            UI.createToast(`Filtrando logs do TV Box "${deviceId}"`, 'info', 2000);
-        }
-    }
-
-    function clearFilters() {
-        const sourceSel = document.getElementById('log-source');
-        const levelSel = document.getElementById('log-level');
-        const devSel = document.getElementById('log-device');
-        const dateInput = document.getElementById('log-date');
-        const datePreset = document.getElementById('log-date-preset');
-        const queryInput = document.getElementById('log-query');
-
-        if (sourceSel) sourceSel.value = '';
-        if (levelSel) levelSel.value = '';
-        if (devSel) devSel.value = '';
-        if (dateInput) dateInput.value = '';
-        if (datePreset) datePreset.value = '';
-        if (queryInput) queryInput.value = '';
-
-        updateLevelChips('');
-        search(1);
-        if (typeof UI !== 'undefined' && UI.createToast) {
-            UI.createToast('Filtros de log limpos', 'info', 1500);
-        }
-    }
-
-    async function download() {
-        const source = document.getElementById('log-source')?.value || '';
-        let url = '/api/logs/download';
-        if (source) url += `?source=${encodeURIComponent(source)}`;
-        try {
-            if (typeof UI !== 'undefined' && UI.createToast) {
-                UI.createToast('Baixando logs...', 'info');
-            }
-            await API.download(url, `logs-${source || 'all'}-${Date.now()}.txt`);
-            if (typeof UI !== 'undefined' && UI.createToast) {
-                UI.createToast('✅ Logs baixados', 'success');
-            }
-        } catch (e) {
-            if (typeof UI !== 'undefined' && UI.createToast) {
-                UI.createToast(`❌ ${e.message}`, 'error');
-            }
-        }
-    }
-
-    function startAutoRefresh() {
-        if (refreshTimer) clearInterval(refreshTimer);
-        refreshTimer = setInterval(() => {
-            if (autoRefresh) search(currentQuery.page || 1);
-        }, 5000);
-    }
-
-    function toggleAutoRefresh() {
-        autoRefresh = !autoRefresh;
-        const btn = document.getElementById('log-refresh-toggle');
-        if (btn) {
-            btn.innerHTML = `${UI.icon(autoRefresh ? 'pause' : 'play')} Auto`;
-            btn.classList.toggle('btn-ghost', autoRefresh);
-            btn.classList.toggle('btn-secondary', !autoRefresh);
-            btn.title = autoRefresh ? 'Pausar atualização automática' : 'Retomar atualização automática';
-        }
-        UI.createToast(autoRefresh ? 'Auto-refresh ativado' : 'Auto-refresh pausado', 'info', 2000);
+        el.innerHTML = `
+            <div class="pagination">
+                <button class="btn btn-sm btn-secondary" onclick="LOGS.search(${res.page - 1})" ${res.page <= 1 ? 'disabled' : ''}>
+                    ← Anterior
+                </button>
+                <span class="pagination-info font-mono">Página ${res.page} de ${res.pages}</span>
+                <button class="btn btn-sm btn-secondary" onclick="LOGS.search(${res.page + 1})" ${res.page >= res.pages ? 'disabled' : ''}>
+                    Próximo →
+                </button>
+            </div>
+        `;
     }
 
     function destroy() {
@@ -442,7 +660,20 @@ const LOGS = (() => {
             clearInterval(refreshTimer);
             refreshTimer = null;
         }
+        if (wsHandler && typeof WS !== 'undefined') {
+            WS.off('all', wsHandler);
+            wsHandler = null;
+        }
     }
 
-    return { render, search, download, destroy, toggleAutoRefresh, filterDevice, clearFilters };
+    return {
+        render,
+        search,
+        download,
+        destroy,
+        togglePause,
+        filterDevice,
+        clearFilters,
+        clearTerminal
+    };
 })();
