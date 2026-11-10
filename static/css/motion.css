@@ -32,6 +32,42 @@
     50% { opacity: 0.55; }
 }
 
+/* ---------- Stagger de entrada refinado (listas e tabelas) ---------- */
+.stagger-item {
+    opacity: 0;
+    transform: translateY(6px);
+    animation: stagger-in var(--dur-base) var(--ease-appear) forwards;
+}
+.stagger-item:nth-child(1) { animation-delay: 20ms; }
+.stagger-item:nth-child(2) { animation-delay: 40ms; }
+.stagger-item:nth-child(3) { animation-delay: 60ms; }
+.stagger-item:nth-child(4) { animation-delay: 80ms; }
+.stagger-item:nth-child(5) { animation-delay: 100ms; }
+.stagger-item:nth-child(6) { animation-delay: 120ms; }
+.stagger-item:nth-child(7) { animation-delay: 140ms; }
+.stagger-item:nth-child(8) { animation-delay: 160ms; }
+.stagger-item:nth-child(9) { animation-delay: 180ms; }
+.stagger-item:nth-child(10) { animation-delay: 200ms; }
+.stagger-item:nth-child(11) { animation-delay: 220ms; }
+.stagger-item:nth-child(12) { animation-delay: 240ms; }
+.stagger-item:nth-child(13) { animation-delay: 260ms; }
+.stagger-item:nth-child(14) { animation-delay: 280ms; }
+.stagger-item:nth-child(15) { animation-delay: 300ms; }
+/* Itens acima de 15 entram sem delay adicional para não atrasar */
+.stagger-item:nth-child(n+16) { animation-delay: 300ms; }
+
+/* Suporte a CSS custom property --i (DOM.stagger) com limite em 15 */
+.stagger-item[style*="--i"] {
+    animation-delay: calc(min(var(--i), 15) * 20ms);
+}
+
+@keyframes stagger-in {
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
 /* ---------- prefers-reduced-motion (§5.4) ---------- */
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
@@ -39,6 +75,18 @@
         animation-iteration-count: 1 !important;
         transition-duration: 0.01ms !important;
         scroll-behavior: auto !important;
+    }
+    .stagger-item {
+        animation: none !important;
+        opacity: 1 !important;
+        transform: none !important;
+        transition: none !important;
+    }
+    .progress-indeterminate::after {
+        animation: none !important;
+    }
+    .btn.is-loading::after {
+        animation: none !important;
     }
     ::view-transition-old(root),
     ::view-transition-new(root) { animation: none !important; }
@@ -49,4 +97,6 @@
     .badge.offline::before,
     .status-badge.offline::before,
     .device-status-badge.offline::before { animation: none !important; }
+    .data-row-detail { transition: none !important; }
 }
+

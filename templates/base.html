@@ -23,6 +23,7 @@
     <link rel="stylesheet" href="/static/css/components.css?v=30">
     <link rel="stylesheet" href="/static/css/motion.css?v=30">
     <link rel="stylesheet" href="/static/css/pages/dashboard.css?v=30">
+    <link rel="stylesheet" href="/static/css/pages/mural.css?v=30">
     <link rel="stylesheet" href="/static/css/pages/devices.css?v=30">
     <link rel="stylesheet" href="/static/css/pages/device.css?v=30">
     <link rel="stylesheet" href="/static/css/pages/groups.css?v=30">
@@ -95,7 +96,7 @@
         <div class="sidebar-footer">
             <a href="#/wizard" class="btn btn-primary btn-sm" style="width:100%">Wizard</a>
             <div style="display:flex;gap:6px">
-                <button id="theme-toggle" class="btn btn-primary btn-sm" style="flex:1" title="Alternar tema"></button>
+                <button id="theme-toggle" class="btn btn-primary btn-sm" style="flex:1" title="Alternar tema" aria-label="Alternar tema"></button>
                 <button id="auth-logout" class="btn btn-primary btn-sm" style="flex:1" title="Sair do painel">Sair</button>
             </div>
             <span class="version">v0.1.0</span>
@@ -129,16 +130,16 @@
     <div id="toast-container" class="toast-container" aria-live="polite" role="status"></div>
 
     <!-- MODAL CONTAINER -->
-    <div id="modal-container" class="modal-container hidden">
+    <div id="modal-container" class="modal-container hidden" aria-labelledby="modal-title">
         <div class="modal-overlay"></div>
-        <div class="modal-content" id="modal-content" role="dialog" aria-modal="true"></div>
+        <div class="modal-content" id="modal-content" role="dialog" aria-modal="true" aria-labelledby="modal-title"></div>
     </div>
 
     <!-- LOGIN OVERLAY -->
     <div id="auth-overlay" class="auth-overlay hidden">
-        <div class="auth-card">
+        <div class="auth-card" role="dialog" aria-modal="true" aria-labelledby="auth-title">
             <div class="auth-brand">TV</div>
-            <h2>Painel TV Box</h2>
+            <h2 id="auth-title">Painel TV Box</h2>
             <p class="text-muted text-sm">Acesse com o <b>usuário e senha do administrador</b>.</p>
             <div id="auth-setup-hint" class="text-warning text-sm hidden" style="margin-bottom:8px">
                 ⚠️ Administrador ainda não configurado — crie em <b>Configurações → Segurança</b>
@@ -150,7 +151,7 @@
                 <input type="password" id="auth-token-input" class="form-input hidden" placeholder="Token de acesso" autocomplete="off" style="margin-bottom:8px">
                 <a href="#" id="auth-mode-toggle" class="text-sm text-muted hidden" style="display:block;margin-top:8px">usar token de acesso</a>
                 <button type="submit" class="btn btn-primary" style="width:100%;margin-top:12px">Entrar</button>
-                <div id="auth-status" class="text-danger text-sm" style="margin-top:8px"></div>
+                <div id="auth-status" class="text-danger text-sm" role="status" aria-live="polite" style="margin-top:8px"></div>
             </form>
         </div>
     </div>
@@ -163,6 +164,7 @@
     <script src="/static/js/ws.js?v=38"></script>
     <script src="/static/js/api.js?v=38"></script>
     <script src="/static/js/components.js?v=38"></script>
+    <script src="/static/js/dom.js?v=1"></script>
     <script src="/static/js/dashboard.js?v=38"></script>
     <script src="/static/js/wizard.js?v=38"></script>
     <script src="/static/js/device.js?v=38"></script>
