@@ -1,27 +1,28 @@
 /**
- * Wizard — assistente de configuração inicial (10 steps).
- * Estado client-side, tudo enviado no finish.
+ * Wizard — assistente de configuração inicial (2 passos).
+ * Passo 1: Criar Administrador (credenciais e regras de validação em tempo real)
+ * Passo 2: Cadastrar TV Boxes (formulário compacto, teste ADB e lista dinâmica)
  */
 const WIZARD = (() => {
     let currentStep = 1;
-    const TOTAL_STEPS = 10;
+    const TOTAL_STEPS = 2;
 
-    // Estado completo do wizard (client-side)
-    const data = {
-        server: { host: '', port: 8080, ip: '' },
-        mediamtx: { api_url: 'http://localhost:9997', rtsp_port: 8554, rtmp_port: 1935 },
-        adb: { default_port: 5555, connect_timeout: 10 },
-        players: null,
-        watchdog: null,
-        groups: [],
+    // Estado client-side do assistente
+    const state = {
+        admin: {
+            username: 'admin',
+            password: '',
+            confirmPassword: '',
+        },
         devices: [],
-        admin: { username: '', password: '' },
     };
 
-    // ── Render ─────────────────────────────────
+    // ── Renderização Principal ─────────────────────────────
 
     function render(el) {
-        UI.setPageTitle('Configuração Inicial');
+        if (typeof UI !== 'undefined' && UI.setPageTitle) {
+            UI.setPageTitle('Configuração Inicial');
+        }
         el.innerHTML = `
             <div class="wizard-progress" id="wizard-progress"></div>
             <div class="wizard-step" id="wizard-step"></div>
@@ -32,8 +33,7 @@ const WIZARD = (() => {
     function renderStep(step) {
         currentStep = step;
 
-        // Progresso: steps numerados (D6)
-        const STEP_NAMES = ['Boas-vindas', 'Servidor', 'MediaMTX', 'ADB', 'Players', 'Watchdog', 'Grupos', 'Dispositivos', 'Revisão', 'Finalizar'];
+        const STEP_NAMES = ['Criar Administrador', 'Cadastrar TV Boxes'];
         let dots = '';
         for (let i = 1; i <= TOTAL_STEPS; i++) {
             const cls = i === step ? 'active' : (i < step ? 'done' : '');
@@ -42,618 +42,559 @@ const WIZARD = (() => {
         }
         const progHtml = `
             <div class="wizard-steps">${dots}</div>
-            <span class="wizard-progress-text">${STEP_NAMES[step - 1] || `Passo ${step}`} · ${step} de ${TOTAL_STEPS}</span>
+            <span class="wizard-progress-text">${STEP_NAMES[step - 1]} · ${step} de ${TOTAL_STEPS}</span>
         `;
-        document.getElementById('wizard-progress').innerHTML = progHtml;
 
-        // Step content
+        const progEl = document.getElementById('wizard-progress');
+        if (progEl) progEl.innerHTML = progHtml;
+
+        const stepContainer = document.getElementById('wizard-step');
+        if (!stepContainer) return;
+
         const html = STEP_RENDERERS[step]();
         let navHtml = '<div class="wizard-nav">';
 
-        // Oculta o box de admin se já existir administrador configurado
-        if (typeof AUTH !== 'undefined' && AUTH.fetchStatus) {
-            AUTH.fetchStatus().then((st) => {
-                const box = document.getElementById('w-admin-box');
-                if (box && st && st.admin_configured) box.style.display = 'none';
-            });
-        }
-
         if (step > 1) {
-            navHtml += `<button class="btn btn-secondary" onclick="WIZARD.goPrev()">← Anterior</button>`;
+            navHtml += `<button type="button" class="btn btn-secondary" onclick="WIZARD.goPrev()">← Voltar ao Passo 1</button>`;
         } else {
             navHtml += '<div></div>';
         }
 
-        if (step < TOTAL_STEPS) {
-            navHtml += `<button class="btn btn-primary" id="wizard-next-btn" onclick="WIZARD.goNext()">Próximo →</button>`;
+        if (step === 1) {
+            navHtml += `<button type="button" class="btn btn-primary" id="wizard-next-btn" onclick="WIZARD.goNext()" ${isStep1Valid() ? '' : 'disabled'}>Próximo →</button>`;
         } else {
-            navHtml += `<button class="btn btn-success" id="wizard-finish-btn" onclick="WIZARD.finish()">Finalizar</button>`;
+            navHtml += `<button type="button" class="btn btn-primary" id="wizard-finish-btn" onclick="WIZARD.finish()" ${state.devices.length >= 1 ? '' : 'disabled'}>Finalizar Configuração</button>`;
         }
 
         navHtml += '</div>';
-        document.getElementById('wizard-step').innerHTML = html + navHtml;
+        stepContainer.innerHTML = html + navHtml;
+
+        if (step === 1) {
+            attachStep1Listeners();
+        } else if (step === 2) {
+            attachStep2Listeners();
+        }
     }
 
-    // ── Navegação ──────────────────────────────
+    // ── Navegação ──────────────────────────────────────────
 
     function goPrev() {
-        saveStepData();
-        renderStep(currentStep - 1);
+        if (currentStep > 1) {
+            renderStep(currentStep - 1);
+        }
     }
 
     function goNext() {
-        if (!validateStep()) return;
-        saveStepData();
-        renderStep(currentStep + 1);
-    }
-
-    function saveStepData() {
-        switch (currentStep) {
-            case 1: _saveAdmin(); break;
-            case 2: _saveServer(); break;
-            case 3: _saveMediaMTX(); break;
-            case 4: _saveADB(); break;
-            case 5: _savePlayers(); break;
-            case 6: _saveWatchdog(); break;
-            case 7: break; // groups saved on add
-            case 8: break; // devices saved on add
+        if (currentStep === 1) {
+            saveStep1();
+            if (!isStep1Valid()) {
+                if (typeof UI !== 'undefined' && UI.createToast) {
+                    UI.createToast('Verifique os requisitos das credenciais antes de prosseguir', 'warning');
+                }
+                return;
+            }
+            renderStep(2);
         }
     }
 
-    function validateStep() {
-        let valid = true;
-        switch (currentStep) {
-            case 2: valid = _validateServer(); break;
-            case 3: valid = _validateMediaMTX(); break;
-            case 8: valid = _validateDevices(); break;
-        }
-        return valid;
+    // ── Validações Auxiliares ──────────────────────────────
+
+    function hasControlChars(str) {
+        return /[\x00-\x1F\x7F]/.test(str);
     }
 
-    function skipStep() {
-        saveStepData();
-        switch (currentStep) {
-            case 4: data.adb = { default_port: 5555, connect_timeout: 10 }; break;
-            case 5: data.players = null; break;
-            case 6: data.watchdog = null; break;
-            case 7: data.groups = []; break;
-        }
-        renderStep(currentStep + 1);
+    function isValidUsername(u) {
+        const user = (u || '').trim();
+        if (user.length < 2 || user.length > 64) return false;
+        if (hasControlChars(user)) return false;
+        return /^[A-Za-z0-9._@-]{2,64}$/.test(user);
     }
 
-    // ── Steps (renderizadores) ─────────────────
+    function isValidPassword(p) {
+        const pass = p || '';
+        if (pass.length < 8 || pass.length > 256) return false;
+        if (hasControlChars(pass)) return false;
+        return true;
+    }
 
-    const STEP_RENDERERS = {
-        1: () => `
-            <h2>Boas-vindas!</h2>
-            <p>Este assistente vai configurar o Painel TV Box para gerenciar seus TV Boxes Android.</p>
-            <p>Você vai precisar de:</p>
-            <ul style="color:var(--text-secondary);font-size:0.9em;line-height:1.8;margin-bottom:16px">
-                <li><strong>IP do servidor</strong> onde o painel e MediaMTX rodam</li>
-                <li><strong>Pelo menos 1 TV Box</strong> com ADB via TCP habilitado</li>
-                <li>🔗 <strong>Configuração do MediaMTX</strong> (ou usar os defaults)</li>
-            </ul>
-            <div id="w-admin-box" class="settings-card" style="margin-top:16px">
-                <div class="section-title">🔐 Criar administrador</div>
-                <p class="text-muted text-sm">Usuário e senha para acessar o painel (obrigatório na 1ª instalação).</p>
-                <div class="form-grid">
-                    <div class="form-group">
-                        <label>Usuário</label>
-                        <input type="text" id="w-admin-user" value="${data.admin.username}" placeholder="admin" autocomplete="username">
-                    </div>
-                    <div class="form-group">
-                        <label>Senha (mín. 8 caracteres)</label>
-                        <input type="password" id="w-admin-pass" value="${data.admin.password}" placeholder="••••••••" autocomplete="new-password">
-                    </div>
-                </div>
-            </div>
-            <p class="text-muted text-sm" style="margin-top:12px">O processo leva cerca de 2 minutos. Bora? 🚀</p>
-        `,
+    function isPasswordMatching(p, c) {
+        return (p || '').length > 0 && p === c;
+    }
 
-        2: () => `
-            <h2>Servidor</h2>
-            <p>Configure o endereço do servidor onde o painel está rodando.</p>
-            <div class="form-group">
-                <label>IP do servidor</label>
-                <input type="text" id="w-srv-ip" value="${data.server.ip}" placeholder="192.168.254.102">
-                <div class="form-hint">Usado para montar URLs RTSP</div>
-            </div>
-            <div class="form-grid">
-                <div class="form-group">
-                    <label>Porta do Painel</label>
-                    <input type="number" id="w-srv-port" value="${data.server.port}" placeholder="8080">
-                </div>
-                <div class="form-group">
-                    <label>Host de escuta</label>
-                    <input type="text" id="w-srv-host" value="${data.server.host}" placeholder="0.0.0.0">
-                </div>
-            </div>
-        `,
+    function isStep1Valid() {
+        return (
+            isValidUsername(state.admin.username) &&
+            isValidPassword(state.admin.password) &&
+            isPasswordMatching(state.admin.password, state.admin.confirmPassword)
+        );
+    }
 
-        3: () => `
-            <h2>MediaMTX</h2>
-            <p>Configure o servidor de streaming MediaMTX.</p>
-            <div class="form-group">
-                <label>URL da API</label>
-                <input type="text" id="w-mtx-api" value="${data.mediamtx.api_url}" placeholder="http://localhost:9997">
-            </div>
-            <div class="form-grid">
-                <div class="form-group">
-                    <label>Porta RTSP</label>
-                    <input type="number" id="w-mtx-rtsp" value="${data.mediamtx.rtsp_port}" placeholder="8554">
-                </div>
-                <div class="form-group">
-                    <label>Porta RTMP</label>
-                    <input type="number" id="w-mtx-rtmp" value="${data.mediamtx.rtmp_port}" placeholder="1935">
-                </div>
-            </div>
-        `,
+    function isValidIpv4(ip) {
+        if (!ip || typeof ip !== 'string') return false;
+        const parts = ip.trim().split('.');
+        if (parts.length !== 4) return false;
+        for (const part of parts) {
+            if (!/^\d{1,3}$/.test(part)) return false;
+            const num = parseInt(part, 10);
+            if (num < 0 || num > 255) return false;
+        }
+        return true;
+    }
 
-        4: () => `
-            <h2>ADB</h2>
-            <p>Configuração da conexão ADB com os TV Boxes.</p>
-            ${_skipButton(4, 'Usar ADB padrão (porta 5555, timeout 10s)')}
-            <div class="form-grid">
-                <div class="form-group">
-                    <label>Porta ADB padrão</label>
-                    <input type="number" id="w-adb-port" value="${data.adb.default_port}" placeholder="5555">
-                </div>
-                <div class="form-group">
-                    <label>Timeout de conexão (s)</label>
-                    <input type="number" id="w-adb-timeout" value="${data.adb.connect_timeout}" placeholder="10">
-                </div>
-            </div>
-        `,
+    // ── Passo 1: Criar Administrador ───────────────────────
 
-        5: () => `
-            <h2>Players</h2>
-            <p>Players de vídeo nos TV Boxes. Os valores abaixo já são os defaults recomendados.</p>
-            ${_skipButton(5, 'Usar players padrão (VLC + MPV)')}
-            <div class="form-grid">
-                <div class="form-group">
-                    <label>VLC — Package</label>
-                    <input type="text" id="w-pl-vlc-pkg" value="${data.players?.vlc?.package || 'org.videolan.vlc'}">
-                </div>
-                <div class="form-group">
-                    <label>VLC — Activity</label>
-                    <input type="text" id="w-pl-vlc-act" value="${data.players?.vlc?.activity || 'org.videolan.vlc.gui.video.VideoPlayerActivity'}">
-                </div>
-                <div class="form-group">
-                    <label>MPV — Package</label>
-                    <input type="text" id="w-pl-mpv-pkg" value="${data.players?.mpv?.package || 'is.xyz.mpv'}">
-                </div>
-                <div class="form-group">
-                    <label>MPV — Activity</label>
-                    <input type="text" id="w-pl-mpv-act" value="${data.players?.mpv?.activity || 'is.xyz.mpv.MPVActivity'}">
-                </div>
-                <div class="form-group full-width">
-                    <label>Player padrão</label>
-                    <select id="w-pl-default">
-                        <option value="vlc" ${(data.players?.default || 'vlc') === 'vlc' ? 'selected' : ''}>VLC</option>
-                        <option value="mpv" ${(data.players?.default || '') === 'mpv' ? 'selected' : ''}>MPV</option>
-                    </select>
-                </div>
-            </div>
-        `,
+    function saveStep1() {
+        const uEl = document.getElementById('w-admin-user');
+        const pEl = document.getElementById('w-admin-pass');
+        const cEl = document.getElementById('w-admin-confirm');
+        if (uEl) state.admin.username = uEl.value.trim();
+        if (pEl) state.admin.password = pEl.value;
+        if (cEl) state.admin.confirmPassword = cEl.value;
+    }
 
-        6: () => `
-            <h2>Watchdog</h2>
-            <p>Monitoramento automático e recuperação de falhas.</p>
-            ${_skipButton(6, 'Usar configuração padrão do watchdog')}
-            <div class="form-grid">
-                <div class="form-group">
-                    <label>Intervalo de verificação (s)</label>
-                    <input type="number" id="w-wd-interval" value="${data.watchdog?.check_interval || '10'}">
-                </div>
-                <div class="form-group">
-                    <label>Tentativas reabrir player</label>
-                    <input type="number" id="w-wd-retry" value="${data.watchdog?.recovery?.player_retry_max || '2'}">
-                </div>
-                <div class="form-group">
-                    <label>Timeout reboot (s)</label>
-                    <input type="number" id="w-wd-boot" value="${data.watchdog?.recovery?.reboot_boot_timeout || '120'}">
-                </div>
-                <div class="form-group">
-                    <label>Reboots máximos</label>
-                    <input type="number" id="w-wd-reboot" value="${data.watchdog?.recovery?.reboot_max || '1'}">
-                </div>
-            </div>
-        `,
+    function attachStep1Listeners() {
+        const uEl = document.getElementById('w-admin-user');
+        const pEl = document.getElementById('w-admin-pass');
+        const cEl = document.getElementById('w-admin-confirm');
+        const nextBtn = document.getElementById('wizard-next-btn');
 
-        7: () => `
-            <h2>Grupos (opcional)</h2>
-            <p>Organize seus TV Boxes em grupos para ações em lote.</p>
-            ${_skipButton(7, 'Nenhum grupo (criar depois)')}
-            <div id="w-groups-list">
-                ${data.groups.map((g, i) => `
-                    <div class="wizard-device-item">
-                        <div><span class="d-name">📁 ${g.name}</span> <span class="d-ip">${g.description || ''}</span></div>
-                        <span class="d-remove" onclick="WIZARD.removeGroup(${i})">✕</span>
-                    </div>
-                `).join('') || '<div class="text-muted text-sm" style="margin-bottom:12px">Nenhum grupo ainda.</div>'}
-            </div>
-            <div class="form-grid">
-                <div class="form-group">
-                    <label>Nome do grupo</label>
-                    <input type="text" id="w-grp-name" placeholder="Ex: Armazéns">
-                </div>
-                <div class="form-group">
-                    <label>Descrição</label>
-                    <input type="text" id="w-grp-desc" placeholder="Ex: TV Boxes dos armazéns">
-                </div>
-            </div>
-            <button class="btn btn-ghost" onclick="WIZARD.addGroup()">+ Adicionar Grupo</button>
-        `,
+        function updateRealtime() {
+            saveStep1();
+            const u = state.admin.username;
+            const p = state.admin.password;
+            const c = state.admin.confirmPassword;
 
-        8: () => `
-            <h2>Dispositivos</h2>
-            <p>Adicione pelo menos 1 TV Box para começar.</p>
-            <div id="w-devices-list">
-                ${data.devices.map((d, i) => `
-                    <div class="wizard-device-item">
-                        <div><span class="d-name">${d.name}</span> <span class="d-ip">${d.ip}</span></div>
-                        <span class="d-remove" onclick="WIZARD.removeDevice(${i})">✕</span>
-                    </div>
-                `).join('') || '<div class="text-muted text-sm" style="margin-bottom:12px">Nenhum dispositivo ainda.</div>'}
-            </div>
-            <div id="w-device-form" class="form-grid">
-                <div class="form-group">
-                    <label>Nome *</label>
-                    <input type="text" id="w-dev-name" placeholder="Ex: TV Box Armazém 1B">
-                </div>
-                <div class="form-group">
-                    <label>IP *</label>
-                    <input type="text" id="w-dev-ip" placeholder="192.168.254.XXX">
-                </div>
-                <div class="form-group">
-                    <label>Localização</label>
-                    <input type="text" id="w-dev-loc" placeholder="Ex: Armazém 1B">
-                </div>
-                <div class="form-group">
-                    <label>Path RTSP</label>
-                    <input type="text" id="w-dev-path" placeholder="TV_BOX_1">
-                </div>
-                <div class="form-group">
-                    <label>Porta ADB</label>
-                    <input type="number" id="w-dev-adb" value="5555">
-                </div>
-                <div class="form-group">
-                    <label>Player</label>
-                    <select id="w-dev-player">
-                        <option value="vlc">VLC</option>
-                        <option value="mpv">MPV</option>
-                    </select>
-                </div>
-                <div class="form-group full-width" style="display:flex;gap:8px;align-items:center">
-                    <label><input type="checkbox" id="w-dev-root"> Tem root</label>
-                    <button class="btn btn-ghost" type="button" onclick="WIZARD.testDevice()">🔍 Testar ADB</button>
-                    <button class="btn btn-primary" type="button" onclick="WIZARD.addDevice()">+ Adicionar</button>
-                </div>
-            </div>
-            <div id="w-dev-test-result"></div>
-        `,
+            const userOk = isValidUsername(u);
+            const lenOk = p.length >= 8 && p.length <= 256;
+            const ctrlOk = p.length > 0 && !hasControlChars(p);
+            const matchOk = isPasswordMatching(p, c);
 
-        9: () => {
-            const hasDevices = data.devices.length > 0;
+            _updateRule('rule-user', userOk, u.length > 0);
+            _updateRule('rule-len', lenOk, p.length > 0);
+            _updateRule('rule-ctrl', ctrlOk, p.length > 0);
+            _updateRule('rule-match', matchOk, c.length > 0);
+
+            if (nextBtn) {
+                nextBtn.disabled = !(userOk && lenOk && ctrlOk && matchOk);
+            }
+        }
+
+        if (uEl) uEl.addEventListener('input', updateRealtime);
+        if (pEl) pEl.addEventListener('input', updateRealtime);
+        if (cEl) cEl.addEventListener('input', updateRealtime);
+
+        [uEl, pEl, cEl].forEach(input => {
+            if (input) {
+                input.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' && isStep1Valid()) {
+                        e.preventDefault();
+                        goNext();
+                    }
+                });
+            }
+        });
+
+        updateRealtime();
+    }
+
+    function _updateRule(id, ok, active) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const icon = el.querySelector('.rule-icon');
+        if (ok) {
+            el.style.color = 'var(--text-primary)';
+            if (icon) {
+                icon.textContent = '✓';
+                icon.style.fontWeight = '700';
+            }
+        } else if (active) {
+            el.style.color = 'var(--text-muted)';
+            if (icon) {
+                icon.textContent = '✕';
+                icon.style.fontWeight = 'normal';
+            }
+        } else {
+            el.style.color = 'var(--text-muted)';
+            if (icon) {
+                icon.textContent = '○';
+                icon.style.fontWeight = 'normal';
+            }
+        }
+    }
+
+    // ── Passo 2: Cadastrar TV Boxes ────────────────────────
+
+    function attachStep2Listeners() {
+        const formInputs = ['w-dev-name', 'w-dev-ip', 'w-dev-group', 'w-dev-loc', 'w-dev-adb'];
+        formInputs.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        addDevice();
+                    }
+                });
+            }
+        });
+    }
+
+    function renderDevicesListHtml() {
+        if (state.devices.length === 0) {
             return `
-                <h2>Revisão</h2>
-                <p>Confira os dados antes de finalizar.</p>
-                <div class="wizard-review">
-                    <h3>🖥️ Servidor</h3>
-                    <p>IP: ${data.server.ip || '(automático)'} — Porta: ${data.server.port}</p>
-                    <h3>🔗 MediaMTX</h3>
-                    <p>API: ${data.mediamtx.api_url} — RTSP: ${data.mediamtx.rtsp_port} — RTMP: ${data.mediamtx.rtmp_port}</p>
-                    <h3>Dispositivos (${data.devices.length})</h3>
-                    ${data.devices.map(d => `
-                        <div class="review-device">${d.name} — ${d.ip} — Path: ${d.rtsp_path || '—'}</div>
-                    `).join('')}
-                    <h3>📁 Grupos (${data.groups.length})</h3>
-                    ${data.groups.map(g => `<div class="review-device">📁 ${g.name}${g.description ? ': ' + g.description : ''}</div>`).join('') || '<p class="text-muted">Nenhum grupo</p>'}
-                    <h3>📄 Arquivos que serão gerados</h3>
-                    <ul>
-                        <li>config/system.yml</li>
-                        <li>config/watchdog.yml</li>
-                        <li>config/players.yml</li>
-                        <li>config/mediamtx.yml</li>
-                        ${data.devices.map(d => `<li>devices/${slugify(d.name || d.id || 'tvbox')}.yml</li>`).join('')}
-                        ${data.groups.map(g => `<li>groups/${slugify(g.name || g.id || 'grupo')}.yml</li>`).join('')}
-                    </ul>
+                <div class="text-muted text-sm" style="padding:16px;background:var(--bg-base);border:1px dashed var(--border-subtle);border-radius:var(--radius-sm);text-align:center;">
+                    Nenhum TV Box adicionado ainda. Preencha o formulário acima e clique em "+ Adicionar Dispositivo".
                 </div>
             `;
-        },
-
-        10: () => `
-            <h2>Finalizar!</h2>
-            <p>Ao clicar em "Finalizar", o sistema vai:</p>
-            <ol style="color:var(--text-secondary);font-size:0.9em;line-height:2;margin-bottom:16px">
-                <li>✅ Criar todos os arquivos de configuração</li>
-                <li>✅ Gerar o mediamtx.yml com os paths dos dispositivos</li>
-                <li>✅ Salvar dispositivos e grupos</li>
-                <li>🔄 Redirecionar para o Dashboard</li>
-            </ol>
-            <p>Tudo pronto para começar? 🚀</p>
-            <div id="wizard-finish-status"></div>
-        `,
-    };
-
-    function _skipButton(stepNum, msg) {
-        return `<button class="btn btn-ghost" style="margin-bottom:12px" onclick="WIZARD.skipStep(${stepNum})">⏩ Pular — ${msg}</button>`;
-    }
-
-    // ── Save handlers ──────────────────────────
-
-    function _saveAdmin() {
-        data.admin.username = val('w-admin-user');
-        data.admin.password = val('w-admin-pass');
-    }
-
-    function _saveServer() {
-        data.server.ip = val('w-srv-ip');
-        data.server.port = parseInt(val('w-srv-port')) || 8080;
-        data.server.host = val('w-srv-host') || '0.0.0.0';
-    }
-
-    function _saveMediaMTX() {
-        data.mediamtx.api_url = val('w-mtx-api') || 'http://localhost:9997';
-        data.mediamtx.rtsp_port = parseInt(val('w-mtx-rtsp')) || 8554;
-        data.mediamtx.rtmp_port = parseInt(val('w-mtx-rtmp')) || 1935;
-    }
-
-    function _saveADB() {
-        data.adb.default_port = parseInt(val('w-adb-port')) || 5555;
-        data.adb.connect_timeout = parseInt(val('w-adb-timeout')) || 10;
-    }
-
-    function _savePlayers() {
-        const vlcPkg = val('w-pl-vlc-pkg');
-        const vlcAct = val('w-pl-vlc-act');
-        const mpvPkg = val('w-pl-mpv-pkg');
-        const mpvAct = val('w-pl-mpv-act');
-        const def = val('w-pl-default') || 'vlc';
-
-        if (vlcPkg && vlcAct && mpvPkg && mpvAct) {
-            data.players = {
-                players: {
-                    vlc: { package: vlcPkg, activity: vlcAct, force_stop: vlcPkg, intent_template: 'am start -a android.intent.action.VIEW -d "{URL}" -n {PACKAGE}/{ACTIVITY} --activity-clear-task' },
-                    mpv: { package: mpvPkg, activity: mpvAct, force_stop: mpvPkg, intent_template: 'am start -a android.intent.action.VIEW -d "{URL}" -n {PACKAGE}/{ACTIVITY} --activity-clear-task' },
-                },
-                default: def,
-            };
-        } else {
-            data.players = null;
         }
+        return state.devices.map((d, i) => `
+            <div class="wizard-device-item">
+                <div>
+                    <div class="d-name">${escapeHtml(d.name)}</div>
+                    <div class="d-ip">
+                        ${escapeHtml(d.ip)}:${d.adb_port} · Player: ${escapeHtml((d.player || 'vlc').toUpperCase())}${d.group ? ` · Grupo: ${escapeHtml(d.group)}` : ''}${d.location ? ` · ${escapeHtml(d.location)}` : ''}
+                    </div>
+                </div>
+                <button type="button" class="btn btn-ghost btn-sm d-remove" onclick="WIZARD.removeDevice(${i})" title="Remover este TV Box">✕ Remover</button>
+            </div>
+        `).join('');
     }
 
-    function _saveWatchdog() {
-        data.watchdog = {
-            check_interval: parseInt(val('w-wd-interval')) || 10,
-            ping: { count: 1, timeout_ms: 800 },
-            adb: { timeout: 5 },
-            activity_check: true,
-            mediamtx_check: true,
-            recovery: {
-                cooldown_seconds: 15,
-                player_retry_max: parseInt(val('w-wd-retry')) || 2,
-                player_retry_delay: 10,
-                wifi_restart: true,
-                wifi_reconnect_timeout: 30,
-                eth_restart: true,
-                eth_reconnect_timeout: 30,
-                reboot_max: parseInt(val('w-wd-reboot')) || 1,
-                reboot_boot_timeout: parseInt(val('w-wd-boot')) || 120,
-                critical_alert_cooldown: 300,
-            },
-        };
-    }
+    function updateDevicesView() {
+        const listEl = document.getElementById('w-devices-list');
+        const countEl = document.getElementById('w-dev-count');
+        const finishBtn = document.getElementById('wizard-finish-btn');
 
-    // ── Validation ─────────────────────────────
-
-    function _validateServer() {
-        const ip = val('w-srv-ip');
-        if (ip && !/^(\d{1,3}\.){3}\d{1,3}$/.test(ip)) {
-            UI.createToast('Formato de IP inválido', 'error');
-            return false;
-        }
-        return true;
-    }
-
-    function _validateMediaMTX() {
-        return true;
-    }
-
-    function _validateDevices() {
-        if (data.devices.length === 0) {
-            UI.createToast('Adicione pelo menos 1 dispositivo antes de prosseguir', 'warning');
-            return false;
-        }
-        return true;
-    }
-
-    // ── Actions ────────────────────────────────
-
-    function addGroup() {
-        const name = val('w-grp-name');
-        if (!name) { UI.createToast('Informe o nome do grupo', 'warning'); return; }
-        data.groups.push({
-            id: slugify(name),
-            name,
-            description: val('w-grp-desc') || '',
-        });
-        document.getElementById('w-grp-name').value = '';
-        document.getElementById('w-grp-desc').value = '';
-        renderStep(currentStep);
-    }
-
-    function removeGroup(index) {
-        data.groups.splice(index, 1);
-        renderStep(currentStep);
+        if (listEl) listEl.innerHTML = renderDevicesListHtml();
+        if (countEl) countEl.textContent = String(state.devices.length);
+        if (finishBtn) finishBtn.disabled = state.devices.length === 0;
     }
 
     function addDevice() {
-        const name = val('w-dev-name');
         const ip = val('w-dev-ip');
+        const name = val('w-dev-name');
+        const port = parseInt(val('w-dev-adb'), 10) || 5555;
+        const group = val('w-dev-group');
+        const loc = val('w-dev-loc');
+        const player = val('w-dev-player') || 'vlc';
 
-        if (!name || !ip) {
-            UI.createToast('Nome e IP são obrigatórios', 'error');
+        if (!name) {
+            if (typeof UI !== 'undefined' && UI.createToast) UI.createToast('Nome de identificação é obrigatório', 'error');
+            const el = document.getElementById('w-dev-name');
+            if (el) el.focus();
             return;
         }
-        if (!/^(\d{1,3}\.){3}\d{1,3}$/.test(ip)) {
-            UI.createToast('Formato de IP inválido', 'error');
+        if (!ip) {
+            if (typeof UI !== 'undefined' && UI.createToast) UI.createToast('Endereço IP é obrigatório', 'error');
+            const el = document.getElementById('w-dev-ip');
+            if (el) el.focus();
             return;
         }
-        if (data.devices.some(d => d.ip === ip)) {
-            UI.createToast('IP já adicionado', 'warning');
+        if (!isValidIpv4(ip)) {
+            if (typeof UI !== 'undefined' && UI.createToast) UI.createToast('Formato IPv4 inválido (ex: 192.168.1.100)', 'error');
+            const el = document.getElementById('w-dev-ip');
+            if (el) el.focus();
+            return;
+        }
+        if (port < 1 || port > 65535) {
+            if (typeof UI !== 'undefined' && UI.createToast) UI.createToast('Porta ADB deve ser entre 1 e 65535', 'error');
+            return;
+        }
+        if (state.devices.some(d => d.ip === ip)) {
+            if (typeof UI !== 'undefined' && UI.createToast) UI.createToast('Este endereço IP já foi adicionado', 'warning');
             return;
         }
 
-        data.devices.push({
+        state.devices.push({
             name,
             ip,
-            location: val('w-dev-loc') || '',
-            rtsp_path: val('w-dev-path') || '',
-            adb_port: parseInt(val('w-dev-adb')) || 5555,
-            player: val('w-dev-player') || 'vlc',
-            root: document.getElementById('w-dev-root')?.checked || false,
-            capabilities: {
-                wifi_restart: true,
-                ethernet_restart: true,
-                reboot: true,
-                root: document.getElementById('w-dev-root')?.checked || false,
-                install_apk: true,
-                shell: true,
-                screenshot: true,
-            },
+            adb_port: port,
+            group,
+            location: loc,
+            player,
         });
 
-        // Limpa form
-        ['w-dev-name', 'w-dev-ip', 'w-dev-loc', 'w-dev-path'].forEach(id => document.getElementById(id).value = '');
-        document.getElementById('w-dev-root').checked = false;
-        document.getElementById('w-dev-test-result').innerHTML = '';
+        // Limpa campos do formulário
+        ['w-dev-ip', 'w-dev-name', 'w-dev-group', 'w-dev-loc'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.value = '';
+        });
+        const portEl = document.getElementById('w-dev-adb');
+        if (portEl) portEl.value = '5555';
+        const resEl = document.getElementById('w-dev-test-result');
+        if (resEl) resEl.innerHTML = '';
 
-        UI.createToast(`${name} adicionado!`, 'success');
-        renderStep(currentStep);
+        updateDevicesView();
+        if (typeof UI !== 'undefined' && UI.createToast) {
+            UI.createToast(`TV Box "${name}" adicionado com sucesso!`, 'success');
+        }
     }
 
     function removeDevice(index) {
-        data.devices.splice(index, 1);
-        renderStep(currentStep);
+        if (index >= 0 && index < state.devices.length) {
+            const removed = state.devices.splice(index, 1)[0];
+            updateDevicesView();
+            if (removed && typeof UI !== 'undefined' && UI.createToast) {
+                UI.createToast(`TV Box "${removed.name}" removido`, 'info');
+            }
+        }
     }
 
     async function testDevice() {
         const ip = val('w-dev-ip');
-        const port = parseInt(val('w-dev-adb')) || 5555;
+        const port = parseInt(val('w-dev-adb'), 10) || 5555;
 
-        if (!ip || !/^(\d{1,3}\.){3}\d{1,3}$/.test(ip)) {
-            UI.createToast('Informe um IP válido para testar', 'error');
+        if (!ip) {
+            if (typeof UI !== 'undefined' && UI.createToast) UI.createToast('Informe o IP para testar a conexão', 'warning');
+            const el = document.getElementById('w-dev-ip');
+            if (el) el.focus();
+            return;
+        }
+        if (!isValidIpv4(ip)) {
+            if (typeof UI !== 'undefined' && UI.createToast) UI.createToast('Informe um endereço IPv4 válido (ex: 192.168.1.100)', 'error');
+            const el = document.getElementById('w-dev-ip');
+            if (el) el.focus();
             return;
         }
 
+        const testBtn = document.getElementById('w-btn-test-adb');
         const resultDiv = document.getElementById('w-dev-test-result');
-        resultDiv.innerHTML = '<div class="test-result loading">Testando conexão ADB...</div>';
+        if (testBtn) testBtn.disabled = true;
+        if (resultDiv) {
+            resultDiv.innerHTML = `<div class="test-result loading">Testando conexão ADB em ${escapeHtml(ip)}:${port}...</div>`;
+        }
 
         try {
             const res = await API.post('/wizard/validate-device', { ip, adb_port: port });
-            if (res.adb_connected) {
-                resultDiv.innerHTML = `<div class="test-result success">✅ ADB OK — ${res.model || 'modelo desconhecido'} (Android ${res.android || '?'})${res.root ? ' — Root ✅' : ''}</div>`;
+            if (res && res.adb_connected) {
+                const modelStr = res.model ? escapeHtml(res.model) : 'Dispositivo';
+                const androidStr = res.android ? ` (Android ${escapeHtml(res.android)})` : '';
+                const rootStr = res.root ? ' · Root ✅' : '';
+                if (resultDiv) {
+                    resultDiv.innerHTML = `
+                        <div class="test-result success" style="display:flex;align-items:center;gap:8px;">
+                            <span class="badge online">Conectado</span>
+                            <span>ADB OK — ${modelStr}${androidStr}${rootStr}</span>
+                        </div>
+                    `;
+                }
             } else {
-                resultDiv.innerHTML = `<div class="test-result error">❌ ADB não conectou — Verifique se o TV Box está ligado e o ADB via TCP está habilitado</div>`;
+                if (resultDiv) {
+                    resultDiv.innerHTML = `
+                        <div class="test-result error" style="display:flex;align-items:center;gap:8px;">
+                            <span class="badge offline">Falha</span>
+                            <span>Não foi possível conectar ao TV Box. Verifique se o aparelho está ligado e com o ADB TCP ativo na porta ${port}.</span>
+                        </div>
+                    `;
+                }
             }
-        } catch (e) {
-            resultDiv.innerHTML = `<div class="test-result error">❌ Erro: ${e.message}</div>`;
+        } catch (err) {
+            if (resultDiv) {
+                resultDiv.innerHTML = `
+                    <div class="test-result error" style="display:flex;align-items:center;gap:8px;">
+                        <span class="badge offline">Erro</span>
+                        <span>${escapeHtml(err.message || 'Erro ao conectar com o TV Box')}</span>
+                    </div>
+                `;
+            }
+        } finally {
+            if (testBtn) testBtn.disabled = false;
         }
     }
 
-    // ── Finish ─────────────────────────────────
+    // ── Finalização (finish) ────────────────────────────────
 
     async function finish() {
-        const btn = document.getElementById('wizard-finish-btn');
-        const status = document.getElementById('wizard-finish-status');
-        if (btn) btn.disabled = true;
-        if (status) status.innerHTML = '<div class="test-result loading">Gerando configurações...</div>';
+        if (state.devices.length === 0) {
+            if (typeof UI !== 'undefined' && UI.createToast) {
+                UI.createToast('Cadastre pelo menos 1 TV Box para finalizar', 'warning');
+            }
+            return;
+        }
+
+        const finishBtn = document.getElementById('wizard-finish-btn');
+        const statusDiv = document.getElementById('wizard-finish-status');
+        if (finishBtn) finishBtn.disabled = true;
+        if (statusDiv) {
+            statusDiv.innerHTML = '<div class="test-result loading">Finalizando configuração e gerando sistema...</div>';
+        }
+
+        const payload = {
+            admin: {
+                username: state.admin.username,
+                password: state.admin.password,
+            },
+            devices: state.devices.map(d => ({
+                name: d.name,
+                ip: d.ip,
+                adb_port: parseInt(d.adb_port, 10) || 5555,
+                group: d.group || '',
+                location: d.location || '',
+                player: d.player || 'vlc',
+            })),
+        };
 
         try {
-            // Admin (criado na 1ª execução)
-            _saveAdmin();
-            const adminPayload = {};
-            if (data.admin.username.trim() && data.admin.password) {
-                if (!/^[A-Za-z0-9._@-]{2,64}$/.test(data.admin.username.trim())) {
-                    throw new Error('Usuário inválido — use 2-64 caracteres: letras, números, . _ @ - (sem espaços)');
-                }
-                if (data.admin.password.length < 8) {
-                    throw new Error('Senha do administrador precisa ter pelo menos 8 caracteres');
-                }
-                adminPayload.username = data.admin.username.trim();
-                adminPayload.password = data.admin.password;
-            }
-
-            // Build payload completo
-            const payload = {
-                server: {
-                    ip: data.server.ip,
-                    port: data.server.port,
-                    host: data.server.host,
-                },
-                mediamtx: data.mediamtx,
-                adb: data.adb,
-                players: data.players,
-                watchdog: data.watchdog,
-                admin: adminPayload,
-                groups: data.groups.map(g => ({
-                    id: slugify(g.name || 'grupo'),
-                    name: g.name,
-                    description: g.description || '',
-                })),
-                devices: data.devices.map(d => ({
-                    id: slugify(d.name || 'tvbox'),
-                    name: d.name,
-                    ip: d.ip,
-                    adb_port: d.adb_port,
-                    location: d.location || '',
-                    rtsp_path: d.rtsp_path || '',
-                    player: d.player || 'vlc',
-                    root: d.root || false,
-                    capabilities: d.capabilities || {},
-                })),
-            };
-
             const res = await API.post('/wizard/finish', payload);
 
-            if (res.success) {
-                // Auto-login quando o admin foi criado no wizard
-                if (res.session_token && typeof AUTH !== 'undefined') {
-                    AUTH.setToken(res.session_token);
-                }
-                if (status) status.innerHTML = `<div class="test-result success">✅ Configuração concluída! (${res.files_created.devices} dispositivos, ${res.files_created.groups} grupos)</div>`;
-                UI.createToast('Painel configurado! 🎉', 'success', 5000);
-                setTimeout(() => { window.location.hash = '#/'; }, 500);
-            } else {
-                if (status) status.innerHTML = `<div class="test-result error">❌ Erro ao finalizar: ${res.detail || 'desconhecido'}</div>`;
-                if (btn) btn.disabled = false;
+            if (res && res.session_token && typeof AUTH !== 'undefined') {
+                AUTH.setToken(res.session_token);
             }
-        } catch (e) {
-            if (status) status.innerHTML = `<div class="test-result error">❌ ${e.message}</div>`;
-            if (btn) btn.disabled = false;
+
+            window.dispatchEvent(new CustomEvent('auth:logged-in', {
+                detail: { username: (res && res.username) || state.admin.username }
+            }));
+
+            if (typeof UI !== 'undefined' && UI.createToast) {
+                UI.createToast('Painel configurado com sucesso! 🎉', 'success');
+            }
+
+            if (statusDiv) {
+                statusDiv.innerHTML = '<div class="test-result success">Configuração concluída com sucesso! Redirecionando...</div>';
+            }
+
+            setTimeout(() => {
+                window.location.hash = '#/';
+            }, 500);
+        } catch (err) {
+            const msg = err.message || 'Falha ao finalizar o assistente';
+            if (statusDiv) {
+                statusDiv.innerHTML = `<div class="test-result error">Erro: ${escapeHtml(msg)}</div>`;
+            }
+            if (typeof UI !== 'undefined' && UI.createToast) {
+                UI.createToast(msg, 'error');
+            }
+            if (finishBtn) finishBtn.disabled = false;
         }
     }
 
-    // ── Helpers ────────────────────────────────
+    // ── Renderizadores dos Passos ──────────────────────────
+
+    const STEP_RENDERERS = {
+        1: () => `
+            <h2>Criar Administrador</h2>
+            <p>Defina as credenciais para acessar e administrar o Painel TV Box com segurança.</p>
+
+            <div class="settings-card" style="margin-top:16px;">
+                <div class="section-title">🔐 Credenciais de Acesso</div>
+                <p class="text-muted text-sm" style="margin-bottom:16px;">
+                    O administrador gerencia os dispositivos, transmissões RTSP e configurações de recuperação do painel.
+                </p>
+
+                <div class="form-grid">
+                    <div class="form-group full-width">
+                        <label for="w-admin-user">Usuário Administrador *</label>
+                        <input type="text" id="w-admin-user" value="${escapeHtml(state.admin.username)}" placeholder="admin" autocomplete="username">
+                        <div class="form-hint">Mínimo 2 caracteres (letras, números, '.', '_', '@' e '-')</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="w-admin-pass">Senha *</label>
+                        <input type="password" id="w-admin-pass" value="${escapeHtml(state.admin.password)}" placeholder="••••••••" autocomplete="new-password">
+                    </div>
+                    <div class="form-group">
+                        <label for="w-admin-confirm">Confirmar Senha *</label>
+                        <input type="password" id="w-admin-confirm" value="${escapeHtml(state.admin.confirmPassword)}" placeholder="••••••••" autocomplete="new-password">
+                    </div>
+                </div>
+
+                <div class="wizard-validation-box" style="margin-top:16px;padding:12px;background:var(--bg-raised);border-radius:var(--radius-sm);border:1px solid var(--border-subtle);font-size:0.85em;">
+                    <div style="font-weight:600;margin-bottom:8px;color:var(--text-secondary);">Requisitos de segurança:</div>
+                    <div id="rule-user" style="display:flex;align-items:center;gap:6px;margin-bottom:4px;color:var(--text-muted)">
+                        <span class="rule-icon">○</span> Usuário válido (2 a 64 caracteres)
+                    </div>
+                    <div id="rule-len" style="display:flex;align-items:center;gap:6px;margin-bottom:4px;color:var(--text-muted)">
+                        <span class="rule-icon">○</span> Mínimo de 8 caracteres na senha
+                    </div>
+                    <div id="rule-ctrl" style="display:flex;align-items:center;gap:6px;margin-bottom:4px;color:var(--text-muted)">
+                        <span class="rule-icon">○</span> Senha sem caracteres de controle
+                    </div>
+                    <div id="rule-match" style="display:flex;align-items:center;gap:6px;color:var(--text-muted)">
+                        <span class="rule-icon">○</span> Confirmação coincidente
+                    </div>
+                </div>
+            </div>
+        `,
+
+        2: () => `
+            <h2>Cadastrar TV Boxes</h2>
+            <p>Cadastre os aparelhos Android na rede local que reproduzirão as transmissões de vídeo.</p>
+
+            <div class="settings-card" id="w-device-form-card" style="margin-top:16px;">
+                <div class="section-title">📺 Novo TV Box</div>
+                <div class="form-grid" style="margin-top:12px;">
+                    <div class="form-group">
+                        <label for="w-dev-ip">Endereço IP (IPv4) *</label>
+                        <input type="text" id="w-dev-ip" placeholder="Ex: 192.168.1.100" autocomplete="off">
+                        <div class="form-hint">IP do TV Box na rede local</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="w-dev-name">Nome de Identificação *</label>
+                        <input type="text" id="w-dev-name" placeholder="Ex: TV Sala de Espera" autocomplete="off">
+                        <div class="form-hint">Identificação amigável no painel</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="w-dev-adb">Porta ADB</label>
+                        <input type="number" id="w-dev-adb" value="5555" min="1" max="65535">
+                        <div class="form-hint">Padrão: 5555</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="w-dev-group">Grupo (opcional)</label>
+                        <input type="text" id="w-dev-group" placeholder="Ex: Recepção">
+                        <div class="form-hint">Para agrupamento e ações em lote</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="w-dev-loc">Localização (opcional)</label>
+                        <input type="text" id="w-dev-loc" placeholder="Ex: Térreo Bloco A">
+                    </div>
+                    <div class="form-group">
+                        <label for="w-dev-player">Player Padrão</label>
+                        <select id="w-dev-player">
+                            <option value="vlc" selected>VLC (Recomendado)</option>
+                            <option value="mpv">MPV</option>
+                        </select>
+                    </div>
+                </div>
+                <div style="display:flex;gap:10px;align-items:center;margin-top:16px;flex-wrap:wrap;">
+                    <button type="button" class="btn btn-secondary" id="w-btn-test-adb" onclick="WIZARD.testDevice()">🔍 Testar Conexão ADB</button>
+                    <button type="button" class="btn btn-primary" onclick="WIZARD.addDevice()">+ Adicionar Dispositivo</button>
+                </div>
+                <div id="w-dev-test-result" style="margin-top:12px;"></div>
+            </div>
+
+            <div class="settings-card" style="margin-top:20px;">
+                <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;">
+                    <span>Dispositivos Adicionados (<span id="w-dev-count">${state.devices.length}</span>)</span>
+                </div>
+                <div id="w-devices-list" style="margin-top:12px;">
+                    ${renderDevicesListHtml()}
+                </div>
+            </div>
+
+            <div id="wizard-finish-status" style="margin-top:16px;"></div>
+        `,
+    };
+
+    // ── Utilitários ────────────────────────────────────────
 
     function val(id) {
         const el = document.getElementById(id);
         return el ? el.value.trim() : '';
     }
 
-    function slugify(text) {
-        return text
-            .toLowerCase()
-            .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-            .replace(/[^a-z0-9\s-]/g, '')
-            .replace(/[\s]+/g, '-')
-            .replace(/-+/g, '-')
-            .replace(/^-|-$/g, '');
+    function escapeHtml(value) {
+        if (value === null || value === undefined) return '';
+        const div = document.createElement('div');
+        div.textContent = String(value);
+        return div.innerHTML;
     }
 
-    // ── Expose pública ─────────────────────────
-
-    return { render, goPrev, goNext, skipStep, addGroup, removeGroup, addDevice, removeDevice, testDevice, finish };
+    return {
+        render,
+        goPrev,
+        goNext,
+        addDevice,
+        removeDevice,
+        testDevice,
+        finish,
+    };
 })();

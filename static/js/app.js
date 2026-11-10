@@ -8,7 +8,13 @@ const APP = (() => {
     const routes = {
         '/': DASHBOARD,
         '/mural': typeof MURAL !== 'undefined' ? MURAL : { render: () => {} },
-        '/wizard': { render: WIZARD.render },
+        '/wizard': {
+            render: (el) => {
+                checkWizard().then((completed) => {
+                    if (!completed) WIZARD.render(el);
+                });
+            }
+        },
         '/devices': { render: DEVICES.render },
         '/device': null, // dinâmico: /device/{id}
         '/groups': { render: GROUPS.render },
@@ -119,7 +125,14 @@ const APP = (() => {
                 window.location.hash = '#/wizard';
                 return false;
             }
-            // Wizard pode ser re-executado a qualquer momento (não redireciona)
+            // Se wizard já concluído e está na rota do wizard → redireciona para home
+            if (completed && hash === '/wizard') {
+                if (typeof UI !== 'undefined' && UI.createToast) {
+                    UI.createToast('O assistente de configuração já foi concluído.', 'info');
+                }
+                window.location.hash = '#/';
+                return true;
+            }
             return completed;
         } catch (e) {
             console.error('Wizard check failed:', e);
