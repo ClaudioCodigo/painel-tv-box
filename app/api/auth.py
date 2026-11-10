@@ -2,22 +2,24 @@
 
 import re
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from app.core.auth import (
     _extract_token,
     admin_configured,
-    check_rate_limit,
-    clear_user_failures,
+    clear_ip_failures,
+    create_ephemeral_ticket,
     create_session_token,
     get_admin_username,
-    is_user_locked,
+    is_ip_rate_limited,
     record_login_failure,
+    require_auth,
     revoke_token_by_raw,
     set_admin,
     validate_credentials,
     verify_admin,
+    verify_session_token,
 )
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -58,33 +60,31 @@ async def login(body: LoginBody, request: Request):
     token legado de `config/.panel_token` para não bloquear o acesso."""
     client_ip = request.client.host if request.client else "127.0.0.1"
 
-    if not check_rate_limit(client_ip):
-        raise HTTPException(status_code=429, detail="Muitas tentativas — aguarde 5 minutos")
+    if is_ip_rate_limited(client_ip):
+        raise HTTPException(
+            status_code=429,
+            detail="Muitas tentativas inválidas — aguarde 10 minutos",
+        )
 
     if not admin_configured():
         # Migração: token legado ainda vale até o admin ser criado
         from app.core.auth import check_token
 
         if body.token and check_token(body.token):
+            clear_ip_failures(client_ip)
             return {"success": True, "token": body.token, "username": "painel", "expires_in": None}
-        record_login_failure(None, client_ip)
+        record_login_failure(client_ip, body.username)
         raise HTTPException(status_code=409, detail="admin_nao_configurado")
 
     if not body.username or not body.password:
-        record_login_failure(body.username, client_ip)
+        record_login_failure(client_ip, body.username)
         raise HTTPException(status_code=401, detail="Usuário ou senha inválidos")
-
-    if is_user_locked(body.username):
-        raise HTTPException(
-            status_code=429,
-            detail="Conta temporariamente bloqueada por excesso de tentativas. Aguarde 15 minutos.",
-        )
 
     if not verify_admin(body.username, body.password):
-        record_login_failure(body.username, client_ip)
+        record_login_failure(client_ip, body.username)
         raise HTTPException(status_code=401, detail="Usuário ou senha inválidos")
 
-    clear_user_failures(body.username)
+    clear_ip_failures(client_ip)
     token = create_session_token(get_admin_username())
     return {
         "success": True,
@@ -96,11 +96,25 @@ async def login(body: LoginBody, request: Request):
 
 @router.post("/logout")
 async def logout(request: Request):
-    """Revoga o token de sessão atual."""
+    """Revoga o token de sessão atual e encerra conexões WebSocket ativas."""
     token = _extract_token(request)
     if token:
         revoke_token_by_raw(token)
-    return {"success": True}
+    hub = getattr(request.app.state, "ws_hub", None)
+    if hub:
+        await hub.close_all(code=4401, reason="Logout")
+    return {"success": True, "message": "Sessão encerrada"}
+
+
+@router.post("/ticket", dependencies=[Depends(require_auth)])
+async def issue_ticket(request: Request):
+    """Emite um ticket efêmero descartável (TTL 60s) para conexões sensíveis como WebSocket."""
+    token = _extract_token(request)
+    username = verify_session_token(token) if admin_configured() else "painel"
+    if not username:
+        username = get_admin_username() or "admin"
+    ticket = create_ephemeral_ticket(username)
+    return {"ticket": ticket, "expires_in": 60}
 
 
 @router.post("/set-admin")

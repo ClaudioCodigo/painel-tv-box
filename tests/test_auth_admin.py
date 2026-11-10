@@ -23,8 +23,10 @@ def auth_files(tmp_path, monkeypatch):
     secret_file = tmp_path / ".session_secret"
     monkeypatch.setattr(auth, "ADMIN_FILE", admin_file)
     monkeypatch.setattr(auth, "SESSION_SECRET_FILE", secret_file)
+    monkeypatch.setattr(auth, "REVOKED_EPOCH_FILE", tmp_path / ".revoked_epoch")
     monkeypatch.setattr(auth, "_secret_cache", "")
     monkeypatch.setattr(auth, "_token_cache", "")
+    auth._reset_rate_limits()
     return admin_file
 
 

@@ -21,6 +21,7 @@ import re
 import secrets
 import time
 from pathlib import Path
+from typing import Optional
 
 from fastapi import HTTPException, Request
 
@@ -31,20 +32,22 @@ CONFIG_DIR = PROJECT_ROOT / "config"
 TOKEN_FILE = CONFIG_DIR / ".panel_token"
 ADMIN_FILE = CONFIG_DIR / "admin.json"
 SESSION_SECRET_FILE = CONFIG_DIR / ".session_secret"
+REVOKED_EPOCH_FILE = CONFIG_DIR / ".revoked_epoch"
 
 SESSION_TTL = 12 * 3600  # 12h
 PBKDF2_ITERATIONS = 200_000
 
-# Rate limiting & Lockout
-RATE_LIMIT_WINDOW = 300       # 5 minutos
-RATE_LIMIT_MAX = 5            # máx 5 tentativas por IP em 5 min
-LOCKOUT_DURATION = 900        # 15 minutos de bloqueio
-LOCKOUT_THRESHOLD = 5         # 5 falhas consecutivas bloqueiam usuário
+# Rate limiting
+RATE_LIMIT_WINDOW = 600       # 10 minutos
+RATE_LIMIT_MAX = 5            # máx 5 falhas por IP em 10 min
 
-_login_attempts: dict[str, list[float]] = {}   # ip -> timestamps
-_user_failures: dict[str, list[float]] = {}    # user -> timestamps de falhas
-_revoked_jtis: set[str] = set()                # JTIs de tokens revogados
+_ip_failures: dict[str, list[float]] = {}          # ip -> timestamps de falhas
+_login_attempts: dict[str, list[float]] = _ip_failures  # alias para compatibilidade com testes legados
+_revoked_jtis: set[str] = set()                    # JTIs de tokens revogados
 _revoked_before: float = 0.0                       # revogação em massa
+
+TICKET_TTL = 60                                    # TTL de ticket descartável: 60s
+_ephemeral_tickets: dict[str, tuple[str, float]] = {}  # ticket -> (username, exp_time)
 
 # Username: allowlist estrita — letras/dígitos e . _ @ - (SEM espaços,
 # sem controle, sem separadores de caminho, sem aspas/colchetes).
@@ -56,57 +59,83 @@ _token_cache: str = ""
 _secret_cache: str = ""
 
 
+def is_ip_rate_limited(client_ip: str) -> bool:
+    """Verifica se o IP excedeu RATE_LIMIT_MAX falhas na janela RATE_LIMIT_WINDOW (sem mutar estado)."""
+    if not client_ip:
+        return False
+    now = time.time()
+    failures = [t for t in _ip_failures.get(client_ip, []) if now - t < RATE_LIMIT_WINDOW]
+    _ip_failures[client_ip] = failures
+    return len(failures) >= RATE_LIMIT_MAX
+
+
 def check_rate_limit(client_ip: str) -> bool:
-    """Verifica rate limiting por IP na janela deslizante. Retorna False se exceder."""
+    """Compatibilidade: retorna False se o IP estiver com rate limit excedido."""
+    return not is_ip_rate_limited(client_ip)
+
+
+def record_login_failure(client_ip: str, username: str | None = None):
+    """Adiciona timestamp de falha estritamente ao IP e registra em log de auditoria."""
     now = time.time()
-    attempts = _login_attempts.get(client_ip, [])
-    attempts = [t for t in attempts if now - t < RATE_LIMIT_WINDOW]
-    if len(attempts) >= RATE_LIMIT_MAX:
-        _login_attempts[client_ip] = attempts
-        return False
-    attempts.append(now)
-    _login_attempts[client_ip] = attempts
-    return True
+    fails = [t for t in _ip_failures.get(client_ip, []) if now - t < RATE_LIMIT_WINDOW]
+    fails.append(now)
+    _ip_failures[client_ip] = fails
+    logger.warning("Falha de autenticação: ip=%s user='%s'", client_ip, username or "")
 
 
-def is_user_locked(username: str) -> bool:
-    """Verifica se o usuário está temporariamente bloqueado após muitas falhas."""
-    if not username:
-        return False
+def clear_ip_failures(client_ip: str):
+    """Limpa falhas do IP imediatamente no sucesso."""
+    _ip_failures.pop(client_ip, None)
+
+
+def _load_revoked_epoch() -> float:
+    """Lê o timestamp de revogação global persistido em disco ou retorna 0.0 em fallback."""
+    try:
+        if REVOKED_EPOCH_FILE.is_file():
+            val = REVOKED_EPOCH_FILE.read_text(encoding="utf-8").strip()
+            if val:
+                return float(val)
+    except Exception as e:
+        logger.warning("Falha ao ler revoked_epoch: %s", e)
+    return 0.0
+
+
+def create_ephemeral_ticket(username: str) -> str:
+    """Emite um ticket descartável (TTL 60s)."""
+    ticket = secrets.token_urlsafe(32)
     now = time.time()
-    uname = username.strip().lower()
-    fails = _user_failures.get(uname, [])
-    fails = [t for t in fails if now - t < LOCKOUT_DURATION]
-    _user_failures[uname] = fails
-    return len(fails) >= LOCKOUT_THRESHOLD
+    expired = [k for k, (_, exp) in _ephemeral_tickets.items() if now > exp]
+    for k in expired:
+        _ephemeral_tickets.pop(k, None)
+    _ephemeral_tickets[ticket] = (username, now + TICKET_TTL)
+    return ticket
 
 
-def record_login_failure(username: str | None, client_ip: str):
-    """Registra falha de login para lockout de usuário e log de auditoria."""
-    now = time.time()
-    uname = (username or "").strip().lower()
-    if uname:
-        fails = _user_failures.get(uname, [])
-        fails = [t for t in fails if now - t < LOCKOUT_DURATION]
-        fails.append(now)
-        _user_failures[uname] = fails
-    logger.warning("Falha de autenticação: user='%s' ip=%s", username or "", client_ip)
-
-
-def clear_user_failures(username: str | None):
-    """Limpa contador de falhas após login bem-sucedido."""
-    uname = (username or "").strip().lower()
-    if uname:
-        _user_failures.pop(uname, None)
+def consume_ephemeral_ticket(ticket: str) -> Optional[str]:
+    """Consome e invalida um ticket descartável (retorna username ou None)."""
+    if not ticket:
+        return None
+    item = _ephemeral_tickets.pop(ticket, None)
+    if not item:
+        return None
+    username, exp = item
+    if time.time() > exp:
+        return None
+    return username
 
 
 def _reset_rate_limits():
-    """Auxiliar para testes: limpa rate limits e lockouts."""
-    _login_attempts.clear()
-    _user_failures.clear()
+    """Auxiliar para testes: limpa rate limits, tickets e revogações."""
+    _ip_failures.clear()
     _revoked_jtis.clear()
+    _ephemeral_tickets.clear()
     global _revoked_before
-    _revoked_before = 0
+    _revoked_before = 0.0
+    try:
+        if REVOKED_EPOCH_FILE.is_file():
+            REVOKED_EPOCH_FILE.unlink()
+    except Exception:
+        pass
 
 
 def revoke_token_by_raw(token: str | None) -> bool:
@@ -127,10 +156,18 @@ def revoke_token_by_raw(token: str | None) -> bool:
 
 
 def revoke_all_tokens():
-    """Invalida todas as sessões anteriores a este momento."""
+    """Invalida todas as sessões anteriores a este momento e persiste em disco."""
     global _revoked_before
     _revoked_before = time.time()
     _revoked_jtis.clear()
+    try:
+        REVOKED_EPOCH_FILE.write_text(str(_revoked_before), encoding="utf-8")
+        try:
+            REVOKED_EPOCH_FILE.chmod(0o600)
+        except Exception:
+            pass
+    except Exception as e:
+        logger.error("Falha ao persistir revoked_epoch: %s", e)
     logger.warning("Todas as sessões ativas foram revogadas.")
 
 
@@ -274,7 +311,7 @@ def verify_session_token(token: str | None) -> str | None:
     if int(payload.get("exp", 0)) < time.time():
         return None
     iat = float(payload.get("iat", 0))
-    if _revoked_before and iat <= _revoked_before:
+    if iat < max(_revoked_before, _load_revoked_epoch()):
         return None
     jti = payload.get("jti")
     if jti and str(jti) in _revoked_jtis:
@@ -392,5 +429,14 @@ async def require_auth(request: Request):
 
 
 async def require_auth_ws(websocket) -> bool:
-    """Valida credencial para conexões WebSocket (via ?token=)."""
-    return check_token(websocket.query_params.get("token"))
+    """Valida credencial para conexões WebSocket (via ?ticket= ou ?token=)."""
+    ticket = websocket.query_params.get("ticket")
+    if ticket and consume_ephemeral_ticket(ticket):
+        return True
+    candidate = websocket.query_params.get("token")
+    if candidate:
+        if consume_ephemeral_ticket(candidate):
+            return True
+        if check_token(candidate):
+            return True
+    return False

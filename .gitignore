@@ -24,6 +24,7 @@ scrcpy/mpv_splits/
 # Ferramentas/agente (não versionar)
 .reasonix/
 reasonix.toml
+.omo/
 docs/.obsidian/
 
 # Arquivos não relacionados ao projeto
@@ -43,6 +44,7 @@ groups/*.yml
 config/.panel_token
 config/admin.json
 config/.session_secret
+config/.revoked_epoch
 
 # OS
 .DS_Store

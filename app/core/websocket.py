@@ -40,6 +40,18 @@ class WebSocketHub:
                 for ws in dead:
                     self._connections.discard(ws)
 
+    async def close_all(self, code: int = 4401, reason: str = "Logout"):
+        """Fecha todas as conexões ativas com o código e motivo fornecidos."""
+        async with self._lock:
+            connections = list(self._connections)
+            self._connections.clear()
+        for ws in connections:
+            try:
+                await ws.close(code=code, reason=reason)
+            except Exception as e:
+                logger.debug("Erro ao fechar WS no close_all: %s", e)
+        logger.info(f"WS close_all: {len(connections)} conexões encerradas (code={code}, reason='{reason}')")
+
     @property
     def active_count(self) -> int:
         return len(self._connections)
