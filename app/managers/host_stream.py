@@ -97,7 +97,10 @@ class HostStreamManager:
                     })
                 else:
                     # Processo morreu inesperadamente
-                    self._streams.pop(stream_id, None)
+                    dead = self._streams.pop(stream_id, None) or {}
+                    tail = dead.get("stderr_tail") or []
+                    logger.warning("Host stream '%s' encerrou sozinho: %s",
+                                   stream_id, " | ".join(tail[-3:]) or "sem detalhes")
             return active
 
     async def start_stream(
@@ -145,6 +148,9 @@ class HostStreamManager:
 
             cmd = [
                 ffmpeg_bin,
+                "-hide_banner",
+                "-nostats",
+                "-loglevel", "warning",
                 "-y",
                 "-f", "gdigrab",
                 "-framerate", str(fps),
@@ -181,8 +187,15 @@ class HostStreamManager:
                 err_msg = stderr.decode(errors="replace")[:300] if stderr else "Processo encerrou prematuramente"
                 return {"success": False, "error": f"FFmpeg falhou: {err_msg}"}
 
+            # Drena o stderr continuamente: se o PIPE enche (~64 KB) e ninguém
+            # lê, o ffmpeg bloqueia na escrita e a transmissão congela.
+            stderr_tail: list[str] = []
+            drain = asyncio.create_task(self._drain_stderr(proc, stream_id, stderr_tail))
+
             self._streams[stream_id] = {
                 "process": proc,
+                "stderr_task": drain,
+                "stderr_tail": stderr_tail,
                 "window_title": window_title,
                 "profile": profile,
                 "fps": fps,
@@ -199,6 +212,22 @@ class HostStreamManager:
                 "fps": fps,
                 "profile": profile,
             }
+
+    @staticmethod
+    async def _drain_stderr(proc, stream_id: str, tail: list[str], keep: int = 20) -> None:
+        """Lê o stderr do ffmpeg até EOF, guardando as últimas linhas."""
+        try:
+            while True:
+                line = await proc.stderr.readline()
+                if not line:
+                    break
+                text = line.decode(errors="replace").rstrip()
+                if text:
+                    tail.append(text)
+                    del tail[:-keep]
+                    logger.debug("ffmpeg[%s]: %s", stream_id, text)
+        except Exception:
+            pass
 
     async def stop_stream(self, stream_id: str) -> dict:
         """Encerra uma stream ativa e remove o path correspondente."""
@@ -218,6 +247,9 @@ class HostStreamManager:
                         await proc.wait()
                 except Exception as e:
                     logger.warning("Erro ao finalizar processo FFmpeg da stream '%s': %s", stream_id, e)
+            task = info.get("stderr_task")
+            if task:
+                task.cancel()
 
             # Remove o path do MediaMTX
             if self.mediamtx:

@@ -61,6 +61,20 @@ class TestADBManager:
             assert result is False
 
     @pytest.mark.asyncio
+    async def test_connect_failure_with_exit_code_zero(self, adb):
+        """Regressão: `adb connect` sai 0 mesmo falhando — não marcar conectado."""
+        with patch("asyncio.create_subprocess_exec") as mock_sub:
+            proc = AsyncMock()
+            proc.communicate.return_value = (
+                b"failed to connect to '192.168.1.1:5555': Connection refused\n", b"")
+            proc.returncode = 0
+            mock_sub.return_value = proc
+
+            result = await adb.connect("192.168.1.1", 5555)
+            assert result is False
+            assert "192.168.1.1:5555" not in adb._connected
+
+    @pytest.mark.asyncio
     async def test_reboot(self, adb):
         with patch.object(adb, "shell", return_value=("", 0)) as mock_shell:
             await adb.reboot("192.168.1.1", 5555)

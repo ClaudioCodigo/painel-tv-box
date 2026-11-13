@@ -56,12 +56,31 @@ class TestCronParser:
             CronParser("0 8")
 
     def test_weekday(self):
-        # 0=Monday in Python datetime.weekday()
-        c = CronParser("* * * * 0")
-        # 2026-07-27 is a Monday
+        # Convenção cron: 0 (ou 7) = domingo, 1 = segunda
+        c = CronParser("* * * * 1")
+        # 2026-07-27 é segunda
         assert c.matches(datetime(2026, 7, 27, 10, 0))
-        # 2026-07-22 is a Wednesday (weekday=2)
+        # 2026-07-22 é quarta
         assert not c.matches(datetime(2026, 7, 22, 10, 0))
+
+    def test_weekday_sunday_0_and_7(self):
+        sunday = datetime(2026, 7, 26, 10, 0)
+        assert CronParser("* * * * 0").matches(sunday)
+        assert CronParser("* * * * 7").matches(sunday)
+
+    def test_weekdays_mon_to_fri(self):
+        c = CronParser("0 8 * * 1-5")
+        assert c.matches(datetime(2026, 7, 27, 8, 0))      # segunda
+        assert c.matches(datetime(2026, 7, 31, 8, 0))      # sexta
+        assert not c.matches(datetime(2026, 8, 1, 8, 0))   # sábado
+        assert not c.matches(datetime(2026, 7, 26, 8, 0))  # domingo
+
+    def test_step_with_range_and_list(self):
+        c = CronParser("0-30/10,45 * * * *")
+        for m in (0, 10, 20, 30, 45):
+            assert c.matches(datetime(2026, 7, 27, 10, m))
+        for m in (5, 40, 50):
+            assert not c.matches(datetime(2026, 7, 27, 10, m))
 
 
 class TestScheduleManager:
@@ -100,3 +119,17 @@ class TestScheduleManager:
         dt2 = datetime(2026, 8, 24, 18, 0)
         await sm._check_devices(dt2)
         assert mock_adb.reboot.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_execute_action_accepts_hyphen_form():
+    from unittest.mock import AsyncMock, MagicMock
+    from app.managers.schedule import ScheduleManager
+    cfg = MagicMock()
+    cfg.get_device.return_value = MagicMock()
+    player = MagicMock(start_stream=AsyncMock(), stop_stream=AsyncMock())
+    sm = ScheduleManager(config_manager=cfg, player_manager=player)
+    await sm._execute_action("d1", "start-stream")
+    await sm._execute_action("d1", "stop_stream")
+    player.start_stream.assert_awaited_once()
+    player.stop_stream.assert_awaited_once()

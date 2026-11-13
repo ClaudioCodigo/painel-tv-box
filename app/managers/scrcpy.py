@@ -604,7 +604,8 @@ class ScrcpyManager:
         adb_cmd = [adb.binary, "-s", target, "exec-out",
                    "screenrecord", "--output-format=h264",
                    "--bit-rate", "4000000", "-"]
-        ffmpeg_cmd = [ffmpeg_bin, "-fflags", "nobuffer", "-i", "pipe:0",
+        ffmpeg_cmd = [ffmpeg_bin, "-hide_banner", "-nostats", "-loglevel", "warning",
+                      "-fflags", "nobuffer", "-i", "pipe:0",
                       "-c:v", "libx264", "-preset", "ultrafast", "-tune", "zerolatency",
                       "-pix_fmt", "yuv420p", "-g", "50",
                       "-f", "flv", "-flvflags", "no_duration_filesize",
@@ -613,12 +614,18 @@ class ScrcpyManager:
         try:
             proc_adb = await asyncio.create_subprocess_exec(
                 *adb_cmd, env=_env_panel_adb(),
-                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
             )
+            # stdout do ffmpeg não é usado (saída vai para RTMP). O stderr é
+            # drenado em background: PIPE cheio sem leitor trava o ffmpeg e
+            # congela a transmissão depois de alguns minutos.
             proc_ffmpeg = await asyncio.create_subprocess_exec(
                 *ffmpeg_cmd, stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE,
             )
+            from app.managers.host_stream import HostStreamManager
+            ffmpeg_tail: list[str] = []
+            asyncio.create_task(HostStreamManager._drain_stderr(proc_ffmpeg, target, ffmpeg_tail))
 
             async def _pump():
                 try:
@@ -642,10 +649,10 @@ class ScrcpyManager:
             # Aguarda 6s para ver se ffmpeg crasha (tela morta, URL ruim, etc.)
             await asyncio.sleep(6)
             if proc_ffmpeg.returncode is not None:
-                stderr = await proc_ffmpeg.stderr.read() if proc_ffmpeg.stderr else b""
+                await asyncio.sleep(0.1)  # deixa o dreno ler as últimas linhas
                 proc_adb.kill()
                 return {"success": False, "error": "ffmpeg encerrou cedo",
-                        "stderr": stderr.decode(errors="replace")[:300]}
+                        "stderr": "\n".join(ffmpeg_tail)[-300:]}
 
             self._streams[target] = {
                 "running": True, "adb": proc_adb, "ffmpeg": proc_ffmpeg,

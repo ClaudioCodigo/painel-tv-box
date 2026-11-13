@@ -1,3 +1,4 @@
+import asyncio
 """Testes unitários para HostStreamManager e endpoints de Host Streaming (Office/Janelas)."""
 
 import pytest
@@ -49,6 +50,9 @@ async def test_host_stream_manager_lifecycle():
         fake_proc.returncode = None
         fake_proc.terminate = MagicMock()
         fake_proc.wait = AsyncMock()
+        # stderr com algumas linhas e depois EOF (drenado em background)
+        lines = [b"warning: frame dropped\n", b""]
+        fake_proc.stderr.readline = AsyncMock(side_effect=lambda: lines.pop(0) if lines else b"")
         mock_proc_exec.return_value = fake_proc
 
         # Start stream no modo loop (30 fps)
@@ -60,6 +64,10 @@ async def test_host_stream_manager_lifecycle():
         assert start_res["success"] is True
         assert start_res["fps"] == 30
         assert start_res["rtsp_path"] == "live/mural-loop"
+        # stderr do ffmpeg é consumido (sem isso o PIPE enche e trava o ffmpeg)
+        await asyncio.sleep(0)
+        assert mgr._streams["mural-loop"]["stderr_tail"] == ["warning: frame dropped"]
+        assert "-nostats" in mock_proc_exec.call_args.args
         mock_mtx.add_path.assert_called_with("live/mural-loop")
 
         # Verifica stream ativa

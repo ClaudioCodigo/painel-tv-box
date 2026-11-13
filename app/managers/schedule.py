@@ -31,7 +31,10 @@ class CronParser:
             return False
         if not self._match_field(self.month, dt.month):
             return False
-        if not self._match_field(self.weekday, dt.weekday()):
+        # cron: 0=domingo..6=sábado (7 também = domingo); Python: 0=segunda
+        cron_wd = (dt.weekday() + 1) % 7
+        if not (self._match_field(self.weekday, cron_wd)
+                or (cron_wd == 0 and self._match_field(self.weekday, 7))):
             return False
         return True
 
@@ -41,12 +44,21 @@ class CronParser:
             return True
         if pattern.isdigit():
             return int(pattern) == value
-        if "/" in pattern:
-            base, step = pattern.split("/")
-            base_val = 0 if base == "*" else int(base)
-            return (value - base_val) >= 0 and (value - base_val) % int(step) == 0
+        # Lista primeiro: "*/15,50" e "1-5,0" combinam outros formatos
         if "," in pattern:
             return any(CronParser._match_field(p.strip(), value) for p in pattern.split(","))
+        if "/" in pattern:
+            base, step = pattern.split("/")
+            step_val = int(step)
+            if step_val <= 0:
+                return False
+            if base == "*":
+                low, high = 0, value
+            elif "-" in base:
+                low, high = map(int, base.split("-"))
+            else:
+                low, high = int(base), value
+            return low <= value <= high and (value - low) % step_val == 0
         if "-" in pattern:
             low, high = map(int, pattern.split("-"))
             return low <= value <= high
@@ -144,6 +156,8 @@ class ScheduleManager:
         if not device:
             return
 
+        # Aceita "start-stream" (forma usada na API/UI/docs) e "start_stream"
+        action = action.strip().lower().replace("-", "_")
         if action == "start_stream":
             if self.player:
                 await self.player.start_stream(device)
@@ -153,3 +167,5 @@ class ScheduleManager:
         elif action == "reboot":
             if self.adb:
                 await self.adb.reboot(device.ip, port=device.adb_port)
+        else:
+            logger.warning("Schedule com ação desconhecida ignorado: %s (%s)", action, device_id)

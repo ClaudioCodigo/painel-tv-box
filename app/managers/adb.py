@@ -72,6 +72,7 @@ class ADBManager:
             self.metrics["last_error"] = f"timeout: {' '.join(cmd)}"
             try:
                 proc.kill()
+                await proc.wait()  # colhe o processo (evita zumbi/handle aberto)
             except Exception:
                 pass
             return "timeout", -1
@@ -100,7 +101,10 @@ class ADBManager:
             self.metrics["connect_attempts"] += 1
             output, code = await self._run("connect", target, timeout=self.connect_timeout)
             normalized = output.lower()
-            if code == 0 or "connected" in normalized or "already connected" in normalized:
+            # `adb connect` sai com código 0 mesmo quando falha ("failed to
+            # connect to ...", "cannot connect to ..."): decide pelo texto.
+            failed = any(w in normalized for w in ("failed", "unable", "cannot", "refused", "timeout"))
+            if not failed and ("connected to" in normalized or "already connected" in normalized):
                 self._connected.add(target)
                 self.metrics["connect_success"] += 1
                 logger.info("ADB connected: %s", target)
