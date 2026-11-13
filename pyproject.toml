@@ -28,3 +28,9 @@ dev = [
 # App roda como módulo a partir da raiz do projeto (uvicorn app.main:app);
 # sem empacotamento — só precisamos que o pip instale as dependências.
 py-modules = []
+
+[tool.pytest.ini_options]
+asyncio_default_fixture_loop_scope = "function"
+# Falha em ResourceWarning (arquivo não fechado): no Windows, handle aberto
+# impede rotação/exclusão de arquivos — trate como bug.
+filterwarnings = ["error::ResourceWarning", "error::pytest.PytestUnraisableExceptionWarning"]

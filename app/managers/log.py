@@ -45,12 +45,15 @@ class LogManager:
         """Configura logging do sistema: um arquivo por fonte."""
         # Remove handlers padrão
         root = logging.getLogger()
-        root.handlers.clear()
+        self._close_handlers(root)
 
         for source in LOG_SOURCES:
             logger = logging.getLogger(source)
             logger.setLevel(logging.INFO)
-            logger.handlers.clear()
+            self._close_handlers(logger)
+            # Evita acumular filtros quando setup() roda mais de uma vez
+            for flt in [f for f in logger.filters if isinstance(f, DeviceFilter)]:
+                logger.removeFilter(flt)
             logger.addFilter(DeviceFilter())
 
             # File handler (um por fonte) com rotação
@@ -78,6 +81,25 @@ class LogManager:
         # (PermissionError ao renomear arquivo em uso) e duplicando linhas.
 
         self.info("system", "LogManager inicializado")
+
+    @staticmethod
+    def _close_handlers(logger: logging.Logger) -> None:
+        """Remove e FECHA os handlers do logger.
+
+        ``handlers.clear()`` sozinho deixa o arquivo aberto; no Windows isso
+        impede rotação/exclusão do .log (PermissionError: arquivo em uso).
+        """
+        for h in list(logger.handlers):
+            logger.removeHandler(h)
+            try:
+                h.close()
+            except Exception:
+                pass
+
+    def close(self) -> None:
+        """Fecha os arquivos de log de todas as fontes (shutdown/testes)."""
+        for logger in self._loggers.values():
+            self._close_handlers(logger)
 
     def get_logger(self, source: str) -> logging.Logger:
         """Retorna logger para uma fonte."""
