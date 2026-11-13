@@ -10,7 +10,28 @@ class TestLogManager:
 
     @pytest.fixture
     def log_mgr(self, tmp_path):
-        return LogManager(log_dir=tmp_path / "logs")
+        mgr = LogManager(log_dir=tmp_path / "logs")
+        yield mgr
+        mgr.close()
+
+    def test_setup_twice_closes_previous_handlers(self, log_mgr):
+        """Regressão: setup() repetido não pode vazar arquivos nem filtros."""
+        import logging
+        from app.managers.log import DeviceFilter
+        log_mgr.setup()
+        old = list(logging.getLogger("system").handlers)
+        log_mgr.setup()
+        assert all(h.stream is None for h in old)  # fechados
+        lg = logging.getLogger("system")
+        assert len(lg.handlers) == 1
+        assert sum(isinstance(f, DeviceFilter) for f in lg.filters) == 1
+
+    def test_close_releases_files(self, log_mgr):
+        log_mgr.setup()
+        log_mgr.info("system", "x")
+        log_mgr.close()
+        # No Windows, só é possível apagar se o handle foi liberado
+        (log_mgr.log_dir / "system.log").unlink()
 
     def test_setup_creates_log_files(self, log_mgr):
         log_mgr.setup()

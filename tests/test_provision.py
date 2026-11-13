@@ -1,5 +1,6 @@
 """Testes do provision — especialmente o push do heartbeat.conf (Ideia 3)."""
 
+from pathlib import Path
 import os
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -68,7 +69,7 @@ class TestProvisionHeartbeatPush:
             async def push(self, ip, local, remote, port=5555, timeout=30):
                 # Captura o conteúdo NO MOMENTO do push (o temp é apagado depois)
                 try:
-                    content = open(local, encoding="utf-8").read()
+                    content = Path(local).read_text(encoding="utf-8")
                 except Exception:
                     content = None
                 self.push_calls.append((local, remote, content))

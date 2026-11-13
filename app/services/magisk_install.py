@@ -240,8 +240,8 @@ class MagiskInstaller:
 
     async def _wait_flash_done(self, ip: str, port: int) -> bool:
         """Espera a instalação terminar (app volta p/ home com versão ou fecha)."""
-        deadline = asyncio.get_event_loop().time() + FLASH_TIMEOUT_S
-        while asyncio.get_event_loop().time() < deadline:
+        deadline = asyncio.get_running_loop().time() + FLASH_TIMEOUT_S
+        while asyncio.get_running_loop().time() < deadline:
             await asyncio.sleep(5)
             xml = await self._dump_ui(ip, port)
             if self._has_text(xml, "Instalado") and not self._has_text(xml, "Não disponível"):
@@ -253,8 +253,8 @@ class MagiskInstaller:
 
     async def _wait_boot(self, ip: str, port: int) -> bool:
         """Espera o box voltar com sys.boot_completed=1."""
-        deadline = asyncio.get_event_loop().time() + BOOT_TIMEOUT_S
-        while asyncio.get_event_loop().time() < deadline:
+        deadline = asyncio.get_running_loop().time() + BOOT_TIMEOUT_S
+        while asyncio.get_running_loop().time() < deadline:
             await asyncio.sleep(10)
             try:
                 out = await self._shell(ip, port, "getprop sys.boot_completed", timeout=8)

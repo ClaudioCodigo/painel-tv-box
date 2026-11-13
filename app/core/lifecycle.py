@@ -152,3 +152,8 @@ async def shutdown(fastapi_app):
         watchdog.stop()
         logger.info("Watchdog parado")
     logger.info("Painel TV Box encerrado")
+
+    # Fecha os arquivos de log por último (libera os .log no Windows)
+    log_mgr = getattr(fastapi_app.state, "log_manager", None)
+    if log_mgr:
+        log_mgr.close()
